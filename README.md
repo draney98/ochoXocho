@@ -43,7 +43,7 @@ The built files will be in the `dist` directory.
 ## Project Structure
 
 ```
-sieteXsiete/
+ochoXocho/
 ├── src/
 │   ├── main.ts          # Application entry point
 │   ├── game.ts          # Main game loop and state management
@@ -62,21 +62,33 @@ sieteXsiete/
 
 ## How to Play
 
-1. **Receive Shapes**: You start with 3 random shapes displayed on the right side
+1. **Receive Shapes**: You start with 3 random shapes displayed beneath the board
 2. **Drag to Place**: Click and drag a shape from the queue onto the game board
 3. **Valid Placement**: Shapes can only be placed where all blocks fit in empty cells
 4. **Clear Lines**: When a row or column is completely filled, it clears automatically
-5. **Score Points**: Earn 100 points per cleared row/column, with multipliers for consecutive clears
+5. **Score Points**: Earn 100 points per cleared line with progressive multipliers when you clear several lines at once
 6. **New Shapes**: After placing 3 shapes, you receive 3 new ones
 7. **Game Over**: The game ends when no available shapes can be placed
+8. **Adjust Settings**: Use the gear icon in the top-right corner to toggle the grid, ghost preview, clear animations, change the visual design, or mute sound effects at any time
+
+## Settings
+
+The floating gear button opens a lightweight settings panel that lets you:
+
+- Hide or show the board grid lines
+- Hide or show the ghost placement preview
+- Toggle clear animations for a faster, distraction-free experience
+- Switch between the **Classic**, **Midnight**, and **Sunset** visual designs
+- Enable or disable sound effects
+
+Changes apply instantly and persist until you refresh the page.
 
 ## Scoring System
 
-- **Base Points**: 100 points per cleared row or column
-- **Consecutive Bonus**: 
-  - 2 consecutive clears: 2x multiplier
-  - 3 consecutive clears: 3x multiplier
-  - 4+ consecutive clears: 4x multiplier
+- **Base Points**: Each cleared row or column starts at 100 points.
+- **Simultaneous Clear Bonus**: When you clear multiple lines in the same move, the second line is worth 2× its base value, the third line 3×, etc.
+- **Board Clear Multiplier**: If that clear empties the entire board, the total for that move is multiplied by 5.
+- **Game Over Cleanup**: When no more moves are available, every remaining block disappears and awards 1 bonus point, so you’re rewarded for keeping the board tidy all game long.
 
 ## Mobile Porting Guide
 

@@ -2,13 +2,14 @@
  * Main game orchestrator - manages game loop, state, and all game systems
  */
 
-import { Position, Shape, PlacedBlock, DragState, GameState, AnimatingCell } from './types';
+import { Position, Shape, PlacedBlock, DragState, GameState, AnimatingCell, GameSettings } from './types';
 import { Board } from './board';
 import { generateShapes, getShapeColor, getShapeIndex } from './shapes';
 import { Renderer } from './renderer';
 import { InputHandler } from './input';
 import { calculateScore } from './scoring';
 import { checkGameOver } from './gameOver';
+import { SoundManager } from './sound';
 
 /**
  * Game class orchestrates all game systems and manages the game loop
@@ -26,10 +27,12 @@ export class Game {
     private readonly ANIMATION_DURATION = 300; // milliseconds
     private gameOverStartTime: number | null = null;
     private readonly GAME_OVER_ANIMATION_DURATION = 1000; // milliseconds
-    private _loggedEmptyBoard: boolean = false; // Track if we've logged empty board warning
+    private settings: GameSettings;
+    private soundManager: SoundManager;
 
-    constructor(canvas: HTMLCanvasElement) {
+    constructor(canvas: HTMLCanvasElement, initialSettings: GameSettings) {
         this.canvas = canvas;
+        this.settings = { ...initialSettings };
         this.board = new Board();
         this.state = {
             board: this.board.getGrid(),
@@ -37,10 +40,9 @@ export class Game {
             placedBlocks: [],
             score: 0,
             gameOver: false,
-            consecutiveClears: 0,
         };
 
-        this.renderer = new Renderer(canvas);
+        this.renderer = new Renderer(canvas, this.settings);
         this.inputHandler = new InputHandler(
             canvas,
             this.board,
@@ -49,7 +51,23 @@ export class Game {
         );
 
         this.scoreElement = document.getElementById('score-value');
+        this.soundManager = new SoundManager(initialSettings.soundEnabled);
         this.updateScoreDisplay();
+    }
+
+    /**
+     * Updates runtime settings originating from the UI panel
+     * @param updatedSettings - latest settings selected by the player
+     */
+    updateSettings(updatedSettings: GameSettings): void {
+        this.settings = { ...updatedSettings };
+        this.renderer.updateSettings(this.settings);
+        this.soundManager.setEnabled(this.settings.soundEnabled);
+
+        if (!this.settings.enableAnimations) {
+            // Immediately drop any active animations so the board stays in sync
+            this.animatingCells = [];
+        }
     }
 
     /**
@@ -107,10 +125,8 @@ export class Game {
         // This ensures game over is detected even if user can't place any shapes
         if (this.state.queue.length > 0) {
             const isGameOver = checkGameOver(this.board, this.state.queue);
-            if (isGameOver && !this.state.gameOver) {
-                // Game just ended - show message, keep board visible
-                this.state.gameOver = true;
-                this.gameOverStartTime = currentTime;
+            if (isGameOver) {
+                this.triggerGameOver();
             }
         }
         
@@ -175,6 +191,7 @@ export class Game {
             color: shapeColor,
         };
         this.state.placedBlocks.push(placedBlock);
+        this.soundManager.playPlace();
         console.log(`[PLACE] Placed shape at (${position.x}, ${position.y}), total blocks: ${this.state.placedBlocks.length}`);
 
         // Remove shape from queue
@@ -188,17 +205,14 @@ export class Game {
         if (this.shapesPlacedThisTurn >= 3) {
             this.shapesPlacedThisTurn = 0;
             this.state.queue = generateShapes();
-            this.state.consecutiveClears = 0; // Reset consecutive clears counter
         }
 
         // Check for game over after clearing lines and updating queue
         // Game over happens when no shapes can be placed
         if (this.state.queue.length > 0) {
             const isGameOver = checkGameOver(this.board, this.state.queue);
-            if (isGameOver && !this.state.gameOver) {
-                // Game just ended - don't clear board, just show message
-                this.state.gameOver = true;
-                this.gameOverStartTime = Date.now();
+            if (isGameOver) {
+                this.triggerGameOver();
             }
         } else {
             // If queue is empty, game is not over yet (waiting for new shapes)
@@ -279,44 +293,39 @@ export class Game {
         const fullColumns = this.board.getFullColumns();
 
         if (fullRows.length === 0 && fullColumns.length === 0) {
-            this.state.consecutiveClears = 0;
             return;
         }
 
-        // Increment consecutive clears counter
-        this.state.consecutiveClears++;
+        const linesCleared = fullRows.length + fullColumns.length;
 
-        // Calculate and add score BEFORE clearing (so we use the correct counts)
-        const points = calculateScore(
-            fullRows.length,
-            fullColumns.length,
-            this.state.consecutiveClears
-        );
-        this.state.score += points;
+        const shouldAnimate = this.settings.enableAnimations;
 
-        // Start animations for cells being removed
-        const currentTime = Date.now();
-        
-        for (const block of this.state.placedBlocks) {
-            for (const cell of block.shape) {
-                const absoluteX = block.position.x + cell.x;
-                const absoluteY = block.position.y + cell.y;
-                
-                const inClearedRow = fullRows.includes(absoluteY);
-                const inClearedColumn = fullColumns.includes(absoluteX);
-                
-                if (inClearedRow || inClearedColumn) {
-                    // Add to animating cells
-                    this.animatingCells.push({
-                        x: absoluteX,
-                        y: absoluteY,
-                        color: block.color,
-                        letter: '', // No letters
-                        startTime: currentTime,
-                        progress: 0
-                    });
+        if (shouldAnimate) {
+            // Start animations for cells being removed
+            const currentTime = Date.now();
+            
+            for (const block of this.state.placedBlocks) {
+                for (const cell of block.shape) {
+                    const absoluteX = block.position.x + cell.x;
+                    const absoluteY = block.position.y + cell.y;
+                    
+                    const inClearedRow = fullRows.includes(absoluteY);
+                    const inClearedColumn = fullColumns.includes(absoluteX);
+                    
+                    if (inClearedRow || inClearedColumn) {
+                        // Add to animating cells
+                        this.animatingCells.push({
+                            x: absoluteX,
+                            y: absoluteY,
+                            color: block.color,
+                            startTime: currentTime,
+                            progress: 0
+                        });
+                    }
                 }
             }
+        } else {
+            this.animatingCells = [];
         }
 
         // Clear full rows and columns on the board immediately
@@ -328,8 +337,18 @@ export class Game {
             this.board.clearColumn(col);
         }
 
+        const boardCleared = this.willBoardBeCleared(fullRows, fullColumns);
+        const points = calculateScore(
+            fullRows.length,
+            fullColumns.length,
+            boardCleared
+        );
+        this.state.score += points;
+        this.updateScoreDisplay();
+        this.soundManager.playClear(linesCleared, boardCleared);
+
         // Remove cells from shapes after animation completes
-        if (this.animatingCells.length > 0) {
+        if (shouldAnimate && this.animatingCells.length > 0) {
             setTimeout(() => {
                 this.removeCellsFromShapes(fullRows, fullColumns);
             }, this.ANIMATION_DURATION);
@@ -346,6 +365,64 @@ export class Game {
         if (this.scoreElement) {
             this.scoreElement.textContent = this.state.score.toString();
         }
+    }
+
+    /**
+     * Awards bonus points for remaining cells when the game ends and clears the board.
+     */
+    private awardGameOverBonus(): void {
+        const remainingCells = this.state.placedBlocks.reduce(
+            (sum, block) => sum + block.shape.length,
+            0
+        );
+
+        if (remainingCells > 0) {
+            this.state.score += remainingCells;
+            this.updateScoreDisplay();
+        }
+
+        this.board.reset();
+        this.state.placedBlocks = [];
+        this.animatingCells = [];
+    }
+
+    /**
+     * Transitions the game into the game-over state with audio/visual feedback.
+     */
+    private triggerGameOver(): void {
+        if (this.state.gameOver) {
+            return;
+        }
+
+        this.state.gameOver = true;
+        this.gameOverStartTime = Date.now();
+        this.awardGameOverBonus();
+        this.soundManager.playGameOver();
+    }
+
+    /**
+     * Determines whether the current clear will remove every remaining block.
+     */
+    private willBoardBeCleared(fullRows: number[], fullColumns: number[]): boolean {
+        if (this.state.placedBlocks.length === 0) {
+            return true;
+        }
+
+        const clearedRows = new Set(fullRows);
+        const clearedCols = new Set(fullColumns);
+
+        for (const block of this.state.placedBlocks) {
+            for (const cell of block.shape) {
+                const absoluteX = block.position.x + cell.x;
+                const absoluteY = block.position.y + cell.y;
+                const cleared = clearedRows.has(absoluteY) || clearedCols.has(absoluteX);
+                if (!cleared) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
     }
 
     /**
@@ -371,13 +448,13 @@ export class Game {
             placedBlocks: [],
             score: 0,
             gameOver: false,
-            consecutiveClears: 0,
         };
         this.shapesPlacedThisTurn = 0;
         this.animatingCells = [];
         this.gameOverStartTime = null;
         this.inputHandler.updateBoard(this.board);
         this.inputHandler.updateQueue(this.state.queue);
+        this.renderer.updateSettings(this.settings);
         this.updateScoreDisplay();
         this.start();
         console.log('[RESET] Game reset complete');

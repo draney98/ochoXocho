@@ -2,7 +2,7 @@
  * Canvas rendering system for drawing the game board, shapes, queue, and score
  */
 
-import { Position, Shape, PlacedBlock, DragState, AnimatingCell } from './types';
+import { Position, Shape, PlacedBlock, DragState, AnimatingCell, GameSettings } from './types';
 import { Board } from './board';
 import { getShapeColor, getShapeIndex } from './shapes';
 import {
@@ -23,9 +23,11 @@ import {
 export class Renderer {
     private canvas: HTMLCanvasElement;
     private ctx: CanvasRenderingContext2D;
+    private settings: GameSettings;
 
-    constructor(canvas: HTMLCanvasElement) {
+    constructor(canvas: HTMLCanvasElement, settings: GameSettings) {
         this.canvas = canvas;
+        this.settings = { ...settings };
         // Set canvas size
         this.canvas.width = CANVAS_WIDTH;
         this.canvas.height = CANVAS_HEIGHT;
@@ -35,6 +37,14 @@ export class Renderer {
             throw new Error('Could not get 2D rendering context');
         }
         this.ctx = context;
+    }
+
+    /**
+     * Updates the rendering settings
+     * @param settings - latest settings to apply
+     */
+    updateSettings(settings: GameSettings): void {
+        this.settings = { ...settings };
     }
 
     /**
@@ -84,7 +94,7 @@ export class Renderer {
             });
             
             if (cellsToDraw.length > 0) {
-                // Draw only the non-animating cells (no letters)
+                // Draw only the non-animating cells
                 this.drawShape(cellsToDraw, block.position, block.color, false);
             }
         }
@@ -136,17 +146,6 @@ export class Renderer {
         // Draw queue background strip
         this.ctx.fillStyle = '#f5f5f5';
         this.ctx.fillRect(0, queueAreaTop, CANVAS_WIDTH, QUEUE_AREA_HEIGHT);
-
-        // Draw label centered above cards
-        this.ctx.fillStyle = '#333';
-        this.ctx.font = 'bold 18px sans-serif';
-        this.ctx.textAlign = 'center';
-        this.ctx.fillText(
-            'Next Shapes',
-            CANVAS_WIDTH / 2,
-            queueAreaTop + QUEUE_AREA_PADDING
-        );
-        this.ctx.textAlign = 'left';
 
         for (let i = 0; i < queue.length; i++) {
             const shape = queue[i];
@@ -205,7 +204,7 @@ export class Renderer {
      * @param dragState - Current drag state
      */
     drawDragPreview(dragState: DragState): void {
-        if (!dragState.isDragging || !dragState.shape) return;
+        if (!dragState.isDragging || !dragState.shape || !dragState.hasBoardPosition) return;
 
         const position = dragState.mousePosition;
         const shapeIndex = getShapeIndex(dragState.shape);
@@ -300,9 +299,8 @@ export class Renderer {
         // Reset shadow
         this.ctx.shadowBlur = 0;
         
-        // Restart prompt with pulsing effect
-        const pulse = Math.sin(Date.now() / 200) * 0.2 + 1; // Pulse between 0.8 and 1.2
-        this.ctx.font = `${24 * pulse}px sans-serif`;
+        // Restart prompt static text for clarity
+        this.ctx.font = '24px sans-serif';
         this.ctx.fillStyle = '#4ECDC4';
         this.ctx.textAlign = 'center';
         this.ctx.fillText(
@@ -334,10 +332,14 @@ export class Renderer {
         gameOverProgress: number = 0
     ): void {
         this.clear();
-        this.drawGrid();
+        if (this.settings.showGrid) {
+            this.drawGrid();
+        }
         this.drawBoard(placedBlocks, animatingCells);
         this.drawQueue(queue);
-        this.drawDragPreview(dragState);
+        if (this.settings.showGhostPreview) {
+            this.drawDragPreview(dragState);
+        }
 
         if (gameOver) {
             this.drawGameOver(gameOverProgress);

@@ -34,8 +34,7 @@ export interface GameState {
     queue: Shape[];                // Current queue of 3 shapes to place
     placedBlocks: PlacedBlock[];   // All blocks currently on the board
     score: number;                 // Current score
-    gameOver: boolean;              // Whether the game has ended
-    consecutiveClears: number;     // Number of consecutive clears in current turn
+    gameOver: boolean;             // Whether the game has ended
 }
 
 /**
@@ -47,6 +46,7 @@ export interface DragState {
     shape: Shape | null;           // The shape being dragged
     mousePosition: Position;       // Current mouse position in grid coordinates
     isValidPosition: boolean;      // Whether current position is valid for placement
+    hasBoardPosition: boolean;     // Whether the cursor has entered the board area
 }
 
 /**
@@ -56,8 +56,20 @@ export interface AnimatingCell {
     x: number;                     // Grid x coordinate
     y: number;                     // Grid y coordinate
     color: string;                 // Color of the cell
-    letter: string;                // Letter to display (if tetromino)
     startTime: number;             // Timestamp when animation started
     progress: number;              // Animation progress (0 to 1)
+}
+
+/**
+ * User-adjustable game settings exposed through the settings panel
+ */
+export type ThemeName = 'classic' | 'midnight' | 'sunset';
+
+export interface GameSettings {
+    showGrid: boolean;
+    showGhostPreview: boolean;
+    enableAnimations: boolean;
+    soundEnabled: boolean;
+    theme: ThemeName;
 }
 

@@ -39,6 +39,7 @@ export class InputHandler {
             shape: null,
             mousePosition: { x: 0, y: 0 },
             isValidPosition: false,
+            hasBoardPosition: false,
         };
 
         this.setupEventListeners();
@@ -115,6 +116,7 @@ export class InputHandler {
         if (canvasX >= 0 && canvasX < BOARD_PIXEL_SIZE && canvasY >= 0 && canvasY < BOARD_PIXEL_SIZE) {
             const gridPos = snapToGrid(canvasX, canvasY, CELL_SIZE);
             this.dragState.mousePosition = gridPos;
+            this.dragState.hasBoardPosition = true;
 
             if (this.dragState.shape) {
                 this.dragState.isValidPosition = canPlaceShape(
@@ -152,6 +154,7 @@ export class InputHandler {
             shape: null,
             mousePosition: { x: 0, y: 0 },
             isValidPosition: false,
+            hasBoardPosition: false,
         };
     }
 
@@ -165,6 +168,7 @@ export class InputHandler {
             shape: null,
             mousePosition: { x: 0, y: 0 },
             isValidPosition: false,
+            hasBoardPosition: false,
         };
     }
 

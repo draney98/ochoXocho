@@ -45,40 +45,32 @@ const TETROMINOES: Shape[] = [
 const ALL_SHAPES: Shape[] = [...DOMINO, ...TETROMINOES];
 
 /**
- * Tetromino letters in order: I, O, T, S, Z, J, L
+ * Keeps all colors within a narrow hue band (same general color family) while
+ * varying saturation/lightness to maintain distinguishability.
  */
-const TETROMINO_LETTERS: string[] = ['I', 'O', 'T', 'S', 'Z', 'J', 'L'];
-
-/**
- * Generates a random monochromatic color scheme
- * Creates colors using variations of a single hue with different saturations and lightness
- * @returns Array of hex color strings
- */
-function generateComplementaryColorScheme(): string[] {
-    // Start with a random base hue (0-360)
-    const baseHue = Math.random() * 360;
-    
-    // Generate 7 colors (one for each tetromino)
-    // All colors use the same hue (monochromatic)
+function generateMonochromaticColorScheme(): string[] {
     const colors: string[] = [];
-    
-    for (let i = 0; i < 7; i++) {
-        // Use the same hue for all colors (monochromatic)
-        const hue = baseHue;
-        
-        // Vary saturation and lightness for visual distinction
-        // Saturation: 50-90% for vibrant colors
-        const saturation = 50 + (i * 5) + Math.random() * 5;
-        
-        // Lightness: vary from 30% to 70% for good contrast
-        // Distribute lightness values across the range
-        const lightness = 30 + (i * 6) + Math.random() * 4;
-        
-        // Convert HSL to RGB then to hex
-        const color = hslToHex(hue, saturation, lightness);
-        colors.push(color);
+    const baseHue = Math.random() * 360;
+    const hueJitterRange = 8; // degrees
+    const shapeCount = ALL_SHAPES.length;
+
+    for (let i = 0; i < shapeCount; i++) {
+        const progress = shapeCount > 1 ? i / (shapeCount - 1) : 0;
+        const hue =
+            (baseHue +
+                (Math.random() * hueJitterRange - hueJitterRange / 2) +
+                360) %
+            360;
+        const saturation = clamp(60 + progress * 25 + Math.random() * 5, 55, 95);
+        const lightnessBase = 35 + progress * 30;
+        const lightness = clamp(
+            lightnessBase + (Math.random() * 6 - 3),
+            30,
+            70
+        );
+        colors.push(hslToHex(hue, saturation, lightness));
     }
-    
+
     return colors;
 }
 
@@ -119,12 +111,15 @@ function hslToHex(h: number, s: number, l: number): string {
     return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
 }
 
+function clamp(value: number, min: number, max: number): number {
+    return Math.min(Math.max(value, min), max);
+}
+
 /**
  * Color palette for shapes - generated once at module load
- * Uses a monochromatic color scheme (variations of a single hue)
- * Each shape gets a distinct color based on its index
+ * Uses a spaced hue scheme to maximize contrast between pieces
  */
-const SHAPE_COLORS: string[] = generateComplementaryColorScheme();
+const SHAPE_COLORS: string[] = generateMonochromaticColorScheme();
 
 /**
  * Rotates a shape by 90, 180, or 270 degrees clockwise
@@ -270,19 +265,5 @@ export function getShapeIndex(shape: Shape): number {
     }
     
     return -1;
-}
-
-/**
- * Gets the letter for a tetromino shape
- * @param shape - The shape to get the letter for
- * @returns The letter (I, O, T, S, Z, J, L) for tetrominoes
- */
-export function getShapeLetter(shape: Shape): string {
-    const index = getShapeIndex(shape);
-    // All shapes are tetrominoes (indices 0-6)
-    if (index >= 0 && index < TETROMINOES.length) {
-        return TETROMINO_LETTERS[index];
-    }
-    return '';
 }
 

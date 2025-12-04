@@ -162,6 +162,20 @@ export class Board {
     }
 
     /**
+     * Checks if the board has no filled cells
+     */
+    isEmpty(): boolean {
+        for (let y = 0; y < BOARD_SIZE; y++) {
+            for (let x = 0; x < BOARD_SIZE; x++) {
+                if (this.grid[y][x]) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    /**
      * Resets the board to an empty state
      */
     reset(): void {
