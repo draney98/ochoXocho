@@ -22,6 +22,8 @@ export const GAMEPLAY_CONFIG = {
     darknessReduction: 0.1,
     shapesPerValueTier: 10,
     pointsPerTier: 10,
+    pulseThreshold: 60, // Blocks with value > this will pulse
+    explosionThreshold: 90, // Blocks with value > this will explode
 } as const;
 
 /**
@@ -30,6 +32,8 @@ export const GAMEPLAY_CONFIG = {
 export const ANIMATION_CONFIG = {
     lineClearMs: 300,
     gameOverFadeMs: 1000,
+    pulseCycleMs: 1000, // Duration of one pulse cycle
+    explosionMs: 500, // Duration of explosion animation
 } as const;
 
 /**
@@ -91,7 +95,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
     soundEnabled: true,
     theme: 'classic',
     mode: 'easy',
-    showPointValues: false, // Dev setting: off by default
+    showPointValues: true, // Dev setting: off by default
 };
 
 /**

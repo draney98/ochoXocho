@@ -67,6 +67,7 @@ export interface AnimatingCell {
     color: string;                 // Color of the cell
     startTime: number;             // Timestamp when animation started
     progress: number;              // Animation progress (0 to 1)
+    type?: 'clear' | 'explosion';  // Type of animation (defaults to 'clear')
 }
 
 /**

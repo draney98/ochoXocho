@@ -16,7 +16,7 @@ import {
     QUEUE_ITEM_HEIGHT,
     getQueueItemRect,
 } from './constants';
-import { GAMEPLAY_CONFIG } from './config';
+import { GAMEPLAY_CONFIG, ANIMATION_CONFIG } from './config';
 
 /**
  * Renderer class handles all canvas drawing operations
@@ -142,7 +142,19 @@ export class Renderer {
                 const displayValue = block.pointValue + (levelIncrements * GAMEPLAY_CONFIG.pointsPerTier);
                 
                 // Apply darkness to color
-                const darkenedColor = this.darkenColor(block.color, block.darkness);
+                let darkenedColor = this.darkenColor(block.color, block.darkness);
+                
+                // Apply pulsing effect if value > pulse threshold
+                const shouldPulse = displayValue > GAMEPLAY_CONFIG.pulseThreshold;
+                if (shouldPulse) {
+                    const pulseProgress = (Date.now() % ANIMATION_CONFIG.pulseCycleMs) / ANIMATION_CONFIG.pulseCycleMs;
+                    // Pulse between 0.7 and 1.0 brightness using sine wave
+                    const pulseBrightness = 0.7 + (Math.sin(pulseProgress * Math.PI * 2) * 0.15 + 0.15);
+                    // Interpolate between current darkness and full brightness (1.0) based on pulseBrightness
+                    // When pulseBrightness is 1.0, use full brightness; when 0.7, use current darkness
+                    const pulsedDarkness = block.darkness + (1.0 - block.darkness) * (pulseBrightness - 0.7) / 0.3;
+                    darkenedColor = this.darkenColor(block.color, pulsedDarkness);
+                }
                 
                 // Draw only the non-animating cells with incremented point values
                 this.drawShape(cellsToDraw, block.position, darkenedColor, false, displayValue);
@@ -340,30 +352,65 @@ export class Renderer {
     drawAnimatingCell(cell: AnimatingCell): void {
         const x = cell.x * CELL_SIZE;
         const y = cell.y * CELL_SIZE;
+        const isExplosion = cell.type === 'explosion';
         
-        // Calculate animation values (fade out and scale down)
-        const alpha = 1 - cell.progress; // Fade from 1 to 0
-        const scale = 1 - cell.progress * 0.5; // Scale from 1 to 0.5
-        
-        const centerX = x + CELL_SIZE / 2;
-        const centerY = y + CELL_SIZE / 2;
-        const size = (CELL_SIZE - 4) * scale;
-        const offsetX = (CELL_SIZE - 4 - size) / 2;
-        const offsetY = (CELL_SIZE - 4 - size) / 2;
-        
-        this.ctx.save();
-        this.ctx.globalAlpha = alpha;
-        
-        // Draw filled cell (scaled)
-        this.ctx.fillStyle = cell.color;
-        this.ctx.fillRect(x + 2 + offsetX, y + 2 + offsetY, size, size);
-        
-        // Draw border (scaled)
-        this.ctx.strokeStyle = '#333';
-        this.ctx.lineWidth = 2;
-        this.ctx.strokeRect(x + 2 + offsetX, y + 2 + offsetY, size, size);
-        
-        this.ctx.restore();
+        if (isExplosion) {
+            // Explosion animation: expand and fade with particles
+            const alpha = 1 - cell.progress;
+            const scale = 1 + cell.progress * 2; // Expand from 1x to 3x size
+            
+            const centerX = x + CELL_SIZE / 2;
+            const centerY = y + CELL_SIZE / 2;
+            const size = (CELL_SIZE - 4) * scale;
+            const offsetX = (CELL_SIZE - 4 - size) / 2;
+            const offsetY = (CELL_SIZE - 4 - size) / 2;
+            
+            this.ctx.save();
+            this.ctx.globalAlpha = alpha * 0.8; // Slightly transparent
+            
+            // Draw expanding cell
+            this.ctx.fillStyle = cell.color;
+            this.ctx.fillRect(x + 2 + offsetX, y + 2 + offsetY, size, size);
+            
+            // Draw particles (small squares radiating outward)
+            const particleCount = 8;
+            for (let i = 0; i < particleCount; i++) {
+                const angle = (i / particleCount) * Math.PI * 2;
+                const distance = cell.progress * CELL_SIZE * 1.5;
+                const particleX = centerX + Math.cos(angle) * distance;
+                const particleY = centerY + Math.sin(angle) * distance;
+                const particleSize = (CELL_SIZE - 4) * 0.3 * (1 - cell.progress);
+                
+                this.ctx.fillStyle = cell.color;
+                this.ctx.fillRect(particleX - particleSize / 2, particleY - particleSize / 2, particleSize, particleSize);
+            }
+            
+            this.ctx.restore();
+        } else {
+            // Original line clear animation (fade out and scale down)
+            const alpha = 1 - cell.progress; // Fade from 1 to 0
+            const scale = 1 - cell.progress * 0.5; // Scale from 1 to 0.5
+            
+            const centerX = x + CELL_SIZE / 2;
+            const centerY = y + CELL_SIZE / 2;
+            const size = (CELL_SIZE - 4) * scale;
+            const offsetX = (CELL_SIZE - 4 - size) / 2;
+            const offsetY = (CELL_SIZE - 4 - size) / 2;
+            
+            this.ctx.save();
+            this.ctx.globalAlpha = alpha;
+            
+            // Draw filled cell (scaled)
+            this.ctx.fillStyle = cell.color;
+            this.ctx.fillRect(x + 2 + offsetX, y + 2 + offsetY, size, size);
+            
+            // Draw border (scaled)
+            this.ctx.strokeStyle = '#333';
+            this.ctx.lineWidth = 2;
+            this.ctx.strokeRect(x + 2 + offsetX, y + 2 + offsetY, size, size);
+            
+            this.ctx.restore();
+        }
     }
 
     /**

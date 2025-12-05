@@ -141,7 +141,9 @@ export class Game {
         const currentTime = Date.now();
         this.animatingCells = this.animatingCells.filter(cell => {
             const elapsed = currentTime - cell.startTime;
-            cell.progress = Math.min(elapsed / this.ANIMATION_DURATION, 1);
+            // Use different duration for explosions vs line clears
+            const duration = cell.type === 'explosion' ? ANIMATION_CONFIG.explosionMs : this.ANIMATION_DURATION;
+            cell.progress = Math.min(elapsed / duration, 1);
             return cell.progress < 1; // Remove completed animations
         });
         
@@ -153,6 +155,9 @@ export class Game {
             }
             return;
         }
+        
+        // Check for blocks that should explode (value > 90)
+        this.checkForExplosions();
         
         // Update input handler references
         this.inputHandler.updateBoard(this.board);
@@ -360,6 +365,69 @@ export class Game {
     }
 
     /**
+     * Checks for blocks that should explode (value > 90) and removes them
+     * Exploding blocks do NOT award points
+     */
+    private checkForExplosions(): void {
+        if (this.state.gameOver) {
+            return;
+        }
+        
+        const currentTime = Date.now();
+        const blocksToExplode: Array<{ block: PlacedBlock; cells: Array<{ x: number; y: number }> }> = [];
+        
+        // Find all cells in blocks that should explode
+        for (const block of this.state.placedBlocks) {
+            const placementLevel = Math.floor(block.totalShapesPlacedAtPlacement / GAMEPLAY_CONFIG.shapesPerValueTier);
+            const currentLevel = Math.floor(this.state.totalShapesPlaced / GAMEPLAY_CONFIG.shapesPerValueTier);
+            const levelIncrements = currentLevel - placementLevel;
+            const currentPointValue = block.pointValue + (levelIncrements * GAMEPLAY_CONFIG.pointsPerTier);
+            
+            if (currentPointValue > GAMEPLAY_CONFIG.explosionThreshold) {
+                const cells: Array<{ x: number; y: number }> = [];
+                for (const cell of block.shape) {
+                    const absoluteX = block.position.x + cell.x;
+                    const absoluteY = block.position.y + cell.y;
+                    cells.push({ x: absoluteX, y: absoluteY });
+                    
+                    // Add explosion animation
+                    this.animatingCells.push({
+                        x: absoluteX,
+                        y: absoluteY,
+                        color: block.color,
+                        startTime: currentTime,
+                        progress: 0,
+                        type: 'explosion' // Mark as explosion
+                    });
+                }
+                blocksToExplode.push({ block, cells });
+            }
+        }
+        
+        // Remove exploding blocks immediately from board and placed blocks
+        if (blocksToExplode.length > 0) {
+            for (const { block, cells } of blocksToExplode) {
+                // Clear cells from board
+                for (const cell of cells) {
+                    this.board.clearCell(cell.x, cell.y);
+                }
+            }
+            
+            // Remove exploded blocks from placedBlocks
+            this.state.placedBlocks = this.state.placedBlocks.filter(block => {
+                const placementLevel = Math.floor(block.totalShapesPlacedAtPlacement / GAMEPLAY_CONFIG.shapesPerValueTier);
+                const currentLevel = Math.floor(this.state.totalShapesPlaced / GAMEPLAY_CONFIG.shapesPerValueTier);
+                const levelIncrements = currentLevel - placementLevel;
+                const currentPointValue = block.pointValue + (levelIncrements * GAMEPLAY_CONFIG.pointsPerTier);
+                return currentPointValue <= GAMEPLAY_CONFIG.explosionThreshold;
+            });
+            
+            // Play explosion sound
+            this.soundManager.playPop();
+        }
+    }
+
+    /**
      * Checks for full rows and columns, clears them, and awards points
      * Does NOT clear if game is over - board should remain visible
      */
@@ -433,9 +501,10 @@ export class Game {
         this.state.linesCleared += linesCleared;
         this.updateLinesDisplay();
 
-        // Darken all remaining blocks
+        // Darken all remaining blocks and increment their point values
         this.state.placedBlocks.forEach(block => {
             block.darkness = Math.max(0, block.darkness - GAMEPLAY_CONFIG.darknessReduction);
+            block.pointValue += linesCleared; // Increment point value by 1 for each line/column cleared
         });
 
         // Update level progress

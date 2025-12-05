@@ -30,6 +30,8 @@ const DOMINO: Shape[] = [
 const TROMINOES: Shape[] = [
     // Three block horizontal line (XXX)
     [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 2, y: 0 }],
+    // L-shape (XX/X)
+    [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 }],
 ];
 
 /**
@@ -246,17 +248,64 @@ function rotateShape(shape: Shape, rotations: number): Shape {
 }
 
 /**
+ * Gets the size (number of blocks) of a shape
+ * @param shape - The shape to measure
+ * @returns Number of blocks in the shape
+ */
+function getShapeSize(shape: Shape): number {
+    return shape.length;
+}
+
+/**
  * Generates a random shape from the pool with random rotation
  * Excludes monomino (single dot piece) - it only appears in easy mode fallback
+ * @param weightedForEasy - If true, smaller shapes are more likely to appear
  * @returns A random shape with random rotation applied
  */
-function getRandomShape(): Shape {
+function getRandomShape(weightedForEasy: boolean = false): Shape {
+    if (!weightedForEasy) {
+        // Normal random selection
+        const index = Math.floor(Math.random() * SHAPES_WITHOUT_MONOMINO.length);
+        const baseShape = SHAPES_WITHOUT_MONOMINO[index];
+        
+        // Apply random rotation (0, 90, 180, or 270 degrees)
+        const rotations = Math.floor(Math.random() * 4);
+        
+        return rotateShape(baseShape, rotations);
+    }
+    
+    // Weighted selection for easy mode: smaller shapes are more likely
+    // Weight inversely proportional to size (smaller = higher weight)
+    const weights: Array<{ shape: Shape; weight: number }> = [];
+    
+    for (const shape of SHAPES_WITHOUT_MONOMINO) {
+        const size = getShapeSize(shape);
+        // Weight = 1/size, so smaller shapes get higher weights
+        // For example: 2 blocks = 0.5, 3 blocks = 0.33, 4 blocks = 0.25, 9 blocks = 0.11
+        const weight = 1 / size;
+        weights.push({ shape, weight });
+    }
+    
+    // Calculate total weight
+    const totalWeight = weights.reduce((sum, w) => sum + w.weight, 0);
+    
+    // Select a random value between 0 and totalWeight
+    let random = Math.random() * totalWeight;
+    
+    // Find which shape this random value corresponds to
+    for (const { shape, weight } of weights) {
+        random -= weight;
+        if (random <= 0) {
+            // Apply random rotation (0, 90, 180, or 270 degrees)
+            const rotations = Math.floor(Math.random() * 4);
+            return rotateShape(shape, rotations);
+        }
+    }
+    
+    // Fallback (shouldn't happen)
     const index = Math.floor(Math.random() * SHAPES_WITHOUT_MONOMINO.length);
     const baseShape = SHAPES_WITHOUT_MONOMINO[index];
-    
-    // Apply random rotation (0, 90, 180, or 270 degrees)
     const rotations = Math.floor(Math.random() * 4);
-    
     return rotateShape(baseShape, rotations);
 }
 
@@ -277,7 +326,7 @@ export function generateShapes(): Shape[] {
 export function generateEasyShapes(board: Board): Shape[] {
     // Try up to configured number of times to find a good combination
     for (let attempt = 0; attempt < EASY_MODE_CONFIG.maxOptimisticAttempts; attempt++) {
-        const shapes = [getRandomShape(), getRandomShape(), getRandomShape()];
+        const shapes = [getRandomShape(true), getRandomShape(true), getRandomShape(true)];
         
         // Check if all three fit
         let allFit = true;
@@ -310,18 +359,18 @@ export function generateEasyShapes(board: Board): Shape[] {
     // Fallback: Try to find at least one shape that fits
     // Try up to configured number of times to find a shape that fits
     for (let attempt = 0; attempt < EASY_MODE_CONFIG.fallbackAttempts; attempt++) {
-        const testShape = getRandomShape();
+        const testShape = getRandomShape(true);
         const validPositions = getValidPositions(board, testShape);
         if (validPositions.length > 0) {
-            // Found a shape that fits, return it with 2 random shapes
-            return [testShape, getRandomShape(), getRandomShape()];
+            // Found a shape that fits, return it with 2 random shapes (weighted for easy mode)
+            return [testShape, getRandomShape(true), getRandomShape(true)];
         }
     }
     
     // Final fallback: If no shape can fit, use a single block (X) which scores 0 points
     // The single block is at index 0 in ALL_SHAPES (MONOMINO)
     const singleBlock: Shape = [{ x: 0, y: 0 }];
-    return [singleBlock, getRandomShape(), getRandomShape()];
+    return [singleBlock, getRandomShape(true), getRandomShape(true)];
 }
 
 /**
