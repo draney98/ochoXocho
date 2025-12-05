@@ -82,5 +82,6 @@ export interface GameSettings {
     soundEnabled: boolean;
     theme: ThemeName;
     mode: GameMode;
+    showPointValues: boolean; // Dev setting: show point values on blocks and in queue
 }
 

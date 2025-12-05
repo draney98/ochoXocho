@@ -183,8 +183,8 @@ export class Renderer {
             this.ctx.lineWidth = 2;
             this.ctx.strokeRect(x + 2, y + 2, CELL_SIZE - 4, CELL_SIZE - 4);
 
-            // Draw point value if provided
-            if (pointValue !== undefined && !isGhost) {
+            // Draw point value if provided and setting is enabled
+            if (pointValue !== undefined && !isGhost && this.settings.showPointValues) {
                 // Calculate center of the filled block (accounting for 2px padding)
                 const blockX = x + 2;
                 const blockY = y + 2;
@@ -282,19 +282,21 @@ export class Renderer {
                 );
             }
 
-            // Draw point value in bottom right corner
-            const shapeIndex = getShapeIndex(shape);
-            // Note: Queue shows base point value, not level-adjusted
-            const pointValue = getShapePointValue(shapeIndex, 0);
-            this.ctx.fillStyle = queuePointText;
-            this.ctx.font = '14px sans-serif';
-            this.ctx.textAlign = 'right';
-            this.ctx.textBaseline = 'bottom';
-            this.ctx.fillText(
-                pointValue.toString(),
-                rect.x + rect.width - 6,
-                rect.y + QUEUE_ITEM_HEIGHT - 6
-            );
+            // Draw point value in bottom right corner if setting is enabled
+            if (this.settings.showPointValues) {
+                const shapeIndex = getShapeIndex(shape);
+                // Note: Queue shows base point value, not level-adjusted
+                const pointValue = getShapePointValue(shapeIndex, 0);
+                this.ctx.fillStyle = queuePointText;
+                this.ctx.font = '14px sans-serif';
+                this.ctx.textAlign = 'right';
+                this.ctx.textBaseline = 'bottom';
+                this.ctx.fillText(
+                    pointValue.toString(),
+                    rect.x + rect.width - 6,
+                    rect.y + QUEUE_ITEM_HEIGHT - 6
+                );
+            }
         }
     }
 

@@ -60,8 +60,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const game = new Game(canvas, settingsState);
     game.start();
 
-    setupSettingsControls(game, settingsState);
-    setupHighScores(game);
+    const updateHighScoreMode = setupHighScores(game, settingsState);
+    setupSettingsControls(game, settingsState, updateHighScoreMode);
 
     // Restart button provides explicit control over resetting the board
     const restartButton = document.getElementById('restart-button');
@@ -72,7 +72,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-function setupSettingsControls(game: Game, initialSettings: GameSettings): void {
+function setupSettingsControls(game: Game, initialSettings: GameSettings, updateHighScoreMode?: (mode: GameMode) => void): void {
     const panel = document.getElementById('settings-panel');
     const backdrop = document.getElementById('settings-backdrop');
     const openButton = document.getElementById('settings-button');
@@ -84,6 +84,7 @@ function setupSettingsControls(game: Game, initialSettings: GameSettings): void 
     const themeSelect = document.getElementById('setting-theme') as HTMLSelectElement | null;
     const soundInput = document.getElementById('setting-enable-sound') as HTMLInputElement | null;
     const modeSelect = document.getElementById('setting-mode') as HTMLSelectElement | null;
+    const pointValuesInput = document.getElementById('setting-show-point-values') as HTMLInputElement | null;
 
     // Sync inputs with initial settings so toggles reflect any future default changes
     if (gridInput) gridInput.checked = initialSettings.showGrid;
@@ -92,12 +93,18 @@ function setupSettingsControls(game: Game, initialSettings: GameSettings): void 
     if (themeSelect) themeSelect.value = initialSettings.theme;
     if (soundInput) soundInput.checked = initialSettings.soundEnabled;
     if (modeSelect) modeSelect.value = initialSettings.mode;
+    if (pointValuesInput) pointValuesInput.checked = initialSettings.showPointValues;
 
     const pushToGame = () => {
         const themeValue = (themeSelect?.value as ThemeName) ?? initialSettings.theme;
         const modeValue = (modeSelect?.value as GameMode) ?? initialSettings.mode;
         applyTheme(themeValue);
         updateModeDisplay(modeValue);
+        
+        // Update high score mode when it changes
+        if (updateHighScoreMode) {
+            updateHighScoreMode(modeValue);
+        }
 
         const updatedSettings: GameSettings = {
             showGrid: gridInput?.checked ?? true,
@@ -106,12 +113,13 @@ function setupSettingsControls(game: Game, initialSettings: GameSettings): void 
             soundEnabled: soundInput?.checked ?? true,
             theme: themeValue,
             mode: modeValue,
+            showPointValues: pointValuesInput?.checked ?? false,
         };
         game.updateSettings(updatedSettings);
         saveSettings(updatedSettings); // Save to localStorage
     };
 
-    [gridInput, ghostInput, animationInput, soundInput].forEach(input => {
+    [gridInput, ghostInput, animationInput, soundInput, pointValuesInput].forEach(input => {
         input?.addEventListener('change', pushToGame);
     });
 
@@ -177,9 +185,12 @@ function setupResponsiveCanvas(canvas: HTMLCanvasElement): void {
     window.addEventListener('resize', updateCanvasSize);
 }
 
-function setupHighScores(game: Game): void {
+function setupHighScores(game: Game, initialSettings: GameSettings): (mode: GameMode) => void {
+    let currentMode = initialSettings.mode;
+    
     const updateHighScores = () => {
-        const scores = getHighScores();
+        // Get scores for the current mode
+        const scores = getHighScores(currentMode);
         const todayEl = document.getElementById('high-score-today');
         const weekEl = document.getElementById('high-score-week');
         const yearEl = document.getElementById('high-score-year');
@@ -189,10 +200,19 @@ function setupHighScores(game: Game): void {
         if (yearEl) yearEl.textContent = scores.ever.toString();
     };
 
+    // Update when mode changes
+    const updateMode = (mode: GameMode) => {
+        currentMode = mode;
+        updateHighScores();
+    };
+
     // Update on load
     updateHighScores();
 
     // Update periodically to catch score changes
     setInterval(updateHighScores, HIGH_SCORE_CONFIG.pollIntervalMs);
+    
+    // Return function to update mode
+    return updateMode;
 }
 

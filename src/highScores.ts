@@ -87,59 +87,60 @@ export function recordScore(score: number, mode: string = 'easy'): void {
 }
 
 /**
- * Gets the highest score today
+ * Gets the highest score today for a specific mode
  */
-export function getHighestToday(): number {
+export function getHighestToday(mode: string = 'easy'): number {
     const todayStart = getTodayStart();
-    const scores = getStoredScores();
+    const scores = getStoredScores(mode);
     const todayScores = scores.filter(s => s.timestamp >= todayStart);
     if (todayScores.length === 0) return 0;
     return Math.max(...todayScores.map(s => s.score));
 }
 
 /**
- * Gets the highest score this week
+ * Gets the highest score this week for a specific mode
  */
-export function getHighestThisWeek(): number {
+export function getHighestThisWeek(mode: string = 'easy'): number {
     const weekStart = getWeekStart();
-    const scores = getStoredScores();
+    const scores = getStoredScores(mode);
     const weekScores = scores.filter(s => s.timestamp >= weekStart);
     if (weekScores.length === 0) return 0;
     return Math.max(...weekScores.map(s => s.score));
 }
 
 /**
- * Gets the highest score this year
+ * Gets the highest score this year for a specific mode
  */
-export function getHighestThisYear(): number {
+export function getHighestThisYear(mode: string = 'easy'): number {
     const yearStart = getYearStart();
-    const scores = getStoredScores();
+    const scores = getStoredScores(mode);
     const yearScores = scores.filter(s => s.timestamp >= yearStart);
     if (yearScores.length === 0) return 0;
     return Math.max(...yearScores.map(s => s.score));
 }
 
 /**
- * Gets the highest score of all time
+ * Gets the highest score of all time for a specific mode
  */
-export function getHighestEver(): number {
-    const scores = getStoredScores();
+export function getHighestEver(mode: string = 'easy'): number {
+    const scores = getStoredScores(mode);
     if (scores.length === 0) return 0;
     return Math.max(...scores.map(s => s.score));
 }
 
 /**
- * Gets all high score records for display
+ * Gets all high score records for display for a specific mode
+ * @param mode - The game mode ('easy' or 'hard')
  */
-export function getHighScores(): {
+export function getHighScores(mode: string = 'easy'): {
     today: number;
     week: number;
     ever: number;
 } {
     return {
-        today: getHighestToday(),
-        week: getHighestThisWeek(),
-        ever: getHighestEver(),
+        today: getHighestToday(mode),
+        week: getHighestThisWeek(mode),
+        ever: getHighestEver(mode),
     };
 }
 

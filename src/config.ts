@@ -91,6 +91,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
     soundEnabled: true,
     theme: 'classic',
     mode: 'easy',
+    showPointValues: false, // Dev setting: off by default
 };
 
 /**
