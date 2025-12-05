@@ -27,11 +27,11 @@ export function calculateScore(
 
     // Sum up point values of all blocks in cleared lines/columns
     for (const block of placedBlocks) {
-        // Calculate current point value (base + increments since placement)
+        // Calculate current point value (base + line clear bonuses + level increments)
         const placementLevel = Math.floor(block.totalShapesPlacedAtPlacement / GAMEPLAY_CONFIG.shapesPerValueTier);
         const currentLevel = Math.floor(totalShapesPlaced / GAMEPLAY_CONFIG.shapesPerValueTier);
         const levelIncrements = currentLevel - placementLevel;
-        const currentPointValue = block.pointValue + (levelIncrements * GAMEPLAY_CONFIG.pointsPerTier);
+        const currentPointValue = block.pointValue + block.lineClearBonuses + (levelIncrements * GAMEPLAY_CONFIG.pointsPerTier);
         
         // Check if any cell of this block is in a cleared line/column
         let blockInClearedLine = false;

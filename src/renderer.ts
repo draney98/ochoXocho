@@ -132,14 +132,14 @@ export class Renderer {
             });
             
             if (cellsToDraw.length > 0) {
-                // Calculate point value: base value + points per tier for each level increment since placement
+                // Calculate point value: base value + line clear bonuses + level increments
                 // Oldest blocks (placed earliest) will have the highest values
                 const placementLevel = Math.floor(block.totalShapesPlacedAtPlacement / GAMEPLAY_CONFIG.shapesPerValueTier);
                 const currentLevel = Math.floor(totalShapesPlaced / GAMEPLAY_CONFIG.shapesPerValueTier);
                 
                 // Each block increments by points per tier for every tier of shapes placed after it was placed
                 const levelIncrements = currentLevel - placementLevel;
-                const displayValue = block.pointValue + (levelIncrements * GAMEPLAY_CONFIG.pointsPerTier);
+                const displayValue = block.pointValue + block.lineClearBonuses + (levelIncrements * GAMEPLAY_CONFIG.pointsPerTier);
                 
                 // Apply darkness to color
                 let darkenedColor = this.darkenColor(block.color, block.darkness);

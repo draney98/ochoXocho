@@ -33,7 +33,6 @@ export const ANIMATION_CONFIG = {
     lineClearMs: 300,
     gameOverFadeMs: 1000,
     pulseCycleMs: 1000, // Duration of one pulse cycle
-    explosionMs: 500, // Duration of explosion animation
 } as const;
 
 /**
@@ -126,4 +125,3 @@ export const RESPONSIVE_CANVAS_LIMITS = {
     verticalPadding: 300,
     horizontalPadding: 80,
 } as const;
-

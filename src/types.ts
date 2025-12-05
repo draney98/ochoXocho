@@ -24,7 +24,8 @@ export interface PlacedBlock {
     shape: Shape;
     position: Position;
     color: string;
-    pointValue: number;  // Points per cell in this shape (stored for reference)
+    pointValue: number;  // Base points per cell in this shape (original value, not modified by line clears)
+    lineClearBonuses: number;  // Cumulative bonuses from line clears (incremented when lines are cleared)
     totalShapesPlacedAtPlacement: number;  // Total shapes placed when this block was placed (ensures point values never decrease)
     shapeIndex: number;  // Index of the shape in the shape pool (preserved even when shape cells are removed)
     darkness: number;    // Darkness multiplier (1.0 = full brightness, decreases by 0.1 each clear)

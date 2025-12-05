@@ -134,11 +134,30 @@ function setupSettingsControls(game: Game, initialSettings: GameSettings, update
         backdrop?.classList.toggle('is-visible', open);
         panel?.setAttribute('aria-hidden', open ? 'false' : 'true');
         backdrop?.setAttribute('aria-hidden', open ? 'false' : 'true');
+        // Prevent body scroll when panel is open on mobile
+        if (open) {
+            document.body.style.overflow = 'hidden';
+        } else {
+            document.body.style.overflow = '';
+        }
     };
 
-    openButton?.addEventListener('click', () => togglePanel(true));
-    closeButton?.addEventListener('click', () => togglePanel(false));
-    backdrop?.addEventListener('click', () => togglePanel(false));
+    openButton?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        togglePanel(true);
+    });
+    closeButton?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        togglePanel(false);
+    });
+    backdrop?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        togglePanel(false);
+    });
+    // Prevent panel clicks from closing the panel
+    panel?.addEventListener('click', (e) => {
+        e.stopPropagation();
+    });
     document.addEventListener('keydown', event => {
         if (event.key === 'Escape') {
             togglePanel(false);
