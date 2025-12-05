@@ -52,11 +52,10 @@ export class Renderer {
      * Loads the Tabler Icons square icon as an image for use on blocks
      */
     private loadBlockIcon(): void {
-        // Tabler Icons square icon - using black stroke for better visibility when multiplied
+        // Tabler Icons square icon - filled version using white fill that we'll colorize
         const svgString = `
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
-                <path d="M3 3m0 2a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2z" />
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="white" stroke="white" stroke-width="1">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" fill="white" stroke="white"/>
             </svg>
         `;
         
@@ -235,27 +234,44 @@ export class Renderer {
      * @param borderColor - Color for the border (defaults to '#333')
      */
     private drawBlock(blockX: number, blockY: number, blockSize: number, color: string, borderColor: string = '#333'): void {
-        // Draw filled cell background
-        this.ctx.fillStyle = color;
-        this.ctx.fillRect(blockX, blockY, blockSize, blockSize);
-
-        // Draw border
-        this.ctx.strokeStyle = borderColor;
-        this.ctx.lineWidth = 2;
-        this.ctx.strokeRect(blockX, blockY, blockSize, blockSize);
-
-        // Draw Heroicons icon overlay if loaded
+        // Draw the icon instead of a filled rectangle
         if (this.blockIconLoaded && this.blockIconImage) {
             this.ctx.save();
-            // Draw the icon with better visibility
-            // Use composite operation to blend with block color
-            this.ctx.globalCompositeOperation = 'multiply';
-            this.ctx.globalAlpha = 0.4; // More visible
-            const iconSize = blockSize * 0.6;
-            const iconX = blockX + (blockSize - iconSize) / 2;
-            const iconY = blockY + (blockSize - iconSize) / 2;
-            this.ctx.drawImage(this.blockIconImage, iconX, iconY, iconSize, iconSize);
+            
+            // Make icon slightly bigger (110% of block size)
+            const iconScale = 1.1;
+            const iconSize = blockSize * iconScale;
+            const iconX = blockX - (iconSize - blockSize) / 2;
+            const iconY = blockY - (iconSize - blockSize) / 2;
+            
+            // Create a temporary canvas to colorize the icon
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = iconSize;
+            tempCanvas.height = iconSize;
+            const tempCtx = tempCanvas.getContext('2d');
+            
+            if (tempCtx) {
+                // Draw the white icon to temp canvas
+                tempCtx.drawImage(this.blockIconImage, 0, 0, iconSize, iconSize);
+                
+                // Colorize: use source-atop to fill with color where icon is opaque
+                tempCtx.globalCompositeOperation = 'source-atop';
+                tempCtx.fillStyle = color;
+                tempCtx.fillRect(0, 0, iconSize, iconSize);
+                
+                // Draw the colorized icon to the main canvas
+                this.ctx.drawImage(tempCanvas, iconX, iconY);
+            } else {
+                // Fallback if temp canvas fails
+                this.ctx.fillStyle = color;
+                this.ctx.fillRect(blockX, blockY, blockSize, blockSize);
+            }
+            
             this.ctx.restore();
+        } else {
+            // Fallback: draw filled rectangle if icon not loaded yet
+            this.ctx.fillStyle = color;
+            this.ctx.fillRect(blockX, blockY, blockSize, blockSize);
         }
     }
 
@@ -456,7 +472,7 @@ export class Renderer {
                 const key = `${x},${row}`;
                 const blockColor = cellColorMap.get(key);
                 
-                if (blockColor) {
+                if (blockColor && this.blockIconLoaded && this.blockIconImage) {
                     // Get complementary color for this specific block
                     const colors = this.getComplementaryColor(blockColor);
                     const highlightColor = colors.highlight;
@@ -464,31 +480,57 @@ export class Renderer {
                     
                     const cellX = x * CELL_SIZE;
                     const cellY = row * CELL_SIZE;
+                    const blockX = cellX + 2;
+                    const blockY = cellY + 2;
+                    const blockSize = CELL_SIZE - 4;
                     
-                    // Draw highlight with glow effect
-                    this.ctx.shadowColor = highlightColor;
+                    // Use icon shape for highlight instead of rectangle
+                    const iconScale = 1.1;
+                    const iconSize = blockSize * iconScale;
+                    const iconX = blockX - (iconSize - blockSize) / 2;
+                    const iconY = blockY - (iconSize - blockSize) / 2;
                     
-                    // Fill with pulsing alpha
-                    this.ctx.globalAlpha = pulseAlpha;
-                    this.ctx.fillStyle = highlightColor;
-                    this.ctx.fillRect(cellX + 2, cellY + 2, CELL_SIZE - 4, CELL_SIZE - 4);
+                    // Create temp canvas for highlighted icon
+                    const tempCanvas = document.createElement('canvas');
+                    tempCanvas.width = iconSize;
+                    tempCanvas.height = iconSize;
+                    const tempCtx = tempCanvas.getContext('2d');
                     
-                    // Draw border
-                    this.ctx.globalAlpha = 1.0;
-                    this.ctx.strokeStyle = borderColor;
-                    this.ctx.lineWidth = 3;
-                    this.ctx.strokeRect(cellX + 2, cellY + 2, CELL_SIZE - 4, CELL_SIZE - 4);
+                    if (tempCtx) {
+                        // Draw the white icon to temp canvas
+                        tempCtx.drawImage(this.blockIconImage, 0, 0, iconSize, iconSize);
+                        
+                        // Colorize with highlight color
+                        tempCtx.globalCompositeOperation = 'source-atop';
+                        tempCtx.fillStyle = highlightColor;
+                        tempCtx.fillRect(0, 0, iconSize, iconSize);
+                        
+                        // Draw highlighted icon with pulsing alpha
+                        this.ctx.shadowColor = highlightColor;
+                        this.ctx.shadowBlur = 10;
+                        this.ctx.globalAlpha = pulseAlpha;
+                        this.ctx.drawImage(tempCanvas, iconX, iconY);
+                        
+                        // Draw border
+                        this.ctx.globalAlpha = 1.0;
+                        this.ctx.strokeStyle = borderColor;
+                        this.ctx.lineWidth = 3;
+                        // Draw border around the icon shape (approximate with rounded rect)
+                        this.ctx.beginPath();
+                        this.ctx.roundRect(iconX, iconY, iconSize, iconSize, 2);
+                        this.ctx.stroke();
+                    }
                 }
             }
         }
         
-        // Highlight individual cells in full columns
+        // Highlight individual cells in full columns - only highlight filled blocks using icon shape
         for (const col of previewLines.columns) {
             for (let y = 0; y < BOARD_CELL_COUNT; y++) {
                 const key = `${col},${y}`;
                 const blockColor = cellColorMap.get(key);
                 
-                if (blockColor) {
+                if (blockColor && this.blockIconLoaded && this.blockIconImage) {
                     // Get complementary color for this specific block
                     const colors = this.getComplementaryColor(blockColor);
                     const highlightColor = colors.highlight;
@@ -496,20 +538,46 @@ export class Renderer {
                     
                     const cellX = col * CELL_SIZE;
                     const cellY = y * CELL_SIZE;
+                    const blockX = cellX + 2;
+                    const blockY = cellY + 2;
+                    const blockSize = CELL_SIZE - 4;
                     
-                    // Draw highlight with glow effect
-                    this.ctx.shadowColor = highlightColor;
+                    // Use icon shape for highlight instead of rectangle
+                    const iconScale = 1.1;
+                    const iconSize = blockSize * iconScale;
+                    const iconX = blockX - (iconSize - blockSize) / 2;
+                    const iconY = blockY - (iconSize - blockSize) / 2;
                     
-                    // Fill with pulsing alpha
-                    this.ctx.globalAlpha = pulseAlpha;
-                    this.ctx.fillStyle = highlightColor;
-                    this.ctx.fillRect(cellX + 2, cellY + 2, CELL_SIZE - 4, CELL_SIZE - 4);
+                    // Create temp canvas for highlighted icon
+                    const tempCanvas = document.createElement('canvas');
+                    tempCanvas.width = iconSize;
+                    tempCanvas.height = iconSize;
+                    const tempCtx = tempCanvas.getContext('2d');
                     
-                    // Draw border
-                    this.ctx.globalAlpha = 1.0;
-                    this.ctx.strokeStyle = borderColor;
-                    this.ctx.lineWidth = 3;
-                    this.ctx.strokeRect(cellX + 2, cellY + 2, CELL_SIZE - 4, CELL_SIZE - 4);
+                    if (tempCtx) {
+                        // Draw the white icon to temp canvas
+                        tempCtx.drawImage(this.blockIconImage, 0, 0, iconSize, iconSize);
+                        
+                        // Colorize with highlight color
+                        tempCtx.globalCompositeOperation = 'source-atop';
+                        tempCtx.fillStyle = highlightColor;
+                        tempCtx.fillRect(0, 0, iconSize, iconSize);
+                        
+                        // Draw highlighted icon with pulsing alpha
+                        this.ctx.shadowColor = highlightColor;
+                        this.ctx.shadowBlur = 10;
+                        this.ctx.globalAlpha = pulseAlpha;
+                        this.ctx.drawImage(tempCanvas, iconX, iconY);
+                        
+                        // Draw border
+                        this.ctx.globalAlpha = 1.0;
+                        this.ctx.strokeStyle = borderColor;
+                        this.ctx.lineWidth = 3;
+                        // Draw border around the icon shape (approximate with rounded rect)
+                        this.ctx.beginPath();
+                        this.ctx.roundRect(iconX, iconY, iconSize, iconSize, 2);
+                        this.ctx.stroke();
+                    }
                 }
             }
         }
@@ -608,17 +676,6 @@ export class Renderer {
         if (dragState.isValidPosition) {
             // Draw valid placement (green tint)
             this.drawShape(dragState.shape, position, color, true);
-            
-            // Draw green border around valid placement
-            this.ctx.strokeStyle = '#4CAF50';
-            this.ctx.lineWidth = 3;
-            this.ctx.globalAlpha = 0.7;
-            for (const block of dragState.shape) {
-                const x = (position.x + block.x) * CELL_SIZE;
-                const y = (position.y + block.y) * CELL_SIZE;
-                this.ctx.strokeRect(x, y, CELL_SIZE, CELL_SIZE);
-            }
-            this.ctx.globalAlpha = 1.0;
         } else {
             // Draw invalid placement (red tint)
             this.ctx.globalAlpha = 0.3;
@@ -698,10 +755,12 @@ export class Renderer {
                 const offset0 = (baseSize - size0) / 2;
                 this.ctx.globalAlpha = alpha0;
                 this.ctx.fillStyle = cell.color;
-                this.ctx.fillRect(x + 2 + offset0, y + 2 + offset0, size0, size0);
+                this.ctx.beginPath();
+                this.ctx.roundRect(x + 2 + offset0, y + 2 + offset0, size0, size0, 2);
+                this.ctx.fill();
                 this.ctx.strokeStyle = '#333';
                 this.ctx.lineWidth = 2;
-                this.ctx.strokeRect(x + 2 + offset0, y + 2 + offset0, size0, size0);
+                this.ctx.stroke();
                 break;
                 
             case 1: // Spin and fade
@@ -714,10 +773,12 @@ export class Renderer {
                 this.ctx.translate(centerX, centerY);
                 this.ctx.rotate(rotation1);
                 this.ctx.fillStyle = cell.color;
-                this.ctx.fillRect(-size1 / 2, -size1 / 2, size1, size1);
+                this.ctx.beginPath();
+                this.ctx.roundRect(-size1 / 2, -size1 / 2, size1, size1, 2);
+                this.ctx.fill();
                 this.ctx.strokeStyle = '#333';
                 this.ctx.lineWidth = 2;
-                this.ctx.strokeRect(-size1 / 2, -size1 / 2, size1, size1);
+                this.ctx.stroke();
                 break;
                 
             case 2: // Shrink to center
@@ -727,10 +788,12 @@ export class Renderer {
                 const offset2 = (baseSize - size2) / 2;
                 this.ctx.globalAlpha = alpha2;
                 this.ctx.fillStyle = cell.color;
-                this.ctx.fillRect(x + 2 + offset2, y + 2 + offset2, size2, size2);
+                this.ctx.beginPath();
+                this.ctx.roundRect(x + 2 + offset2, y + 2 + offset2, size2, size2, 2);
+                this.ctx.fill();
                 this.ctx.strokeStyle = '#333';
                 this.ctx.lineWidth = 2;
-                this.ctx.strokeRect(x + 2 + offset2, y + 2 + offset2, size2, size2);
+                this.ctx.stroke();
                 break;
                 
             case 3: // Slide up and fade
@@ -738,10 +801,12 @@ export class Renderer {
                 const slideY3 = -progress * CELL_SIZE;
                 this.ctx.globalAlpha = alpha3;
                 this.ctx.fillStyle = cell.color;
-                this.ctx.fillRect(x + 2, y + 2 + slideY3, baseSize, baseSize);
+                this.ctx.beginPath();
+                this.ctx.roundRect(x + 2, y + 2 + slideY3, baseSize, baseSize, 2);
+                this.ctx.fill();
                 this.ctx.strokeStyle = '#333';
                 this.ctx.lineWidth = 2;
-                this.ctx.strokeRect(x + 2, y + 2 + slideY3, baseSize, baseSize);
+                this.ctx.stroke();
                 break;
                 
             case 4: // Expand and fade
@@ -751,10 +816,12 @@ export class Renderer {
                 const offset4 = (baseSize - size4) / 2;
                 this.ctx.globalAlpha = alpha4;
                 this.ctx.fillStyle = cell.color;
-                this.ctx.fillRect(x + 2 + offset4, y + 2 + offset4, size4, size4);
+                this.ctx.beginPath();
+                this.ctx.roundRect(x + 2 + offset4, y + 2 + offset4, size4, size4, 2);
+                this.ctx.fill();
                 this.ctx.strokeStyle = '#333';
                 this.ctx.lineWidth = 2;
-                this.ctx.strokeRect(x + 2 + offset4, y + 2 + offset4, size4, size4);
+                this.ctx.stroke();
                 break;
                 
             case 5: // Rotate 180 and shrink
@@ -767,10 +834,12 @@ export class Renderer {
                 this.ctx.translate(centerX, centerY);
                 this.ctx.rotate(rotation5);
                 this.ctx.fillStyle = cell.color;
-                this.ctx.fillRect(-size5 / 2, -size5 / 2, size5, size5);
+                this.ctx.beginPath();
+                this.ctx.roundRect(-size5 / 2, -size5 / 2, size5, size5, 2);
+                this.ctx.fill();
                 this.ctx.strokeStyle = '#333';
                 this.ctx.lineWidth = 2;
-                this.ctx.strokeRect(-size5 / 2, -size5 / 2, size5, size5);
+                this.ctx.stroke();
                 break;
                 
             case 6: // Fade with pulsing scale
@@ -781,10 +850,12 @@ export class Renderer {
                 const offset6 = (baseSize - size6) / 2;
                 this.ctx.globalAlpha = alpha6;
                 this.ctx.fillStyle = cell.color;
-                this.ctx.fillRect(x + 2 + offset6, y + 2 + offset6, size6, size6);
+                this.ctx.beginPath();
+                this.ctx.roundRect(x + 2 + offset6, y + 2 + offset6, size6, size6, 2);
+                this.ctx.fill();
                 this.ctx.strokeStyle = '#333';
                 this.ctx.lineWidth = 2;
-                this.ctx.strokeRect(x + 2 + offset6, y + 2 + offset6, size6, size6);
+                this.ctx.stroke();
                 break;
                 
             case 7: { // Flip horizontally and fade
@@ -795,10 +866,12 @@ export class Renderer {
                 this.ctx.translate(centerX, centerY);
                 this.ctx.scale(scaleX, 1);
                 this.ctx.fillStyle = cell.color;
-                this.ctx.fillRect(-size / 2, -size / 2, size, size);
+                this.ctx.beginPath();
+                this.ctx.roundRect(-size / 2, -size / 2, size, size, 2);
+                this.ctx.fill();
                 this.ctx.strokeStyle = '#333';
                 this.ctx.lineWidth = 2;
-                this.ctx.strokeRect(-size / 2, -size / 2, size, size);
+                this.ctx.stroke();
                 break;
             }
                 
@@ -811,10 +884,12 @@ export class Renderer {
                 this.ctx.globalAlpha = alpha;
                 this.ctx.translate(centerX + wobble, centerY);
                 this.ctx.fillStyle = cell.color;
-                this.ctx.fillRect(-size / 2, -size / 2, size, size);
+                this.ctx.beginPath();
+                this.ctx.roundRect(-size / 2, -size / 2, size, size, 2);
+                this.ctx.fill();
                 this.ctx.strokeStyle = '#333';
                 this.ctx.lineWidth = 2;
-                this.ctx.strokeRect(-size / 2, -size / 2, size, size);
+                this.ctx.stroke();
                 break;
             }
                 
@@ -828,10 +903,12 @@ export class Renderer {
                 this.ctx.translate(centerX, centerY);
                 this.ctx.scale(scaleX, scaleY);
                 this.ctx.fillStyle = cell.color;
-                this.ctx.fillRect(-size / 2, -size / 2, size, size);
+                this.ctx.beginPath();
+                this.ctx.roundRect(-size / 2, -size / 2, size, size, 2);
+                this.ctx.fill();
                 this.ctx.strokeStyle = '#333';
                 this.ctx.lineWidth = 2;
-                this.ctx.strokeRect(-size / 2, -size / 2, size, size);
+                this.ctx.stroke();
                 break;
             }
                 
@@ -846,10 +923,12 @@ export class Renderer {
                 this.ctx.rotate(rotation);
                 this.ctx.translate(distance, 0);
                 this.ctx.fillStyle = cell.color;
-                this.ctx.fillRect(-size / 2, -size / 2, size, size);
+                this.ctx.beginPath();
+                this.ctx.roundRect(-size / 2, -size / 2, size, size, 2);
+                this.ctx.fill();
                 this.ctx.strokeStyle = '#333';
                 this.ctx.lineWidth = 2;
-                this.ctx.strokeRect(-size / 2, -size / 2, size, size);
+                this.ctx.stroke();
                 break;
             }
                 
@@ -864,10 +943,12 @@ export class Renderer {
                 const mixedB = Math.round(b + (255 - b) * whiteMix);
                 this.ctx.globalAlpha = alpha;
                 this.ctx.fillStyle = `rgb(${mixedR}, ${mixedG}, ${mixedB})`;
-                this.ctx.fillRect(x + 2, y + 2, baseSize, baseSize);
+                this.ctx.beginPath();
+                this.ctx.roundRect(x + 2, y + 2, baseSize, baseSize, 2);
+                this.ctx.fill();
                 this.ctx.strokeStyle = '#333';
                 this.ctx.lineWidth = 2;
-                this.ctx.strokeRect(x + 2, y + 2, baseSize, baseSize);
+                this.ctx.stroke();
                 break;
             }
                 
@@ -879,10 +960,12 @@ export class Renderer {
                 const offset = (baseSize - size) / 2;
                 this.ctx.globalAlpha = alpha;
                 this.ctx.fillStyle = cell.color;
-                this.ctx.fillRect(x + 2 + offset, y + 2 + offset - bounce, size, size);
+                this.ctx.beginPath();
+                this.ctx.roundRect(x + 2 + offset, y + 2 + offset - bounce, size, size, 2);
+                this.ctx.fill();
                 this.ctx.strokeStyle = '#333';
                 this.ctx.lineWidth = 2;
-                this.ctx.strokeRect(x + 2 + offset, y + 2 + offset - bounce, size, size);
+                this.ctx.stroke();
                 break;
             }
                 
@@ -918,10 +1001,12 @@ export class Renderer {
                 const explodeY = Math.sin(rotation) * explode;
                 this.ctx.translate(explodeX, explodeY);
                 this.ctx.fillStyle = cell.color;
-                this.ctx.fillRect(-size / 2, -size / 2, size, size);
+                this.ctx.beginPath();
+                this.ctx.roundRect(-size / 2, -size / 2, size, size, 2);
+                this.ctx.fill();
                 this.ctx.strokeStyle = '#333';
                 this.ctx.lineWidth = 2;
-                this.ctx.strokeRect(-size / 2, -size / 2, size, size);
+                this.ctx.stroke();
                 break;
             }
                 
@@ -934,10 +1019,12 @@ export class Renderer {
                 const offset = (baseSize - size) / 2;
                 this.ctx.globalAlpha = alpha;
                 this.ctx.fillStyle = cell.color;
-                this.ctx.fillRect(x + 2 + offset + shake, y + 2 + offset + shakeY, size, size);
+                this.ctx.beginPath();
+                this.ctx.roundRect(x + 2 + offset + shake, y + 2 + offset + shakeY, size, size, 2);
+                this.ctx.fill();
                 this.ctx.strokeStyle = '#333';
                 this.ctx.lineWidth = 2;
-                this.ctx.strokeRect(x + 2 + offset + shake, y + 2 + offset + shakeY, size, size);
+                this.ctx.stroke();
                 break;
             }
                 

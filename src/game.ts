@@ -76,7 +76,7 @@ export class Game {
         this.turnElement = document.getElementById('turn-value');
         this.linesElement = document.getElementById('lines-value');
         this.levelElement = null; // Level number removed, only progress bar shown
-        this.levelProgressElement = document.getElementById('level-progress-bar');
+        this.levelProgressElement = null; // No longer using single progress bar element
         this.soundManager = new SoundManager(initialSettings.soundEnabled);
         // Initialize color scheme for starting level
         updateColorScheme(this.state.level);
@@ -552,11 +552,17 @@ export class Game {
      * Updates the level display in the UI
      */
     private updateLevelDisplay(): void {
-        // Level number removed, only update progress bar
-        if (this.levelProgressElement) {
-            // Update progress bar width (0-100%)
-            this.levelProgressElement.style.width = `${this.state.levelProgress}%`;
-        }
+        // Update 15 rounded boxes based on progress (0-100%)
+        const progressBoxes = document.querySelectorAll('.progress-box');
+        const filledCount = Math.floor((this.state.levelProgress / 100) * 15);
+        
+        progressBoxes.forEach((box, index) => {
+            if (index < filledCount) {
+                box.classList.add('filled');
+            } else {
+                box.classList.remove('filled');
+            }
+        });
     }
 
     /**
