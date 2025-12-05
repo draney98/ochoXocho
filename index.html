@@ -9,9 +9,21 @@
 <body data-theme="classic">
     <div id="app">
         <div id="game-container">
-            <div id="score-display">Score: <span id="score-value">0</span></div>
+            <div id="top-stats">
+                <div id="score-display">Score: <span id="score-value">0</span></div>
+                <div id="turn-display">Turn: <span id="turn-value">0</span></div>
+                <div id="lines-display">Lines: <span id="lines-value">0</span></div>
+                <div id="level-display">
+                    <div id="level-progress-container">
+                        <div id="level-progress-bar"></div>
+                    </div>
+                </div>
+            </div>
             <canvas id="game-canvas"></canvas>
             <button id="restart-button">Restart</button>
+            <div id="high-scores">
+                <span>Today: <span id="high-score-today">0</span> This week: <span id="high-score-week">0</span> Ever: <span id="high-score-year">0</span> <span id="mode-display">Easy</span></span>
+            </div>
         </div>
     </div>
     <button id="settings-button" aria-label="Game settings">
@@ -32,6 +44,13 @@
                     <option value="classic">Classic</option>
                     <option value="midnight">Midnight</option>
                     <option value="sunset">Sunset</option>
+                </select>
+            </label>
+            <label class="settings-row select-row">
+                <span>Difficulty</span>
+                <select id="setting-mode">
+                    <option value="easy">Easy</option>
+                    <option value="hard">Hard</option>
                 </select>
             </label>
             <label class="settings-row">
