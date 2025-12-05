@@ -2,7 +2,9 @@
  * Shared layout constants for board and queue rendering/input math
  */
 
-export const BOARD_CELL_COUNT = 8;
+import { BOARD_CONFIG } from './config';
+
+export const BOARD_CELL_COUNT = BOARD_CONFIG.cellCount;
 export const BOARD_PIXEL_SIZE = 600;
 export const CELL_SIZE = BOARD_PIXEL_SIZE / BOARD_CELL_COUNT;
 

@@ -4,8 +4,9 @@
 
 import { Position, Shape } from './types';
 import { Board } from './board';
+import { BOARD_CELL_COUNT } from './constants';
 
-const BOARD_SIZE = 8;
+const BOARD_SIZE = BOARD_CELL_COUNT;
 
 /**
  * Checks if a shape can be placed at the given position on the board

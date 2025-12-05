@@ -1,37 +1,54 @@
 /**
  * Scoring system with progressive multipliers and board-clear bonuses.
+ * Points are calculated based on the point values of cleared blocks.
  */
 
-const BASE_POINTS_PER_ROW = 100;
-const BASE_POINTS_PER_COLUMN = 100;
+import { PlacedBlock } from './types';
+import { GAMEPLAY_CONFIG } from './config';
 
 /**
- * Calculates the score for cleared rows and columns using progressive multipliers.
- * The first line awards its base points, the second line is doubled, the third tripled, etc.
- * If the clear leaves the board empty, the total for that clear is multiplied by 5.
+ * Calculates the score for cleared rows and columns.
+ * Simply adds up the total point values of all blocks in the cleared lines/columns.
  */
 export function calculateScore(
-    rowsCleared: number,
-    columnsCleared: number,
-    boardCleared: boolean
+    fullRows: number[],
+    fullColumns: number[],
+    placedBlocks: PlacedBlock[],
+    boardCleared: boolean,
+    totalShapesPlaced: number
 ): number {
-    const lineValues: number[] = [
-        ...Array(rowsCleared).fill(BASE_POINTS_PER_ROW),
-        ...Array(columnsCleared).fill(BASE_POINTS_PER_COLUMN),
-    ];
-
-    if (lineValues.length === 0) {
+    if (fullRows.length === 0 && fullColumns.length === 0) {
         return 0;
     }
 
+    const clearedRowsSet = new Set(fullRows);
+    const clearedColsSet = new Set(fullColumns);
     let total = 0;
-    lineValues.forEach((value, index) => {
-        const multiplier = index + 1;
-        total += value * multiplier;
-    });
 
-    if (boardCleared) {
-        total *= 5;
+    // Sum up point values of all blocks in cleared lines/columns
+    for (const block of placedBlocks) {
+        // Calculate current point value (base + increments since placement)
+        const placementLevel = Math.floor(block.totalShapesPlacedAtPlacement / GAMEPLAY_CONFIG.shapesPerValueTier);
+        const currentLevel = Math.floor(totalShapesPlaced / GAMEPLAY_CONFIG.shapesPerValueTier);
+        const levelIncrements = currentLevel - placementLevel;
+        const currentPointValue = block.pointValue + (levelIncrements * GAMEPLAY_CONFIG.pointsPerTier);
+        
+        // Check if any cell of this block is in a cleared line/column
+        let blockInClearedLine = false;
+        for (const cell of block.shape) {
+            const absoluteX = block.position.x + cell.x;
+            const absoluteY = block.position.y + cell.y;
+            
+            if (clearedRowsSet.has(absoluteY) || clearedColsSet.has(absoluteX)) {
+                blockInClearedLine = true;
+                break;
+            }
+        }
+        
+        // If block is in a cleared line, add its point value
+        if (blockInClearedLine) {
+            total += currentPointValue;
+        }
     }
 
     return total;

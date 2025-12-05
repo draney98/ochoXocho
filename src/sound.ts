@@ -2,6 +2,9 @@
  * Lightweight sound manager that plays simple synthesized tones for key events.
  * Uses the Web Audio API so we don't have to ship asset files.
  */
+
+import { SOUND_CONFIG } from './config';
+
 export class SoundManager {
     private audioContext: AudioContext | null = null;
     private masterGain: GainNode | null = null;
@@ -23,18 +26,39 @@ export class SoundManager {
     }
 
     playPlace(): void {
-        this.playTone(360, 0.11, 'triangle');
+        this.playTone(
+            SOUND_CONFIG.place.frequency,
+            SOUND_CONFIG.place.duration,
+            SOUND_CONFIG.place.waveform
+        );
     }
 
     playClear(linesCleared: number, boardCleared: boolean): void {
-        const base = boardCleared ? 620 : 460;
-        const freq = base + linesCleared * 35;
-        const duration = boardCleared ? 0.35 : 0.18;
-        this.playTone(freq, duration, boardCleared ? 'sawtooth' : 'square');
+        const base = boardCleared
+            ? SOUND_CONFIG.clear.boardClearedFrequency
+            : SOUND_CONFIG.clear.baseFrequency;
+        const freq = base + linesCleared * SOUND_CONFIG.clear.frequencyStep;
+        const duration = boardCleared
+            ? SOUND_CONFIG.clear.boardClearedDuration
+            : SOUND_CONFIG.clear.baseDuration;
+        const waveform = boardCleared
+            ? SOUND_CONFIG.clear.boardClearedWaveform
+            : SOUND_CONFIG.clear.baseWaveform;
+        this.playTone(freq, duration, waveform);
     }
 
     playGameOver(): void {
-        this.playTone(220, 0.45, 'sine');
+        this.playTone(
+            SOUND_CONFIG.gameOver.frequency,
+            SOUND_CONFIG.gameOver.duration,
+            SOUND_CONFIG.gameOver.waveform
+        );
+    }
+
+    playPop(): void {
+        // Short, sharp pop sound
+        const freq = SOUND_CONFIG.pop.baseFrequency + Math.random() * SOUND_CONFIG.pop.randomRange;
+        this.playTone(freq, SOUND_CONFIG.pop.duration, SOUND_CONFIG.pop.waveform);
     }
 
     private ensureContext(): void {
@@ -57,7 +81,7 @@ export class SoundManager {
 
         const ctx = new AudioCtor();
         const gain = ctx.createGain();
-        gain.gain.value = 0.15;
+        gain.gain.value = SOUND_CONFIG.masterGain;
         gain.connect(ctx.destination);
         this.audioContext = ctx;
         this.masterGain = gain;

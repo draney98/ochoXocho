@@ -3,8 +3,9 @@
  */
 
 import { Position, Shape, PlacedBlock } from './types';
+import { BOARD_CELL_COUNT } from './constants';
 
-const BOARD_SIZE = 8;
+const BOARD_SIZE = BOARD_CELL_COUNT;
 
 /**
  * Board class manages the 8x8 game grid
@@ -91,6 +92,17 @@ export class Board {
             for (let row = 0; row < BOARD_SIZE; row++) {
                 this.grid[row][col] = false;
             }
+        }
+    }
+
+    /**
+     * Clears a specific cell by setting it to empty
+     * @param x - Column index (0-7)
+     * @param y - Row index (0-7)
+     */
+    clearCell(x: number, y: number): void {
+        if (x >= 0 && x < BOARD_SIZE && y >= 0 && y < BOARD_SIZE) {
+            this.grid[y][x] = false;
         }
     }
 

@@ -4,7 +4,7 @@
 
 import { Position, Shape, PlacedBlock, DragState, AnimatingCell, GameSettings } from './types';
 import { Board } from './board';
-import { getShapeColor, getShapeIndex } from './shapes';
+import { getShapeColor, getShapeIndex, getShapePointValue } from './shapes';
 import {
     BOARD_PIXEL_SIZE,
     CELL_SIZE,
@@ -16,6 +16,7 @@ import {
     QUEUE_ITEM_HEIGHT,
     getQueueItemRect,
 } from './constants';
+import { GAMEPLAY_CONFIG } from './config';
 
 /**
  * Renderer class handles all canvas drawing operations
@@ -45,6 +46,42 @@ export class Renderer {
      */
     updateSettings(settings: GameSettings): void {
         this.settings = { ...settings };
+    }
+
+    /**
+     * Gets a CSS variable value from the document body (where theme is applied)
+     */
+    private getCSSVariable(name: string): string {
+        const body = document.body;
+        if (!body) return '';
+        return getComputedStyle(body).getPropertyValue(name).trim();
+    }
+
+    /**
+     * Darkens a hex color by multiplying RGB values by darkness factor
+     * @param hexColor - Hex color string (e.g., "#ff0000")
+     * @param darkness - Darkness multiplier (1.0 = full brightness, 0.0 = black)
+     * @returns Darkened hex color string
+     */
+    private darkenColor(hexColor: string, darkness: number): string {
+        // Clamp darkness between 0 and 1
+        const factor = Math.max(0, Math.min(1, darkness));
+        
+        // Remove # if present
+        const hex = hexColor.replace('#', '');
+        
+        // Parse RGB values
+        const r = parseInt(hex.substring(0, 2), 16);
+        const g = parseInt(hex.substring(2, 4), 16);
+        const b = parseInt(hex.substring(4, 6), 16);
+        
+        // Apply darkness factor
+        const darkenedR = Math.floor(r * factor);
+        const darkenedG = Math.floor(g * factor);
+        const darkenedB = Math.floor(b * factor);
+        
+        // Convert back to hex
+        return `#${darkenedR.toString(16).padStart(2, '0')}${darkenedG.toString(16).padStart(2, '0')}${darkenedB.toString(16).padStart(2, '0')}`;
     }
 
     /**
@@ -82,8 +119,9 @@ export class Renderer {
      * Draws all placed blocks on the board
      * @param placedBlocks - Array of all placed blocks
      * @param animatingCells - Array of cells currently animating out
+     * @param totalShapesPlaced - Total shapes placed (for calculating current point values)
      */
-    drawBoard(placedBlocks: PlacedBlock[], animatingCells: AnimatingCell[] = []): void {
+    drawBoard(placedBlocks: PlacedBlock[], animatingCells: AnimatingCell[] = [], totalShapesPlaced: number = 0): void {
         // Draw placed blocks, but skip cells that are animating
         for (const block of placedBlocks) {
             const cellsToDraw = block.shape.filter(cell => {
@@ -94,8 +132,20 @@ export class Renderer {
             });
             
             if (cellsToDraw.length > 0) {
-                // Draw only the non-animating cells
-                this.drawShape(cellsToDraw, block.position, block.color, false);
+                // Calculate point value: base value + points per tier for each level increment since placement
+                // Oldest blocks (placed earliest) will have the highest values
+                const placementLevel = Math.floor(block.totalShapesPlacedAtPlacement / GAMEPLAY_CONFIG.shapesPerValueTier);
+                const currentLevel = Math.floor(totalShapesPlaced / GAMEPLAY_CONFIG.shapesPerValueTier);
+                
+                // Each block increments by points per tier for every tier of shapes placed after it was placed
+                const levelIncrements = currentLevel - placementLevel;
+                const displayValue = block.pointValue + (levelIncrements * GAMEPLAY_CONFIG.pointsPerTier);
+                
+                // Apply darkness to color
+                const darkenedColor = this.darkenColor(block.color, block.darkness);
+                
+                // Draw only the non-animating cells with incremented point values
+                this.drawShape(cellsToDraw, block.position, darkenedColor, false, displayValue);
             }
         }
         
@@ -111,8 +161,9 @@ export class Renderer {
      * @param position - Grid position where to draw
      * @param color - Color to use for the shape
      * @param isGhost - Whether to draw as a ghost (semi-transparent)
+     * @param pointValue - Optional point value to display on each cell
      */
-    drawShape(shape: Shape, position: Position, color: string, isGhost: boolean = false): void {
+    drawShape(shape: Shape, position: Position, color: string, isGhost: boolean = false, pointValue?: number): void {
         if (isGhost) {
             this.ctx.globalAlpha = 0.5;
         } else {
@@ -131,6 +182,33 @@ export class Renderer {
             this.ctx.strokeStyle = '#333';
             this.ctx.lineWidth = 2;
             this.ctx.strokeRect(x + 2, y + 2, CELL_SIZE - 4, CELL_SIZE - 4);
+
+            // Draw point value if provided
+            if (pointValue !== undefined && !isGhost) {
+                // Calculate center of the filled block (accounting for 2px padding)
+                const blockX = x + 2;
+                const blockY = y + 2;
+                const blockSize = CELL_SIZE - 4;
+                const centerX = blockX + blockSize / 2;
+                const centerY = blockY + blockSize / 2;
+                
+                // Use a semi-transparent white for less contrast
+                this.ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+                // Font size should almost fill the cell (about 80% of cell size)
+                const fontSize = Math.floor(CELL_SIZE * 0.8);
+                this.ctx.font = `bold ${fontSize}px sans-serif`;
+                
+                // Set text alignment for perfect centering
+                this.ctx.textAlign = 'center';
+                this.ctx.textBaseline = 'middle';
+                
+                // Draw text at exact center
+                this.ctx.fillText(
+                    pointValue.toString(),
+                    centerX,
+                    centerY
+                );
+            }
         }
 
         this.ctx.globalAlpha = 1.0;
@@ -143,8 +221,15 @@ export class Renderer {
     drawQueue(queue: Shape[]): void {
         const queueAreaTop = BOARD_PIXEL_SIZE;
 
-        // Draw queue background strip
-        this.ctx.fillStyle = '#f5f5f5';
+        // Get theme colors for queue area (re-read on each render to catch theme changes)
+        const queueStripBg = this.getCSSVariable('--queue-strip-bg') || '#f5f5f5';
+        const queueCardBg = this.getCSSVariable('--queue-card-bg') || '#ffffff';
+        const queueCardBorder = this.getCSSVariable('--queue-card-border') || '#dddddd';
+        const queueShapeBorder = this.getCSSVariable('--queue-shape-border') || '#333333';
+        const queuePointText = this.getCSSVariable('--queue-point-text') || '#999999';
+
+        // Draw queue background strip with theme color
+        this.ctx.fillStyle = queueStripBg;
         this.ctx.fillRect(0, queueAreaTop, CANVAS_WIDTH, QUEUE_AREA_HEIGHT);
 
         for (let i = 0; i < queue.length; i++) {
@@ -153,9 +238,9 @@ export class Renderer {
             const rect = getQueueItemRect(i, queue.length);
 
             // Card background
-            this.ctx.fillStyle = '#fff';
+            this.ctx.fillStyle = queueCardBg;
             this.ctx.fillRect(rect.x, rect.y, rect.width, QUEUE_ITEM_HEIGHT);
-            this.ctx.strokeStyle = '#ddd';
+            this.ctx.strokeStyle = queueCardBorder;
             this.ctx.lineWidth = 2;
             this.ctx.strokeRect(rect.x, rect.y, rect.width, QUEUE_ITEM_HEIGHT);
 
@@ -187,7 +272,7 @@ export class Renderer {
                     QUEUE_CELL_SIZE - 4
                 );
 
-                this.ctx.strokeStyle = '#333';
+                this.ctx.strokeStyle = queueShapeBorder;
                 this.ctx.lineWidth = 2;
                 this.ctx.strokeRect(
                     x + 2,
@@ -196,6 +281,20 @@ export class Renderer {
                     QUEUE_CELL_SIZE - 4
                 );
             }
+
+            // Draw point value in bottom right corner
+            const shapeIndex = getShapeIndex(shape);
+            // Note: Queue shows base point value, not level-adjusted
+            const pointValue = getShapePointValue(shapeIndex, 0);
+            this.ctx.fillStyle = queuePointText;
+            this.ctx.font = '14px sans-serif';
+            this.ctx.textAlign = 'right';
+            this.ctx.textBaseline = 'bottom';
+            this.ctx.fillText(
+                pointValue.toString(),
+                rect.x + rect.width - 6,
+                rect.y + QUEUE_ITEM_HEIGHT - 6
+            );
         }
     }
 
@@ -321,6 +420,7 @@ export class Renderer {
      * @param gameOver - Whether game is over
      * @param animatingCells - Cells currently animating out
      * @param gameOverProgress - Animation progress for game over (0 to 1)
+     * @param totalShapesPlaced - Total shapes placed (for calculating current point values)
      */
     render(
         board: Board,
@@ -329,13 +429,14 @@ export class Renderer {
         dragState: DragState,
         gameOver: boolean,
         animatingCells: AnimatingCell[] = [],
-        gameOverProgress: number = 0
+        gameOverProgress: number = 0,
+        totalShapesPlaced: number = 0
     ): void {
         this.clear();
         if (this.settings.showGrid) {
             this.drawGrid();
         }
-        this.drawBoard(placedBlocks, animatingCells);
+        this.drawBoard(placedBlocks, animatingCells, totalShapesPlaced);
         this.drawQueue(queue);
         if (this.settings.showGhostPreview) {
             this.drawDragPreview(dragState);

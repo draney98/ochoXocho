@@ -3,6 +3,18 @@
  */
 
 import { Shape } from './types';
+import { Board } from './board';
+import { getValidPositions } from './validator';
+import { getColorSet, getColorSetIndex } from './colorConfig';
+import { EASY_MODE_CONFIG, GAMEPLAY_CONFIG } from './config';
+
+/**
+ * Monomino shape (1 block)
+ */
+const MONOMINO: Shape[] = [
+    // Single block (X)
+    [{ x: 0, y: 0 }],
+];
 
 /**
  * Domino shape (2 blocks)
@@ -10,6 +22,26 @@ import { Shape } from './types';
 const DOMINO: Shape[] = [
     // Horizontal domino
     [{ x: 0, y: 0 }, { x: 1, y: 0 }],
+];
+
+/**
+ * Tromino shapes (3 blocks)
+ */
+const TROMINOES: Shape[] = [
+    // Three block horizontal line (XXX)
+    [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 2, y: 0 }],
+];
+
+/**
+ * Nonomino shapes (9 blocks)
+ */
+const NONOMINOES: Shape[] = [
+    // Three block box (3x3 square)
+    [
+        { x: 0, y: 0 }, { x: 1, y: 0 }, { x: 2, y: 0 },
+        { x: 0, y: 1 }, { x: 1, y: 1 }, { x: 2, y: 1 },
+        { x: 0, y: 2 }, { x: 1, y: 2 }, { x: 2, y: 2 },
+    ],
 ];
 
 /**
@@ -40,9 +72,37 @@ const TETROMINOES: Shape[] = [
 ];
 
 /**
- * Combined pool of all available shapes (domino + tetrominoes)
+ * Combined pool of all available shapes (monomino + domino + trominoes + tetrominoes + nonominoes)
+ * Note: Monomino (index 0) always scores 0 points
  */
-const ALL_SHAPES: Shape[] = [...DOMINO, ...TETROMINOES];
+const ALL_SHAPES: Shape[] = [...MONOMINO, ...DOMINO, ...TROMINOES, ...TETROMINOES, ...NONOMINOES];
+
+/**
+ * Pool of shapes excluding the monomino (single dot piece)
+ * Used for normal random generation - monomino only appears in easy mode fallback
+ */
+const SHAPES_WITHOUT_MONOMINO: Shape[] = [...DOMINO, ...TROMINOES, ...TETROMINOES, ...NONOMINOES];
+
+/**
+ * Point values for each shape (0 for single block, 1-8 for others, randomly assigned at module load)
+ * Maps shape index to point value per cell
+ * Note: Index 0 (single block) always scores 0 points
+ */
+const SHAPE_POINT_VALUES: number[] = (() => {
+    // Single block (index 0) always scores 0, others get 1-8
+    const values = Array.from({ length: ALL_SHAPES.length }, (_, i) => i === 0 ? 0 : i);
+    // Shuffle the array to randomize point assignments (but keep index 0 as 0)
+    for (let i = values.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [values[i], values[j]] = [values[j], values[i]];
+    }
+    // Ensure index 0 is always 0 (single block)
+    const zeroIndex = values.indexOf(0);
+    if (zeroIndex !== 0) {
+        [values[0], values[zeroIndex]] = [values[zeroIndex], values[0]];
+    }
+    return values;
+})();
 
 /**
  * Keeps all colors within a narrow hue band (same general color family) while
@@ -116,10 +176,21 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 /**
- * Color palette for shapes - generated once at module load
- * Uses a spaced hue scheme to maximize contrast between pieces
+ * Color palette for shapes - uses predefined color sets based on level
+ * Colors change every 10 levels, stopping at level 100
  */
-const SHAPE_COLORS: string[] = generateMonochromaticColorScheme();
+let SHAPE_COLORS: string[] = [];
+
+/**
+ * Updates the color palette based on the current level
+ * @param level - Current game level
+ */
+export function updateColorScheme(level: number): void {
+    const colorSet = getColorSet(level);
+    const setIndex = getColorSetIndex(level);
+    console.log(`[COLOR] Updating color scheme for level ${level}, using set ${setIndex}, colors:`, colorSet.colors.slice(0, 3));
+    SHAPE_COLORS = colorSet.colors;
+}
 
 /**
  * Rotates a shape by 90, 180, or 270 degrees clockwise
@@ -176,11 +247,12 @@ function rotateShape(shape: Shape, rotations: number): Shape {
 
 /**
  * Generates a random shape from the pool with random rotation
+ * Excludes monomino (single dot piece) - it only appears in easy mode fallback
  * @returns A random shape with random rotation applied
  */
 function getRandomShape(): Shape {
-    const index = Math.floor(Math.random() * ALL_SHAPES.length);
-    const baseShape = ALL_SHAPES[index];
+    const index = Math.floor(Math.random() * SHAPES_WITHOUT_MONOMINO.length);
+    const baseShape = SHAPES_WITHOUT_MONOMINO[index];
     
     // Apply random rotation (0, 90, 180, or 270 degrees)
     const rotations = Math.floor(Math.random() * 4);
@@ -195,6 +267,61 @@ function getRandomShape(): Shape {
  */
 export function generateShapes(): Shape[] {
     return [getRandomShape(), getRandomShape(), getRandomShape()];
+}
+
+/**
+ * Generates shapes for easy mode - tries to find shapes that fit on the board
+ * @param board - The game board to check against
+ * @returns An array of 3 shapes, with at least 2 that can be placed if possible
+ */
+export function generateEasyShapes(board: Board): Shape[] {
+    // Try up to configured number of times to find a good combination
+    for (let attempt = 0; attempt < EASY_MODE_CONFIG.maxOptimisticAttempts; attempt++) {
+        const shapes = [getRandomShape(), getRandomShape(), getRandomShape()];
+        
+        // Check if all three fit
+        let allFit = true;
+        for (const shape of shapes) {
+            const validPositions = getValidPositions(board, shape);
+            if (validPositions.length === 0) {
+                allFit = false;
+                break;
+            }
+        }
+        
+        if (allFit) {
+            return shapes;
+        }
+        
+        // Check if at least two fit
+        let fitCount = 0;
+        for (const shape of shapes) {
+            const validPositions = getValidPositions(board, shape);
+            if (validPositions.length > 0) {
+                fitCount++;
+            }
+        }
+        
+        if (fitCount >= 2) {
+            return shapes;
+        }
+    }
+    
+    // Fallback: Try to find at least one shape that fits
+    // Try up to configured number of times to find a shape that fits
+    for (let attempt = 0; attempt < EASY_MODE_CONFIG.fallbackAttempts; attempt++) {
+        const testShape = getRandomShape();
+        const validPositions = getValidPositions(board, testShape);
+        if (validPositions.length > 0) {
+            // Found a shape that fits, return it with 2 random shapes
+            return [testShape, getRandomShape(), getRandomShape()];
+        }
+    }
+    
+    // Final fallback: If no shape can fit, use a single block (X) which scores 0 points
+    // The single block is at index 0 in ALL_SHAPES (MONOMINO)
+    const singleBlock: Shape = [{ x: 0, y: 0 }];
+    return [singleBlock, getRandomShape(), getRandomShape()];
 }
 
 /**
@@ -265,5 +392,26 @@ export function getShapeIndex(shape: Shape): number {
     }
     
     return -1;
+}
+
+/**
+ * Gets the point value per cell for a shape based on its index and level
+ * @param shapeIndex - Index of the shape in ALL_SHAPES array
+ * @param level - Current game level (adds 10 points per level, every 10 levels)
+ * @returns Point value per cell
+ */
+export function getShapePointValue(shapeIndex: number, level: number = 0): number {
+    // Single block (index 0) always scores 0 points
+    if (shapeIndex === 0) {
+        return 0;
+    }
+    if (shapeIndex < 0 || shapeIndex >= SHAPE_POINT_VALUES.length) {
+        return 1; // Default to 1 if shape not found
+    }
+    const baseValue = SHAPE_POINT_VALUES[shapeIndex];
+    // Level is already Math.floor(totalShapesPlaced / shapesPerValueTier), so multiply by pointsPerTier to get the bonus
+    // Every tier of shapes placed = +pointsPerTier points
+    const levelBonus = level * GAMEPLAY_CONFIG.pointsPerTier;
+    return baseValue + levelBonus;
 }
 

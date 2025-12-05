@@ -24,6 +24,10 @@ export interface PlacedBlock {
     shape: Shape;
     position: Position;
     color: string;
+    pointValue: number;  // Points per cell in this shape (stored for reference)
+    totalShapesPlacedAtPlacement: number;  // Total shapes placed when this block was placed (ensures point values never decrease)
+    shapeIndex: number;  // Index of the shape in the shape pool (preserved even when shape cells are removed)
+    darkness: number;    // Darkness multiplier (1.0 = full brightness, decreases by 0.1 each clear)
 }
 
 /**
@@ -35,6 +39,11 @@ export interface GameState {
     placedBlocks: PlacedBlock[];   // All blocks currently on the board
     score: number;                 // Current score
     gameOver: boolean;             // Whether the game has ended
+    level: number;                 // Current level (starts at 1, increases when progress reaches 100%)
+    levelProgress: number;        // Progress towards next level (0-100, increases 6.6666667% per line cleared)
+    totalShapesPlaced: number;     // Total shapes placed this game (for point value calculation)
+    turn: number;                  // Turn counter (increments each time a block is placed)
+    linesCleared: number;          // Total lines/columns cleared this game
 }
 
 /**
@@ -64,6 +73,7 @@ export interface AnimatingCell {
  * User-adjustable game settings exposed through the settings panel
  */
 export type ThemeName = 'classic' | 'midnight' | 'sunset';
+export type GameMode = 'easy' | 'hard';
 
 export interface GameSettings {
     showGrid: boolean;
@@ -71,5 +81,6 @@ export interface GameSettings {
     enableAnimations: boolean;
     soundEnabled: boolean;
     theme: ThemeName;
+    mode: GameMode;
 }
 
