@@ -13,84 +13,84 @@ export interface ColorSet {
  * Level 10+ continues using set 9
  */
 export const COLOR_SETS: ColorSet[] = [
-    // Set 0: Level 1 - Blue tones
+    // Set 0: Level 1 - Blue tones (medium brightness for visibility in both light and dark themes)
     {
         colors: [
-            '#1e3a8a', '#1e40af', '#2563eb', '#3b82f6', '#60a5fa', '#93c5fd', '#dbeafe', '#eff6ff',
-            '#1e40af', '#2563eb', '#3b82f6', '#60a5fa', '#93c5fd', '#dbeafe', '#eff6ff', '#1e3a8a',
-            '#2563eb', '#3b82f6', '#60a5fa', '#93c5fd', '#dbeafe', '#eff6ff', '#1e3a8a', '#1e40af',
+            '#3b82f6', '#60a5fa', '#2563eb', '#93c5fd', '#3b82f6', '#60a5fa', '#2563eb', '#93c5fd',
+            '#60a5fa', '#3b82f6', '#93c5fd', '#2563eb', '#60a5fa', '#3b82f6', '#93c5fd', '#2563eb',
+            '#3b82f6', '#60a5fa', '#2563eb', '#93c5fd', '#3b82f6', '#60a5fa', '#2563eb', '#93c5fd',
         ],
     },
-    // Set 1: Level 2 - Green tones
+    // Set 1: Level 2 - Green tones (medium brightness for visibility in both light and dark themes)
     {
         colors: [
-            '#14532d', '#166534', '#16a34a', '#22c55e', '#4ade80', '#86efac', '#bbf7d0', '#dcfce7',
-            '#166534', '#16a34a', '#22c55e', '#4ade80', '#86efac', '#bbf7d0', '#dcfce7', '#14532d',
-            '#16a34a', '#22c55e', '#4ade80', '#86efac', '#bbf7d0', '#dcfce7', '#14532d', '#166534',
+            '#22c55e', '#4ade80', '#16a34a', '#86efac', '#22c55e', '#4ade80', '#16a34a', '#86efac',
+            '#4ade80', '#22c55e', '#86efac', '#16a34a', '#4ade80', '#22c55e', '#86efac', '#16a34a',
+            '#22c55e', '#4ade80', '#16a34a', '#86efac', '#22c55e', '#4ade80', '#16a34a', '#86efac',
         ],
     },
-    // Set 2: Level 3 - Purple tones
+    // Set 2: Level 3 - Purple tones (medium brightness for visibility in both light and dark themes)
     {
         colors: [
-            '#581c87', '#6b21a8', '#7c3aed', '#8b5cf6', '#a78bfa', '#c4b5fd', '#ddd6fe', '#ede9fe',
-            '#6b21a8', '#7c3aed', '#8b5cf6', '#a78bfa', '#c4b5fd', '#ddd6fe', '#ede9fe', '#581c87',
-            '#7c3aed', '#8b5cf6', '#a78bfa', '#c4b5fd', '#ddd6fe', '#ede9fe', '#581c87', '#6b21a8',
+            '#8b5cf6', '#a78bfa', '#7c3aed', '#c4b5fd', '#8b5cf6', '#a78bfa', '#7c3aed', '#c4b5fd',
+            '#a78bfa', '#8b5cf6', '#c4b5fd', '#7c3aed', '#a78bfa', '#8b5cf6', '#c4b5fd', '#7c3aed',
+            '#8b5cf6', '#a78bfa', '#7c3aed', '#c4b5fd', '#8b5cf6', '#a78bfa', '#7c3aed', '#c4b5fd',
         ],
     },
-    // Set 3: Level 4 - Red tones
+    // Set 3: Level 4 - Red tones (medium brightness for visibility in both light and dark themes)
     {
         colors: [
-            '#7f1d1d', '#991b1b', '#dc2626', '#ef4444', '#f87171', '#fca5a5', '#fecaca', '#fee2e2',
-            '#991b1b', '#dc2626', '#ef4444', '#f87171', '#fca5a5', '#fecaca', '#fee2e2', '#7f1d1d',
-            '#dc2626', '#ef4444', '#f87171', '#fca5a5', '#fecaca', '#fee2e2', '#7f1d1d', '#991b1b',
+            '#ef4444', '#f87171', '#dc2626', '#fca5a5', '#ef4444', '#f87171', '#dc2626', '#fca5a5',
+            '#f87171', '#ef4444', '#fca5a5', '#dc2626', '#f87171', '#ef4444', '#fca5a5', '#dc2626',
+            '#ef4444', '#f87171', '#dc2626', '#fca5a5', '#ef4444', '#f87171', '#dc2626', '#fca5a5',
         ],
     },
-    // Set 4: Level 5 - Orange tones
+    // Set 4: Level 5 - Orange tones (medium brightness for visibility in both light and dark themes)
     {
         colors: [
-            '#7c2d12', '#9a3412', '#ea580c', '#f97316', '#fb923c', '#fdba74', '#fed7aa', '#ffedd5',
-            '#9a3412', '#ea580c', '#f97316', '#fb923c', '#fdba74', '#fed7aa', '#ffedd5', '#7c2d12',
-            '#ea580c', '#f97316', '#fb923c', '#fdba74', '#fed7aa', '#ffedd5', '#7c2d12', '#9a3412',
+            '#f97316', '#fb923c', '#ea580c', '#fdba74', '#f97316', '#fb923c', '#ea580c', '#fdba74',
+            '#fb923c', '#f97316', '#fdba74', '#ea580c', '#fb923c', '#f97316', '#fdba74', '#ea580c',
+            '#f97316', '#fb923c', '#ea580c', '#fdba74', '#f97316', '#fb923c', '#ea580c', '#fdba74',
         ],
     },
-    // Set 5: Level 6 - Yellow tones
+    // Set 5: Level 6 - Yellow tones (medium brightness for visibility in both light and dark themes)
     {
         colors: [
-            '#713f12', '#854d0e', '#ca8a04', '#eab308', '#facc15', '#fde047', '#fef08a', '#fef9c3',
-            '#854d0e', '#ca8a04', '#eab308', '#facc15', '#fde047', '#fef08a', '#fef9c3', '#713f12',
-            '#ca8a04', '#eab308', '#facc15', '#fde047', '#fef08a', '#fef9c3', '#713f12', '#854d0e',
+            '#eab308', '#facc15', '#ca8a04', '#fde047', '#eab308', '#facc15', '#ca8a04', '#fde047',
+            '#facc15', '#eab308', '#fde047', '#ca8a04', '#facc15', '#eab308', '#fde047', '#ca8a04',
+            '#eab308', '#facc15', '#ca8a04', '#fde047', '#eab308', '#facc15', '#ca8a04', '#fde047',
         ],
     },
-    // Set 6: Level 7 - Cyan tones
+    // Set 6: Level 7 - Cyan tones (medium brightness for visibility in both light and dark themes)
     {
         colors: [
-            '#164e63', '#155e75', '#0891b2', '#06b6d4', '#22d3ee', '#67e8f9', '#a7f3f0', '#ccfbf1',
-            '#155e75', '#0891b2', '#06b6d4', '#22d3ee', '#67e8f9', '#a7f3f0', '#ccfbf1', '#164e63',
-            '#0891b2', '#06b6d4', '#22d3ee', '#67e8f9', '#a7f3f0', '#ccfbf1', '#164e63', '#155e75',
+            '#06b6d4', '#22d3ee', '#0891b2', '#67e8f9', '#06b6d4', '#22d3ee', '#0891b2', '#67e8f9',
+            '#22d3ee', '#06b6d4', '#67e8f9', '#0891b2', '#22d3ee', '#06b6d4', '#67e8f9', '#0891b2',
+            '#06b6d4', '#22d3ee', '#0891b2', '#67e8f9', '#06b6d4', '#22d3ee', '#0891b2', '#67e8f9',
         ],
     },
-    // Set 7: Level 8 - Pink tones
+    // Set 7: Level 8 - Pink tones (medium brightness for visibility in both light and dark themes)
     {
         colors: [
-            '#831843', '#9f1239', '#db2777', '#ec4899', '#f472b6', '#f9a8d4', '#fbcfe8', '#fce7f3',
-            '#9f1239', '#db2777', '#ec4899', '#f472b6', '#f9a8d4', '#fbcfe8', '#fce7f3', '#831843',
-            '#db2777', '#ec4899', '#f472b6', '#f9a8d4', '#fbcfe8', '#fce7f3', '#831843', '#9f1239',
+            '#ec4899', '#f472b6', '#db2777', '#f9a8d4', '#ec4899', '#f472b6', '#db2777', '#f9a8d4',
+            '#f472b6', '#ec4899', '#f9a8d4', '#db2777', '#f472b6', '#ec4899', '#f9a8d4', '#db2777',
+            '#ec4899', '#f472b6', '#db2777', '#f9a8d4', '#ec4899', '#f472b6', '#db2777', '#f9a8d4',
         ],
     },
-    // Set 8: Level 9 - Teal tones
+    // Set 8: Level 9 - Teal tones (medium brightness for visibility in both light and dark themes)
     {
         colors: [
-            '#134e4a', '#0f766e', '#14b8a6', '#2dd4bf', '#5eead4', '#99f6e4', '#ccfbf1', '#f0fdfa',
-            '#0f766e', '#14b8a6', '#2dd4bf', '#5eead4', '#99f6e4', '#ccfbf1', '#f0fdfa', '#134e4a',
-            '#14b8a6', '#2dd4bf', '#5eead4', '#99f6e4', '#ccfbf1', '#f0fdfa', '#134e4a', '#0f766e',
+            '#14b8a6', '#2dd4bf', '#0f766e', '#5eead4', '#14b8a6', '#2dd4bf', '#0f766e', '#5eead4',
+            '#2dd4bf', '#14b8a6', '#5eead4', '#0f766e', '#2dd4bf', '#14b8a6', '#5eead4', '#0f766e',
+            '#14b8a6', '#2dd4bf', '#0f766e', '#5eead4', '#14b8a6', '#2dd4bf', '#0f766e', '#5eead4',
         ],
     },
-    // Set 9: Level 10+ - Indigo tones (final set, used for level 10+)
+    // Set 9: Level 10+ - Indigo tones (medium brightness for visibility in both light and dark themes)
     {
         colors: [
-            '#312e81', '#3730a3', '#4338ca', '#4f46e5', '#6366f1', '#818cf8', '#a5b4fc', '#c7d2fe',
-            '#3730a3', '#4338ca', '#4f46e5', '#6366f1', '#818cf8', '#a5b4fc', '#c7d2fe', '#312e81',
-            '#4338ca', '#4f46e5', '#6366f1', '#818cf8', '#a5b4fc', '#c7d2fe', '#312e81', '#3730a3',
+            '#6366f1', '#818cf8', '#4f46e5', '#a5b4fc', '#6366f1', '#818cf8', '#4f46e5', '#a5b4fc',
+            '#818cf8', '#6366f1', '#a5b4fc', '#4f46e5', '#818cf8', '#6366f1', '#a5b4fc', '#4f46e5',
+            '#6366f1', '#818cf8', '#4f46e5', '#a5b4fc', '#6366f1', '#818cf8', '#4f46e5', '#a5b4fc',
         ],
     },
 ];

@@ -25,6 +25,16 @@ export class SoundManager {
         }
     }
 
+    /**
+     * Resumes the AudioContext if suspended (for autoplay policy)
+     */
+    resumeContext(): void {
+        this.ensureContext();
+        if (this.audioContext && this.audioContext.state === 'suspended') {
+            this.audioContext.resume().catch(() => void 0);
+        }
+    }
+
     playPlace(): void {
         this.playTone(
             SOUND_CONFIG.place.frequency,
@@ -63,6 +73,10 @@ export class SoundManager {
 
     private ensureContext(): void {
         if (this.audioContext) {
+            // Always try to resume if suspended (fixes autoplay policy issues)
+            if (this.audioContext.state === 'suspended') {
+                this.audioContext.resume().catch(() => void 0);
+            }
             return;
         }
 
@@ -85,6 +99,11 @@ export class SoundManager {
         gain.connect(ctx.destination);
         this.audioContext = ctx;
         this.masterGain = gain;
+        
+        // Try to resume immediately (may fail due to autoplay policy, but will work after user interaction)
+        if (ctx.state === 'suspended') {
+            ctx.resume().catch(() => void 0);
+        }
     }
 
     private playTone(frequency: number, duration: number, type: OscillatorType): void {

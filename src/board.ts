@@ -203,5 +203,51 @@ export class Board {
     getSize(): number {
         return BOARD_SIZE;
     }
+
+    /**
+     * Simulates placing a shape and returns which rows/columns would be full
+     * Does not actually modify the board
+     * @param shape - The shape to simulate placing
+     * @param position - Position where the shape would be placed
+     * @returns Object with arrays of row and column indices that would be full
+     */
+    getFullLinesIfPlaced(shape: Shape, position: Position): { rows: number[]; columns: number[] } {
+        // Create a temporary grid with the shape placed
+        const tempGrid = this.grid.map(row => [...row]);
+        
+        // Place shape on temp grid
+        for (const block of shape) {
+            const x = position.x + block.x;
+            const y = position.y + block.y;
+            if (x >= 0 && x < BOARD_SIZE && y >= 0 && y < BOARD_SIZE) {
+                tempGrid[y][x] = true;
+            }
+        }
+        
+        // Check which rows would be full
+        const fullRows: number[] = [];
+        for (let row = 0; row < BOARD_SIZE; row++) {
+            if (tempGrid[row].every(cell => cell === true)) {
+                fullRows.push(row);
+            }
+        }
+        
+        // Check which columns would be full
+        const fullColumns: number[] = [];
+        for (let col = 0; col < BOARD_SIZE; col++) {
+            let isFull = true;
+            for (let row = 0; row < BOARD_SIZE; row++) {
+                if (!tempGrid[row][col]) {
+                    isFull = false;
+                    break;
+                }
+            }
+            if (isFull) {
+                fullColumns.push(col);
+            }
+        }
+        
+        return { rows: fullRows, columns: fullColumns };
+    }
 }
 

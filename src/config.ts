@@ -33,6 +33,8 @@ export const ANIMATION_CONFIG = {
     lineClearMs: 300,
     gameOverFadeMs: 1000,
     pulseCycleMs: 1000, // Duration of one pulse cycle
+    explosionMs: 500, // Duration of explosion animation
+    levelUpMs: 2000, // Duration of level up text animation
 } as const;
 
 /**

@@ -34,8 +34,11 @@ export class Game {
     private gameOverStartTime: number | null = null;
     private readonly GAME_OVER_ANIMATION_DURATION = ANIMATION_CONFIG.gameOverFadeMs;
     private gameOverPopComplete: boolean = false;
+    private levelUpStartTime: number | null = null;
+    private readonly LEVEL_UP_ANIMATION_DURATION = ANIMATION_CONFIG.levelUpMs;
     private settings: GameSettings;
     private soundManager: SoundManager;
+    // Animation index is based on level, not cycling
 
     constructor(canvas: HTMLCanvasElement, initialSettings: GameSettings) {
         this.canvas = canvas;
@@ -173,6 +176,14 @@ export class Game {
         const gameOverProgress = (this.gameOverStartTime !== null && this.gameOverPopComplete)
             ? Math.min((Date.now() - this.gameOverStartTime) / this.GAME_OVER_ANIMATION_DURATION, 1)
             : 0;
+        // Calculate level up animation progress
+        const levelUpProgress = this.levelUpStartTime !== null
+            ? Math.min((Date.now() - this.levelUpStartTime) / this.LEVEL_UP_ANIMATION_DURATION, 1)
+            : 0;
+        // Clear level up animation if it's complete
+        if (levelUpProgress >= 1) {
+            this.levelUpStartTime = null;
+        }
         this.renderer.render(
             this.board,
             this.state.placedBlocks,
@@ -181,7 +192,9 @@ export class Game {
             this.state.gameOver,
             this.animatingCells,
             gameOverProgress,
-            this.state.totalShapesPlaced
+            this.state.totalShapesPlaced,
+            levelUpProgress,
+            this.state.level
         );
     }
 
@@ -259,6 +272,8 @@ export class Game {
             darkness: 1.0,  // Start at full brightness
         };
         this.state.placedBlocks.push(placedBlock);
+        // Resume AudioContext on first user interaction (fixes autoplay policy)
+        this.soundManager.resumeContext();
         this.soundManager.playPlace();
         console.log(`[PLACE] Placed shape at (${position.x}, ${position.y}), total blocks: ${this.state.placedBlocks.length}`);
 
@@ -394,13 +409,29 @@ export class Game {
                     const inClearedColumn = fullColumns.includes(absoluteX);
                     
                     if (inClearedRow || inClearedColumn) {
-                        // Add to animating cells
+                        // Add staggered delay based on position for more varied animations
+                        // Calculate delay: cells in rows clear left-to-right, columns clear top-to-bottom
+                        let staggerDelay = 0;
+                        if (inClearedRow) {
+                            // Stagger horizontally: left cells clear first
+                            staggerDelay = absoluteX * 15; // 15ms per cell
+                        } else if (inClearedColumn) {
+                            // Stagger vertically: top cells clear first
+                            staggerDelay = absoluteY * 15; // 15ms per cell
+                        }
+                        
+                        // Use one animation per level (level-based, not cycling)
+                        const animationIndex = (this.state.level - 1) % 17;
+                        
+                        // Add to animating cells with animation index and staggered start time
                         this.animatingCells.push({
                             x: absoluteX,
                             y: absoluteY,
                             color: block.color,
-                            startTime: currentTime,
-                            progress: 0
+                            startTime: currentTime + staggerDelay,
+                            progress: 0,
+                            type: 'clear',
+                            animationIndex: animationIndex
                         });
                     }
                 }
@@ -430,6 +461,12 @@ export class Game {
         this.updateScoreDisplay();
         this.soundManager.playClear(linesCleared, boardCleared);
 
+        // Vibrate on mobile when line/column is completed
+        if (linesCleared > 0 && 'vibrate' in navigator) {
+            // Short vibration pattern: vibrate for 50ms
+            navigator.vibrate(50);
+        }
+
         // Update lines cleared counter
         this.state.linesCleared += linesCleared;
         this.updateLinesDisplay();
@@ -458,6 +495,8 @@ export class Game {
             this.state.placedBlocks.forEach(block => {
                 block.color = getShapeColor(block.shapeIndex);
             });
+            // Start level up animation
+            this.levelUpStartTime = Date.now();
             // Force a re-render to show new colors in queue
             this.render();
         }
@@ -478,9 +517,16 @@ export class Game {
     /**
      * Updates the score display in the UI
      */
+    /**
+     * Formats a number with commas (e.g., 1234 -> "1,234")
+     */
+    private formatNumber(num: number): string {
+        return num.toLocaleString('en-US');
+    }
+
     private updateScoreDisplay(): void {
         if (this.scoreElement) {
-            this.scoreElement.textContent = this.state.score.toString();
+            this.scoreElement.textContent = this.formatNumber(this.state.score);
         }
     }
 
@@ -489,7 +535,7 @@ export class Game {
      */
     private updateTurnDisplay(): void {
         if (this.turnElement) {
-            this.turnElement.textContent = this.state.turn.toString();
+            this.turnElement.textContent = this.formatNumber(this.state.turn);
         }
     }
 
@@ -498,7 +544,7 @@ export class Game {
      */
     private updateLinesDisplay(): void {
         if (this.linesElement) {
-            this.linesElement.textContent = this.state.linesCleared.toString();
+            this.linesElement.textContent = this.formatNumber(this.state.linesCleared);
         }
     }
 
@@ -565,13 +611,16 @@ export class Game {
 
         cellsToClear.forEach((cell, index) => {
             setTimeout(() => {
-                // Add to animating cells
+                // Add to animating cells with random animation index (0-9)
+                const randomAnimIndex = Math.floor(Math.random() * 10);
                 this.animatingCells.push({
                     x: cell.x,
                     y: cell.y,
                     color: cell.color,
                     startTime: Date.now(),
                     progress: 0,
+                    type: 'clear',
+                    animationIndex: randomAnimIndex,
                 });
 
                 // Play pop sound
@@ -732,5 +781,12 @@ export class Game {
      */
     getState(): GameState {
         return { ...this.state };
+    }
+
+    /**
+     * Resumes the sound context (for autoplay policy)
+     */
+    resumeSoundContext(): void {
+        this.soundManager.resumeContext();
     }
 }

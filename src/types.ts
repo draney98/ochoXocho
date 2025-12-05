@@ -57,6 +57,10 @@ export interface DragState {
     mousePosition: Position;       // Current mouse position in grid coordinates
     isValidPosition: boolean;      // Whether current position is valid for placement
     hasBoardPosition: boolean;     // Whether the cursor has entered the board area
+    previewLinesCleared?: {       // Lines/columns that would be cleared if placed here
+        rows: number[];
+        columns: number[];
+    };
 }
 
 /**
@@ -69,6 +73,7 @@ export interface AnimatingCell {
     startTime: number;             // Timestamp when animation started
     progress: number;              // Animation progress (0 to 1)
     type?: 'clear' | 'explosion';  // Type of animation (defaults to 'clear')
+    animationIndex?: number;       // Index (0-9) for which clear animation style to use
 }
 
 /**

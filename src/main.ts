@@ -144,6 +144,8 @@ function setupSettingsControls(game: Game, initialSettings: GameSettings, update
 
     openButton?.addEventListener('click', (e) => {
         e.stopPropagation();
+        // Resume sound context on first user interaction (fixes autoplay policy)
+        game.resumeSoundContext();
         togglePanel(true);
     });
     closeButton?.addEventListener('click', (e) => {
@@ -207,6 +209,13 @@ function setupResponsiveCanvas(canvas: HTMLCanvasElement): void {
 function setupHighScores(game: Game, initialSettings: GameSettings): (mode: GameMode) => void {
     let currentMode = initialSettings.mode;
     
+    /**
+     * Formats a number with commas (e.g., 1234 -> "1,234")
+     */
+    const formatNumber = (num: number): string => {
+        return num.toLocaleString('en-US');
+    };
+
     const updateHighScores = () => {
         // Get scores for the current mode
         const scores = getHighScores(currentMode);
@@ -214,9 +223,9 @@ function setupHighScores(game: Game, initialSettings: GameSettings): (mode: Game
         const weekEl = document.getElementById('high-score-week');
         const yearEl = document.getElementById('high-score-year');
         
-        if (todayEl) todayEl.textContent = scores.today.toString();
-        if (weekEl) weekEl.textContent = scores.week.toString();
-        if (yearEl) yearEl.textContent = scores.ever.toString();
+        if (todayEl) todayEl.textContent = formatNumber(scores.today);
+        if (weekEl) weekEl.textContent = formatNumber(scores.week);
+        if (yearEl) yearEl.textContent = formatNumber(scores.ever);
     };
 
     // Update when mode changes

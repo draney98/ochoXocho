@@ -5,8 +5,10 @@
 import { Position, Shape, PlacedBlock, DragState, AnimatingCell, GameSettings } from './types';
 import { Board } from './board';
 import { getShapeColor, getShapeIndex, getShapePointValue } from './shapes';
+import { getColorSet } from './colorConfig';
 import {
     BOARD_PIXEL_SIZE,
+    BOARD_CELL_COUNT,
     CELL_SIZE,
     CANVAS_WIDTH,
     CANVAS_HEIGHT,
@@ -25,6 +27,9 @@ export class Renderer {
     private canvas: HTMLCanvasElement;
     private ctx: CanvasRenderingContext2D;
     private settings: GameSettings;
+    private currentLevel: number = 1;
+    private blockIconImage: HTMLImageElement | null = null;
+    private blockIconLoaded: boolean = false;
 
     constructor(canvas: HTMLCanvasElement, settings: GameSettings) {
         this.canvas = canvas;
@@ -38,6 +43,41 @@ export class Renderer {
             throw new Error('Could not get 2D rendering context');
         }
         this.ctx = context;
+        
+        // Load block icon
+        this.loadBlockIcon();
+    }
+
+    /**
+     * Loads the Tabler Icons square icon as an image for use on blocks
+     */
+    private loadBlockIcon(): void {
+        // Tabler Icons square icon - using black stroke for better visibility when multiplied
+        const svgString = `
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+                <path d="M3 3m0 2a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2z" />
+            </svg>
+        `;
+        
+        const img = new Image();
+        const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        
+        img.onload = () => {
+            this.blockIconImage = img;
+            this.blockIconLoaded = true;
+            console.log('[RENDERER] Block icon loaded successfully');
+            URL.revokeObjectURL(url);
+        };
+        
+        img.onerror = (error) => {
+            console.error('[RENDERER] Failed to load block icon:', error);
+            this.blockIconLoaded = true; // Mark as loaded even on error to prevent retries
+            URL.revokeObjectURL(url);
+        };
+        
+        img.src = url;
     }
 
     /**
@@ -58,10 +98,12 @@ export class Renderer {
     }
 
     /**
-     * Darkens a hex color by multiplying RGB values by darkness factor
+     * Adjusts a hex color based on darkness factor and theme
+     * For light themes: darkens by multiplying RGB values by darkness factor
+     * For dark themes: lightens by interpolating toward white
      * @param hexColor - Hex color string (e.g., "#ff0000")
-     * @param darkness - Darkness multiplier (1.0 = full brightness, 0.0 = black)
-     * @returns Darkened hex color string
+     * @param darkness - Darkness multiplier (1.0 = full brightness, 0.0 = black/white depending on theme)
+     * @returns Adjusted hex color string
      */
     private darkenColor(hexColor: string, darkness: number): string {
         // Clamp darkness between 0 and 1
@@ -75,13 +117,30 @@ export class Renderer {
         const g = parseInt(hex.substring(2, 4), 16);
         const b = parseInt(hex.substring(4, 6), 16);
         
-        // Apply darkness factor
-        const darkenedR = Math.floor(r * factor);
-        const darkenedG = Math.floor(g * factor);
-        const darkenedB = Math.floor(b * factor);
+        // Check if current theme is dark (midnight)
+        const isDarkTheme = this.settings.theme === 'midnight';
+        
+        let adjustedR: number;
+        let adjustedG: number;
+        let adjustedB: number;
+        
+        if (isDarkTheme) {
+            // For dark themes: lighten by interpolating toward white
+            // When darkness = 1.0, use original color
+            // When darkness = 0.0, use white (255, 255, 255)
+            const lightness = 1.0 - factor; // Invert: darkness 0 = full lightness, darkness 1 = no lightness
+            adjustedR = Math.floor(r * (1 - lightness) + 255 * lightness);
+            adjustedG = Math.floor(g * (1 - lightness) + 255 * lightness);
+            adjustedB = Math.floor(b * (1 - lightness) + 255 * lightness);
+        } else {
+            // For light themes: darken by multiplying by darkness factor (current behavior)
+            adjustedR = Math.floor(r * factor);
+            adjustedG = Math.floor(g * factor);
+            adjustedB = Math.floor(b * factor);
+        }
         
         // Convert back to hex
-        return `#${darkenedR.toString(16).padStart(2, '0')}${darkenedG.toString(16).padStart(2, '0')}${darkenedB.toString(16).padStart(2, '0')}`;
+        return `#${adjustedR.toString(16).padStart(2, '0')}${adjustedG.toString(16).padStart(2, '0')}${adjustedB.toString(16).padStart(2, '0')}`;
     }
 
     /**
@@ -168,6 +227,39 @@ export class Renderer {
     }
 
     /**
+     * Draws a single block with Heroicons icon overlay
+     * @param blockX - X position of the block
+     * @param blockY - Y position of the block
+     * @param blockSize - Size of the block
+     * @param color - Color to use for the block
+     * @param borderColor - Color for the border (defaults to '#333')
+     */
+    private drawBlock(blockX: number, blockY: number, blockSize: number, color: string, borderColor: string = '#333'): void {
+        // Draw filled cell background
+        this.ctx.fillStyle = color;
+        this.ctx.fillRect(blockX, blockY, blockSize, blockSize);
+
+        // Draw border
+        this.ctx.strokeStyle = borderColor;
+        this.ctx.lineWidth = 2;
+        this.ctx.strokeRect(blockX, blockY, blockSize, blockSize);
+
+        // Draw Heroicons icon overlay if loaded
+        if (this.blockIconLoaded && this.blockIconImage) {
+            this.ctx.save();
+            // Draw the icon with better visibility
+            // Use composite operation to blend with block color
+            this.ctx.globalCompositeOperation = 'multiply';
+            this.ctx.globalAlpha = 0.4; // More visible
+            const iconSize = blockSize * 0.6;
+            const iconX = blockX + (blockSize - iconSize) / 2;
+            const iconY = blockY + (blockSize - iconSize) / 2;
+            this.ctx.drawImage(this.blockIconImage, iconX, iconY, iconSize, iconSize);
+            this.ctx.restore();
+        }
+    }
+
+    /**
      * Draws a shape at a given position
      * @param shape - The shape to draw
      * @param position - Grid position where to draw
@@ -185,15 +277,11 @@ export class Renderer {
         for (const block of shape) {
             const x = (position.x + block.x) * CELL_SIZE;
             const y = (position.y + block.y) * CELL_SIZE;
+            const blockX = x + 2;
+            const blockY = y + 2;
+            const blockSize = CELL_SIZE - 4;
 
-            // Draw filled cell
-            this.ctx.fillStyle = color;
-            this.ctx.fillRect(x + 2, y + 2, CELL_SIZE - 4, CELL_SIZE - 4);
-
-            // Draw border
-            this.ctx.strokeStyle = '#333';
-            this.ctx.lineWidth = 2;
-            this.ctx.strokeRect(x + 2, y + 2, CELL_SIZE - 4, CELL_SIZE - 4);
+            this.drawBlock(blockX, blockY, blockSize, color);
 
             // Draw point value if provided and setting is enabled
             if (pointValue !== undefined && !isGhost && this.settings.showPointValues) {
@@ -224,6 +312,212 @@ export class Renderer {
         }
 
         this.ctx.globalAlpha = 1.0;
+    }
+
+    /**
+     * Calculates a complementary color for a given hex color
+     * @param hexColor - Hex color string (e.g., "#ff0000")
+     * @returns Object with highlight and border colors (complementary to the input color)
+     */
+    private getComplementaryColor(hexColor: string): { highlight: string; border: string } {
+        const hex = hexColor.replace('#', '');
+        const r = parseInt(hex.substring(0, 2), 16) / 255;
+        const g = parseInt(hex.substring(2, 4), 16) / 255;
+        const b = parseInt(hex.substring(4, 6), 16) / 255;
+        
+        const max = Math.max(r, g, b);
+        const min = Math.min(r, g, b);
+        const delta = max - min;
+        
+        let h = 0;
+        if (delta > 0.01) { // Only calculate hue if color is not too desaturated
+            if (max === r) {
+                h = ((g - b) / delta) % 6;
+            } else if (max === g) {
+                h = (b - r) / delta + 2;
+            } else {
+                h = (r - g) / delta + 4;
+            }
+            h = h * 60;
+            if (h < 0) h += 360;
+        } else {
+            // For grayscale colors, use a default hue
+            h = 200; // Blue-ish
+        }
+        
+        // Calculate complementary color (opposite on color wheel, shifted 180 degrees)
+        const complementaryHue = (h + 180) % 360;
+        
+        // Convert to HSL and create a bright, saturated highlight color
+        // Use high saturation (80-90%) and medium-high lightness (60-70%) for visibility
+        const saturation = 85;
+        const lightness = 65;
+        
+        return this.hslToHex(complementaryHue, saturation, lightness);
+    }
+    
+    /**
+     * Converts HSL to hex color
+     * @param h - Hue (0-360)
+     * @param s - Saturation (0-100)
+     * @param l - Lightness (0-100)
+     * @returns Object with highlight and border colors (border is slightly darker)
+     */
+    private hslToHex(h: number, s: number, l: number): { highlight: string; border: string } {
+        s /= 100;
+        l /= 100;
+        
+        const c = (1 - Math.abs(2 * l - 1)) * s;
+        const x = c * (1 - Math.abs((h / 60) % 2 - 1));
+        const m = l - c / 2;
+        let r = 0, g = 0, b = 0;
+        
+        if (0 <= h && h < 60) {
+            r = c; g = x; b = 0;
+        } else if (60 <= h && h < 120) {
+            r = x; g = c; b = 0;
+        } else if (120 <= h && h < 180) {
+            r = 0; g = c; b = x;
+        } else if (180 <= h && h < 240) {
+            r = 0; g = x; b = c;
+        } else if (240 <= h && h < 300) {
+            r = x; g = 0; b = c;
+        } else if (300 <= h && h < 360) {
+            r = c; g = 0; b = x;
+        }
+        
+        const toHex = (n: number) => {
+            const val = Math.round((n + m) * 255);
+            return val.toString(16).padStart(2, '0');
+        };
+        
+        const highlight = `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+        
+        // Border is slightly darker (reduce lightness by 15%)
+        const borderL = Math.max(0, l - 0.15);
+        const borderC = (1 - Math.abs(2 * borderL - 1)) * s;
+        const borderX = borderC * (1 - Math.abs((h / 60) % 2 - 1));
+        const borderM = borderL - borderC / 2;
+        
+        let borderR = 0, borderG = 0, borderB = 0;
+        if (0 <= h && h < 60) {
+            borderR = borderC; borderG = borderX; borderB = 0;
+        } else if (60 <= h && h < 120) {
+            borderR = borderX; borderG = borderC; borderB = 0;
+        } else if (120 <= h && h < 180) {
+            borderR = 0; borderG = borderC; borderB = borderX;
+        } else if (180 <= h && h < 240) {
+            borderR = 0; borderG = borderX; borderB = borderC;
+        } else if (240 <= h && h < 300) {
+            borderR = borderX; borderG = 0; borderB = borderC;
+        } else if (300 <= h && h < 360) {
+            borderR = borderC; borderG = 0; borderB = borderX;
+        }
+        
+        const border = `#${toHex(borderR)}${toHex(borderG)}${toHex(borderB)}`;
+        
+        return { highlight, border };
+    }
+
+    /**
+     * Draws highlight overlay for lines/columns that would be cleared if shape is placed
+     * Each block gets its own complementary color highlight
+     * @param previewLines - Object containing rows and columns that would be cleared
+     * @param placedBlocks - All placed blocks on the board (to find which block occupies each cell)
+     */
+    private drawPreviewLineHighlights(previewLines: { rows: number[]; columns: number[] }, placedBlocks: PlacedBlock[]): void {
+        if (previewLines.rows.length === 0 && previewLines.columns.length === 0) {
+            return;
+        }
+
+        this.ctx.save();
+        
+        // Use a more obvious pulsing highlight effect
+        const pulseProgress = (Date.now() % 800) / 800;
+        const pulseAlpha = 0.5 + Math.sin(pulseProgress * Math.PI * 2) * 0.2; // Pulse between 0.3 and 0.7
+        
+        // Create a map of cell positions to block colors for quick lookup
+        const cellColorMap = new Map<string, string>();
+        for (const block of placedBlocks) {
+            for (const cell of block.shape) {
+                const absoluteX = block.position.x + cell.x;
+                const absoluteY = block.position.y + cell.y;
+                const key = `${absoluteX},${absoluteY}`;
+                cellColorMap.set(key, block.color);
+            }
+        }
+        
+        // Draw highlight with glow effect
+        this.ctx.shadowBlur = 10;
+        
+        // Highlight individual cells in full rows
+        for (const row of previewLines.rows) {
+            for (let x = 0; x < BOARD_CELL_COUNT; x++) {
+                const key = `${x},${row}`;
+                const blockColor = cellColorMap.get(key);
+                
+                if (blockColor) {
+                    // Get complementary color for this specific block
+                    const colors = this.getComplementaryColor(blockColor);
+                    const highlightColor = colors.highlight;
+                    const borderColor = colors.border;
+                    
+                    const cellX = x * CELL_SIZE;
+                    const cellY = row * CELL_SIZE;
+                    
+                    // Draw highlight with glow effect
+                    this.ctx.shadowColor = highlightColor;
+                    
+                    // Fill with pulsing alpha
+                    this.ctx.globalAlpha = pulseAlpha;
+                    this.ctx.fillStyle = highlightColor;
+                    this.ctx.fillRect(cellX + 2, cellY + 2, CELL_SIZE - 4, CELL_SIZE - 4);
+                    
+                    // Draw border
+                    this.ctx.globalAlpha = 1.0;
+                    this.ctx.strokeStyle = borderColor;
+                    this.ctx.lineWidth = 3;
+                    this.ctx.strokeRect(cellX + 2, cellY + 2, CELL_SIZE - 4, CELL_SIZE - 4);
+                }
+            }
+        }
+        
+        // Highlight individual cells in full columns
+        for (const col of previewLines.columns) {
+            for (let y = 0; y < BOARD_CELL_COUNT; y++) {
+                const key = `${col},${y}`;
+                const blockColor = cellColorMap.get(key);
+                
+                if (blockColor) {
+                    // Get complementary color for this specific block
+                    const colors = this.getComplementaryColor(blockColor);
+                    const highlightColor = colors.highlight;
+                    const borderColor = colors.border;
+                    
+                    const cellX = col * CELL_SIZE;
+                    const cellY = y * CELL_SIZE;
+                    
+                    // Draw highlight with glow effect
+                    this.ctx.shadowColor = highlightColor;
+                    
+                    // Fill with pulsing alpha
+                    this.ctx.globalAlpha = pulseAlpha;
+                    this.ctx.fillStyle = highlightColor;
+                    this.ctx.fillRect(cellX + 2, cellY + 2, CELL_SIZE - 4, CELL_SIZE - 4);
+                    
+                    // Draw border
+                    this.ctx.globalAlpha = 1.0;
+                    this.ctx.strokeStyle = borderColor;
+                    this.ctx.lineWidth = 3;
+                    this.ctx.strokeRect(cellX + 2, cellY + 2, CELL_SIZE - 4, CELL_SIZE - 4);
+                }
+            }
+        }
+        
+        // Reset shadow
+        this.ctx.shadowBlur = 0;
+        
+        this.ctx.restore();
     }
 
     /**
@@ -275,23 +569,11 @@ export class Renderer {
             for (const block of shape) {
                 const x = offsetX + block.x * QUEUE_CELL_SIZE;
                 const y = offsetY + block.y * QUEUE_CELL_SIZE;
+                const blockX = x + 2;
+                const blockY = y + 2;
+                const blockSize = QUEUE_CELL_SIZE - 4;
 
-                this.ctx.fillStyle = shapeColor;
-                this.ctx.fillRect(
-                    x + 2,
-                    y + 2,
-                    QUEUE_CELL_SIZE - 4,
-                    QUEUE_CELL_SIZE - 4
-                );
-
-                this.ctx.strokeStyle = queueShapeBorder;
-                this.ctx.lineWidth = 2;
-                this.ctx.strokeRect(
-                    x + 2,
-                    y + 2,
-                    QUEUE_CELL_SIZE - 4,
-                    QUEUE_CELL_SIZE - 4
-                );
+                this.drawBlock(blockX, blockY, blockSize, shapeColor, queueShapeBorder);
             }
 
             // Draw point value in bottom right corner if setting is enabled
@@ -387,30 +669,297 @@ export class Renderer {
             
             this.ctx.restore();
         } else {
-            // Original line clear animation (fade out and scale down)
-            const alpha = 1 - cell.progress; // Fade from 1 to 0
-            const scale = 1 - cell.progress * 0.5; // Scale from 1 to 0.5
-            
-            const centerX = x + CELL_SIZE / 2;
-            const centerY = y + CELL_SIZE / 2;
-            const size = (CELL_SIZE - 4) * scale;
-            const offsetX = (CELL_SIZE - 4 - size) / 2;
-            const offsetY = (CELL_SIZE - 4 - size) / 2;
-            
-            this.ctx.save();
-            this.ctx.globalAlpha = alpha;
-            
-            // Draw filled cell (scaled)
-            this.ctx.fillStyle = cell.color;
-            this.ctx.fillRect(x + 2 + offsetX, y + 2 + offsetY, size, size);
-            
-            // Draw border (scaled)
-            this.ctx.strokeStyle = '#333';
-            this.ctx.lineWidth = 2;
-            this.ctx.strokeRect(x + 2 + offsetX, y + 2 + offsetY, size, size);
-            
-            this.ctx.restore();
+            // Line clear animation - use one of 10 unique animations based on animationIndex
+            const animIndex = cell.animationIndex ?? 0;
+            this.drawClearAnimation(cell, x, y, animIndex);
         }
+    }
+
+    /**
+     * Draws one of 20 unique clear animations based on animation index
+     * @param cell - The animating cell
+     * @param x - Canvas x position
+     * @param y - Canvas y position
+     * @param animIndex - Animation index (0-16)
+     */
+    private drawClearAnimation(cell: AnimatingCell, x: number, y: number, animIndex: number): void {
+        const centerX = x + CELL_SIZE / 2;
+        const centerY = y + CELL_SIZE / 2;
+        const baseSize = CELL_SIZE - 4;
+        const progress = cell.progress;
+        
+        this.ctx.save();
+        
+        switch (animIndex % 17) {
+            case 0: // Fade out and scale down (original)
+                const alpha0 = 1 - progress;
+                const scale0 = 1 - progress * 0.5;
+                const size0 = baseSize * scale0;
+                const offset0 = (baseSize - size0) / 2;
+                this.ctx.globalAlpha = alpha0;
+                this.ctx.fillStyle = cell.color;
+                this.ctx.fillRect(x + 2 + offset0, y + 2 + offset0, size0, size0);
+                this.ctx.strokeStyle = '#333';
+                this.ctx.lineWidth = 2;
+                this.ctx.strokeRect(x + 2 + offset0, y + 2 + offset0, size0, size0);
+                break;
+                
+            case 1: // Spin and fade
+                const alpha1 = 1 - progress;
+                const rotation1 = progress * Math.PI * 2;
+                const scale1 = 1 - progress * 0.3;
+                const size1 = baseSize * scale1;
+                const offset1 = (baseSize - size1) / 2;
+                this.ctx.globalAlpha = alpha1;
+                this.ctx.translate(centerX, centerY);
+                this.ctx.rotate(rotation1);
+                this.ctx.fillStyle = cell.color;
+                this.ctx.fillRect(-size1 / 2, -size1 / 2, size1, size1);
+                this.ctx.strokeStyle = '#333';
+                this.ctx.lineWidth = 2;
+                this.ctx.strokeRect(-size1 / 2, -size1 / 2, size1, size1);
+                break;
+                
+            case 2: // Shrink to center
+                const alpha2 = 1 - progress;
+                const scale2 = 1 - progress;
+                const size2 = baseSize * scale2;
+                const offset2 = (baseSize - size2) / 2;
+                this.ctx.globalAlpha = alpha2;
+                this.ctx.fillStyle = cell.color;
+                this.ctx.fillRect(x + 2 + offset2, y + 2 + offset2, size2, size2);
+                this.ctx.strokeStyle = '#333';
+                this.ctx.lineWidth = 2;
+                this.ctx.strokeRect(x + 2 + offset2, y + 2 + offset2, size2, size2);
+                break;
+                
+            case 3: // Slide up and fade
+                const alpha3 = 1 - progress;
+                const slideY3 = -progress * CELL_SIZE;
+                this.ctx.globalAlpha = alpha3;
+                this.ctx.fillStyle = cell.color;
+                this.ctx.fillRect(x + 2, y + 2 + slideY3, baseSize, baseSize);
+                this.ctx.strokeStyle = '#333';
+                this.ctx.lineWidth = 2;
+                this.ctx.strokeRect(x + 2, y + 2 + slideY3, baseSize, baseSize);
+                break;
+                
+            case 4: // Expand and fade
+                const alpha4 = 1 - progress;
+                const scale4 = 1 + progress * 0.5;
+                const size4 = baseSize * scale4;
+                const offset4 = (baseSize - size4) / 2;
+                this.ctx.globalAlpha = alpha4;
+                this.ctx.fillStyle = cell.color;
+                this.ctx.fillRect(x + 2 + offset4, y + 2 + offset4, size4, size4);
+                this.ctx.strokeStyle = '#333';
+                this.ctx.lineWidth = 2;
+                this.ctx.strokeRect(x + 2 + offset4, y + 2 + offset4, size4, size4);
+                break;
+                
+            case 5: // Rotate 180 and shrink
+                const alpha5 = 1 - progress;
+                const rotation5 = progress * Math.PI;
+                const scale5 = 1 - progress * 0.6;
+                const size5 = baseSize * scale5;
+                const offset5 = (baseSize - size5) / 2;
+                this.ctx.globalAlpha = alpha5;
+                this.ctx.translate(centerX, centerY);
+                this.ctx.rotate(rotation5);
+                this.ctx.fillStyle = cell.color;
+                this.ctx.fillRect(-size5 / 2, -size5 / 2, size5, size5);
+                this.ctx.strokeStyle = '#333';
+                this.ctx.lineWidth = 2;
+                this.ctx.strokeRect(-size5 / 2, -size5 / 2, size5, size5);
+                break;
+                
+            case 6: // Fade with pulsing scale
+                const alpha6 = 1 - progress;
+                const pulse6 = Math.sin(progress * Math.PI * 4) * 0.1;
+                const scale6 = 1 - progress * 0.4 + pulse6;
+                const size6 = baseSize * scale6;
+                const offset6 = (baseSize - size6) / 2;
+                this.ctx.globalAlpha = alpha6;
+                this.ctx.fillStyle = cell.color;
+                this.ctx.fillRect(x + 2 + offset6, y + 2 + offset6, size6, size6);
+                this.ctx.strokeStyle = '#333';
+                this.ctx.lineWidth = 2;
+                this.ctx.strokeRect(x + 2 + offset6, y + 2 + offset6, size6, size6);
+                break;
+                
+            case 7: { // Flip horizontally and fade
+                const alpha = 1 - progress;
+                const scaleX = 1 - progress * 2; // Flip by scaling X to negative
+                const size = baseSize;
+                this.ctx.globalAlpha = alpha;
+                this.ctx.translate(centerX, centerY);
+                this.ctx.scale(scaleX, 1);
+                this.ctx.fillStyle = cell.color;
+                this.ctx.fillRect(-size / 2, -size / 2, size, size);
+                this.ctx.strokeStyle = '#333';
+                this.ctx.lineWidth = 2;
+                this.ctx.strokeRect(-size / 2, -size / 2, size, size);
+                break;
+            }
+                
+            case 8: { // Wobble and fade
+                const alpha = 1 - progress;
+                const wobble = Math.sin(progress * Math.PI * 6) * progress * 5;
+                const scale = 1 - progress * 0.5;
+                const size = baseSize * scale;
+                const offset = (baseSize - size) / 2;
+                this.ctx.globalAlpha = alpha;
+                this.ctx.translate(centerX + wobble, centerY);
+                this.ctx.fillStyle = cell.color;
+                this.ctx.fillRect(-size / 2, -size / 2, size, size);
+                this.ctx.strokeStyle = '#333';
+                this.ctx.lineWidth = 2;
+                this.ctx.strokeRect(-size / 2, -size / 2, size, size);
+                break;
+            }
+                
+            case 9: { // Squash and stretch
+                const alpha = 1 - progress;
+                const squash = Math.sin(progress * Math.PI);
+                const scaleX = 1 + squash * 0.3;
+                const scaleY = 1 - squash * 0.3;
+                const size = baseSize;
+                this.ctx.globalAlpha = alpha;
+                this.ctx.translate(centerX, centerY);
+                this.ctx.scale(scaleX, scaleY);
+                this.ctx.fillStyle = cell.color;
+                this.ctx.fillRect(-size / 2, -size / 2, size, size);
+                this.ctx.strokeStyle = '#333';
+                this.ctx.lineWidth = 2;
+                this.ctx.strokeRect(-size / 2, -size / 2, size, size);
+                break;
+            }
+                
+            case 10: { // Spiral out
+                const alpha = 1 - progress;
+                const rotation = progress * Math.PI * 3;
+                const distance = progress * CELL_SIZE * 0.5;
+                const scale = 1 - progress * 0.6;
+                const size = baseSize * scale;
+                this.ctx.globalAlpha = alpha;
+                this.ctx.translate(centerX, centerY);
+                this.ctx.rotate(rotation);
+                this.ctx.translate(distance, 0);
+                this.ctx.fillStyle = cell.color;
+                this.ctx.fillRect(-size / 2, -size / 2, size, size);
+                this.ctx.strokeStyle = '#333';
+                this.ctx.lineWidth = 2;
+                this.ctx.strokeRect(-size / 2, -size / 2, size, size);
+                break;
+            }
+                
+            case 11: { // Fade to white
+                const alpha = 1 - progress;
+                const whiteMix = progress;
+                const r = parseInt(cell.color.slice(1, 3), 16);
+                const g = parseInt(cell.color.slice(3, 5), 16);
+                const b = parseInt(cell.color.slice(5, 7), 16);
+                const mixedR = Math.round(r + (255 - r) * whiteMix);
+                const mixedG = Math.round(g + (255 - g) * whiteMix);
+                const mixedB = Math.round(b + (255 - b) * whiteMix);
+                this.ctx.globalAlpha = alpha;
+                this.ctx.fillStyle = `rgb(${mixedR}, ${mixedG}, ${mixedB})`;
+                this.ctx.fillRect(x + 2, y + 2, baseSize, baseSize);
+                this.ctx.strokeStyle = '#333';
+                this.ctx.lineWidth = 2;
+                this.ctx.strokeRect(x + 2, y + 2, baseSize, baseSize);
+                break;
+            }
+                
+            case 12: { // Bounce out
+                const alpha = 1 - progress;
+                const bounce = Math.sin(progress * Math.PI) * (1 - progress) * CELL_SIZE * 0.3;
+                const scale = 1 - progress * 0.4;
+                const size = baseSize * scale;
+                const offset = (baseSize - size) / 2;
+                this.ctx.globalAlpha = alpha;
+                this.ctx.fillStyle = cell.color;
+                this.ctx.fillRect(x + 2 + offset, y + 2 + offset - bounce, size, size);
+                this.ctx.strokeStyle = '#333';
+                this.ctx.lineWidth = 2;
+                this.ctx.strokeRect(x + 2 + offset, y + 2 + offset - bounce, size, size);
+                break;
+            }
+                
+            case 13: { // Pixelate and fade
+                const alpha = 1 - progress;
+                const pixelSize = Math.max(2, baseSize * (1 - progress * 0.8));
+                const pixelCount = Math.floor(baseSize / pixelSize);
+                this.ctx.globalAlpha = alpha;
+                this.ctx.fillStyle = cell.color;
+                for (let px = 0; px < pixelCount; px++) {
+                    for (let py = 0; py < pixelCount; py++) {
+                        this.ctx.fillRect(
+                            x + 2 + px * pixelSize,
+                            y + 2 + py * pixelSize,
+                            pixelSize - 1,
+                            pixelSize - 1
+                        );
+                    }
+                }
+                break;
+            }
+                
+            case 14: { // Rotate and explode outward
+                const alpha = 1 - progress;
+                const rotation = progress * Math.PI * 4;
+                const explode = progress * CELL_SIZE * 0.8;
+                const scale = 1 - progress * 0.5;
+                const size = baseSize * scale;
+                this.ctx.globalAlpha = alpha;
+                this.ctx.translate(centerX, centerY);
+                this.ctx.rotate(rotation);
+                const explodeX = Math.cos(rotation) * explode;
+                const explodeY = Math.sin(rotation) * explode;
+                this.ctx.translate(explodeX, explodeY);
+                this.ctx.fillStyle = cell.color;
+                this.ctx.fillRect(-size / 2, -size / 2, size, size);
+                this.ctx.strokeStyle = '#333';
+                this.ctx.lineWidth = 2;
+                this.ctx.strokeRect(-size / 2, -size / 2, size, size);
+                break;
+            }
+                
+            case 15: { // Shake and fade
+                const alpha = 1 - progress;
+                const shake = (Math.random() - 0.5) * progress * 8;
+                const shakeY = (Math.random() - 0.5) * progress * 8;
+                const scale = 1 - progress * 0.5;
+                const size = baseSize * scale;
+                const offset = (baseSize - size) / 2;
+                this.ctx.globalAlpha = alpha;
+                this.ctx.fillStyle = cell.color;
+                this.ctx.fillRect(x + 2 + offset + shake, y + 2 + offset + shakeY, size, size);
+                this.ctx.strokeStyle = '#333';
+                this.ctx.lineWidth = 2;
+                this.ctx.strokeRect(x + 2 + offset + shake, y + 2 + offset + shakeY, size, size);
+                break;
+            }
+                
+            case 16: { // Dissolve (checkerboard pattern fade)
+                const alpha = 1 - progress;
+                const checkerSize = 4;
+                const checkerProgress = Math.floor(progress * 10);
+                this.ctx.globalAlpha = alpha;
+                this.ctx.fillStyle = cell.color;
+                for (let cx = 0; cx < baseSize; cx += checkerSize) {
+                    for (let cy = 0; cy < baseSize; cy += checkerSize) {
+                        const checkerIndex = Math.floor(cx / checkerSize) + Math.floor(cy / checkerSize);
+                        if (checkerIndex % 2 === checkerProgress % 2) {
+                            this.ctx.fillRect(x + 2 + cx, y + 2 + cy, checkerSize, checkerSize);
+                        }
+                    }
+                }
+                break;
+            }
+        }
+        
+        this.ctx.restore();
     }
 
     /**
@@ -461,6 +1010,58 @@ export class Renderer {
     }
 
     /**
+     * Draws "Level up!" text animation that appears when player levels up
+     * @param progress - Animation progress from 0 to 1
+     */
+    drawLevelUp(progress: number): void {
+        // Fade in quickly, then fade out slowly
+        // Show at full opacity from 0 to 0.3, then fade out from 0.3 to 1.0
+        let alpha: number;
+        if (progress <= 0.3) {
+            // Fade in quickly (0 to 0.3)
+            alpha = progress / 0.3;
+        } else {
+            // Fade out slowly (0.3 to 1.0)
+            alpha = 1 - ((progress - 0.3) / 0.7);
+        }
+        
+        // Scale animation: start small, grow to full size, then shrink slightly
+        let scale: number;
+        if (progress <= 0.2) {
+            // Grow from 0.5 to 1.2
+            scale = 0.5 + (progress / 0.2) * 0.7;
+        } else if (progress <= 0.4) {
+            // Bounce back to 1.0
+            scale = 1.2 - ((progress - 0.2) / 0.2) * 0.2;
+        } else {
+            // Stay at 1.0
+            scale = 1.0;
+        }
+        
+        this.ctx.save();
+        this.ctx.globalAlpha = alpha;
+        this.ctx.translate(BOARD_PIXEL_SIZE / 2, BOARD_PIXEL_SIZE / 2);
+        this.ctx.scale(scale, scale);
+        this.ctx.translate(-BOARD_PIXEL_SIZE / 2, -BOARD_PIXEL_SIZE / 2);
+        
+        // Level up text with glow effect
+        this.ctx.fillStyle = '#fff';
+        this.ctx.font = 'bold 64px sans-serif';
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        
+        // Add text shadow for glow
+        this.ctx.shadowColor = '#4ECDC4';
+        this.ctx.shadowBlur = 30;
+        this.ctx.fillText('Level up!', BOARD_PIXEL_SIZE / 2, BOARD_PIXEL_SIZE / 2);
+        
+        // Reset shadow
+        this.ctx.shadowBlur = 0;
+        
+        this.ctx.restore();
+    }
+
+    /**
      * Main render method that draws everything
      * @param board - The game board
      * @param placedBlocks - All placed blocks
@@ -470,6 +1071,8 @@ export class Renderer {
      * @param animatingCells - Cells currently animating out
      * @param gameOverProgress - Animation progress for game over (0 to 1)
      * @param totalShapesPlaced - Total shapes placed (for calculating current point values)
+     * @param levelUpProgress - Animation progress for level up text (0 to 1, 0 = not showing)
+     * @param level - Current game level (for calculating contrasting highlight color)
      */
     render(
         board: Board,
@@ -479,13 +1082,23 @@ export class Renderer {
         gameOver: boolean,
         animatingCells: AnimatingCell[] = [],
         gameOverProgress: number = 0,
-        totalShapesPlaced: number = 0
+        totalShapesPlaced: number = 0,
+        levelUpProgress: number = 0,
+        level: number = 1
     ): void {
+        // Update current level for highlight color calculation
+        this.currentLevel = level;
         this.clear();
         if (this.settings.showGrid) {
             this.drawGrid();
         }
         this.drawBoard(placedBlocks, animatingCells, totalShapesPlaced);
+        
+        // Draw preview line highlights if dragging and position would clear lines
+        if (dragState.isDragging && dragState.isValidPosition && dragState.previewLinesCleared) {
+            this.drawPreviewLineHighlights(dragState.previewLinesCleared, placedBlocks);
+        }
+        
         this.drawQueue(queue);
         if (this.settings.showGhostPreview) {
             this.drawDragPreview(dragState);
@@ -493,6 +1106,10 @@ export class Renderer {
 
         if (gameOver) {
             this.drawGameOver(gameOverProgress);
+        }
+        
+        if (levelUpProgress > 0 && levelUpProgress < 1) {
+            this.drawLevelUp(levelUpProgress);
         }
     }
 }

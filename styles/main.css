@@ -139,10 +139,9 @@ body {
     width: 100%;
 }
 
-#top-stats-row-1,
-#top-stats-row-2 {
+#top-stats-row-1 {
     display: flex;
-    justify-content: space-around;
+    justify-content: space-between;
     align-items: center;
     flex-wrap: nowrap;
     gap: 15px;
@@ -150,23 +149,49 @@ body {
     min-width: 0;
 }
 
-#score-display,
-#turn-display,
+#top-stats-row-2 {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-width: 0;
+}
+
+#score-display {
+    font-size: 20px;
+    font-weight: bold;
+    color: var(--text-color);
+    white-space: nowrap;
+    flex-shrink: 0;
+    text-align: left;
+    flex: 0 0 auto;
+}
+
+#turn-display {
+    font-size: 20px;
+    font-weight: bold;
+    color: var(--text-color);
+    white-space: nowrap;
+    flex-shrink: 0;
+    text-align: center;
+    flex: 1 1 auto;
+}
+
 #lines-display {
     font-size: 20px;
     font-weight: bold;
     color: var(--text-color);
     white-space: nowrap;
     flex-shrink: 0;
+    text-align: right;
+    flex: 0 0 auto;
 }
 
 #level-display {
     display: flex;
     flex-direction: column;
     gap: 0;
-    flex-shrink: 0;
-    min-width: 150px;
-    max-width: 150px;
+    width: 100%;
+    flex-shrink: 1;
 }
 
 #level-value {
@@ -184,19 +209,74 @@ body {
 
 #level-progress-container {
     width: 100%;
-    height: 8px;
+    height: 32px;
+    display: flex;
+    gap: 2px;
+    padding: 2px;
     background-color: rgba(0, 0, 0, 0.1);
     border-radius: 4px;
     overflow: hidden;
-    margin-top: 2px;
+    position: relative;
+}
+
+/* Background grid pattern for empty blocks */
+#level-progress-container::before {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    right: 2px;
+    bottom: 2px;
+    background-image: 
+        repeating-linear-gradient(
+            to right,
+            transparent 0,
+            transparent calc(28px - 2px),
+            rgba(0, 0, 0, 0.05) calc(28px - 2px),
+            rgba(0, 0, 0, 0.05) 28px
+        );
+    pointer-events: none;
 }
 
 #level-progress-bar {
-    height: 100%;
-    background-color: var(--accent-color);
-    border-radius: 4px;
+    height: calc(100% - 4px);
+    margin: 2px;
     transition: width 0.3s ease;
     width: 0%;
+    min-width: 0;
+    position: relative;
+    z-index: 1;
+    background: repeating-linear-gradient(
+        to right,
+        var(--accent-color) 0,
+        var(--accent-color) calc(28px - 2px),
+        rgba(255, 255, 255, 0.1) calc(28px - 2px),
+        rgba(255, 255, 255, 0.1) 28px
+    );
+    border-radius: 2px;
+    box-shadow: 
+        inset 0 1px 0 rgba(255, 255, 255, 0.2),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.2),
+        0 0 0 1px rgba(0, 0, 0, 0.1);
+}
+
+/* Add block borders to make it look more like game blocks */
+#level-progress-bar::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image: 
+        repeating-linear-gradient(
+            to right,
+            transparent 0,
+            transparent calc(28px - 2px),
+            rgba(0, 0, 0, 0.15) calc(28px - 2px),
+            rgba(0, 0, 0, 0.15) 28px
+        );
+    pointer-events: none;
 }
 
 #mode-display {
@@ -222,7 +302,10 @@ body {
 }
 
 #restart-button {
-    display: block;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
     width: 100%;
     margin-top: 15px;
     padding: 10px 20px;
@@ -234,6 +317,12 @@ body {
     font-weight: 600;
     cursor: pointer;
     transition: background 0.2s ease, transform 0.1s ease;
+}
+
+#restart-button .restart-icon {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
 }
 
 #restart-button:hover {
@@ -252,17 +341,48 @@ body {
 
 #high-scores {
     margin-top: 15px;
-    text-align: center;
-    font-size: 14px;
-    color: var(--muted-text-color);
-    padding: 8px 12px;
-    background: var(--queue-strip-bg);
-    border-radius: 6px;
+    width: 100%;
 }
 
-#high-scores span {
-    color: var(--accent-color);
+#high-scores-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 15px;
+    width: 100%;
+    min-width: 0;
+}
+
+#high-score-today-display {
+    font-size: 20px;
     font-weight: bold;
+    color: var(--text-color);
+    white-space: nowrap;
+    flex-shrink: 0;
+    text-align: left;
+    flex: 0 0 auto;
+}
+
+#high-score-week-display,
+#high-score-year-display {
+    font-size: 20px;
+    font-weight: bold;
+    color: var(--text-color);
+    white-space: nowrap;
+    flex-shrink: 0;
+    text-align: center;
+    flex: 1 1 auto;
+}
+
+#mode-display {
+    font-size: 20px;
+    font-weight: bold;
+    color: var(--text-color);
+    white-space: nowrap;
+    flex-shrink: 0;
+    text-align: right;
+    flex: 0 0 auto;
 }
 
 #settings-button {
@@ -398,7 +518,11 @@ body {
     
     #score-display,
     #turn-display,
-    #lines-display {
+    #lines-display,
+    #high-score-today-display,
+    #high-score-week-display,
+    #high-score-year-display,
+    #mode-display {
         font-size: 18px;
     }
     
