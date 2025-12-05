@@ -40,6 +40,33 @@ npm run build
 
 The built files will be in the `dist` directory.
 
+## Deployment
+
+### Deploying to Render.com
+
+This project includes a `render.yaml` configuration file for easy deployment to Render.com.
+
+1. **Push your code to GitHub** (or GitLab/Bitbucket)
+
+2. **Connect to Render.com**:
+   - Go to [Render.com](https://render.com) and sign up/login
+   - Click "New +" and select "Static Site"
+   - Connect your repository
+
+3. **Configure the deployment**:
+   - **Name**: ocho-xocho (or your preferred name)
+   - **Build Command**: `npm install && npm run build`
+   - **Publish Directory**: `dist`
+   - Render will automatically detect the `render.yaml` file if present
+
+4. **Deploy**: Click "Create Static Site" and Render will build and deploy your site
+
+Your game will be live at a URL like `https://ocho-xocho.onrender.com`
+
+Alternatively, you can deploy manually by:
+- Running `npm run build` locally
+- Uploading the `dist` folder contents to any static hosting service (Netlify, Vercel, GitHub Pages, etc.)
+
 ## Project Structure
 
 ```
