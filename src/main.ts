@@ -211,31 +211,35 @@ function setupResponsiveCanvas(canvas: HTMLCanvasElement): void {
         const availableHeight = window.innerHeight - RESPONSIVE_CANVAS_LIMITS.verticalPadding;
         const availableWidth = window.innerWidth - RESPONSIVE_CANVAS_LIMITS.horizontalPadding;
         
-        // The board itself is square (BOARD_PIXEL_SIZE x BOARD_PIXEL_SIZE)
-        // To ensure the board stays square, we need to scale based on the smaller dimension
-        // that would fit the square board portion
+        // The board itself is square (BOARD_PIXEL_SIZE x BOARD_PIXEL_SIZE = 600x600)
+        // The canvas is 600px wide x 820px tall (600px board + 220px queue)
+        // To ensure the board stays square, we must scale the entire canvas uniformly
         
-        // Calculate scale based on width (to keep board square)
+        // Calculate scale based on width - canvas width must fit
         const widthScale = availableWidth / CANVAS_WIDTH;
         
-        // Calculate scale based on height (accounting for queue area)
-        // We want the board to be square, so we need to fit square board + queue
-        // If we scale by widthScale, the queue height becomes: QUEUE_AREA_HEIGHT * widthScale
-        // So available height for board = availableHeight - (QUEUE_AREA_HEIGHT * widthScale)
-        const heightForBoard = availableHeight - (QUEUE_AREA_HEIGHT * widthScale);
-        const heightScale = heightForBoard / BOARD_PIXEL_SIZE;
+        // Calculate scale based on height - canvas height must fit
+        const heightScale = availableHeight / CANVAS_HEIGHT;
         
-        // Use the smaller scale to ensure everything fits and board stays square
-        const finalScale = Math.min(widthScale, heightScale);
+        // Use the smaller scale to ensure everything fits
+        // Uniform scaling of the entire canvas ensures the board stays square
+        let finalScale = Math.min(widthScale, heightScale);
         
         // Clamp to min/max limits
         const minScale = RESPONSIVE_CANVAS_LIMITS.minHeight / CANVAS_HEIGHT;
         const maxScale = RESPONSIVE_CANVAS_LIMITS.maxHeight / CANVAS_HEIGHT;
-        const clampedScale = Math.max(minScale, Math.min(finalScale, maxScale));
+        finalScale = Math.max(minScale, Math.min(finalScale, maxScale));
         
-        // Apply scale to canvas, maintaining aspect ratio
-        canvas.style.width = `${CANVAS_WIDTH * clampedScale}px`;
-        canvas.style.height = `${CANVAS_HEIGHT * clampedScale}px`;
+        // Apply scale to canvas - uniform scaling maintains board square aspect ratio
+        const scaledWidth = CANVAS_WIDTH * finalScale;
+        const scaledHeight = CANVAS_HEIGHT * finalScale;
+        
+        canvas.style.width = `${scaledWidth}px`;
+        canvas.style.height = `${scaledHeight}px`;
+        
+        // Ensure the canvas element itself maintains square aspect ratio for the board portion
+        // The canvas internal size is fixed (600x820), but we need to ensure CSS doesn't distort it
+        // By setting both width and height with the same scale factor, the board stays square
     };
     
     updateCanvasSize();

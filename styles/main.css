@@ -252,10 +252,10 @@ body {
     border: 2px solid var(--canvas-border);
     border-radius: 8px;
     cursor: grab;
-    max-width: 100%;
-    max-height: calc(100vh - 300px);
-    width: auto;
-    height: auto;
+    /* Width and height are set dynamically by JavaScript to maintain square board */
+    /* Removing max-width/max-height/width:auto/height:auto to prevent CSS from distorting the aspect ratio */
+    /* Ensure canvas maintains aspect ratio - prevents distortion */
+    image-rendering: pixelated;
 }
 
 #game-canvas:active {
@@ -510,10 +510,8 @@ body[data-theme="midnight"] #restart-button .restart-icon {
         font-size: 18px;
     }
     
-    #game-canvas {
-        max-width: 100%;
-        height: auto;
-    }
+    /* Canvas size is controlled by JavaScript to maintain square board */
+    /* No CSS constraints needed on mobile */
 
     #settings-panel {
         right: 10px;
