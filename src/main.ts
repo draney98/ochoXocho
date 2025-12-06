@@ -10,6 +10,7 @@ import {
     STORAGE_KEYS,
     HIGH_SCORE_CONFIG,
     RESPONSIVE_CANVAS_LIMITS,
+    GAMEPLAY_CONFIG,
 } from './config';
 import { CANVAS_WIDTH, CANVAS_HEIGHT, BOARD_PIXEL_SIZE, QUEUE_AREA_HEIGHT } from './constants';
 
@@ -41,6 +42,35 @@ function saveSettings(settings: GameSettings): void {
     }
 }
 
+/**
+ * Calculates the number of lines needed to complete a level
+ */
+function getLinesPerLevel(): number {
+    return Math.ceil(GAMEPLAY_CONFIG.levelProgressThreshold / GAMEPLAY_CONFIG.levelProgressPerLine);
+}
+
+/**
+ * Creates progress boxes dynamically based on lines per level
+ */
+function setupProgressBoxes(): void {
+    const container = document.getElementById('level-progress-container');
+    if (!container) return;
+
+    // Clear existing boxes
+    container.innerHTML = '';
+
+    // Calculate number of boxes needed (one per line to complete level)
+    const linesPerLevel = getLinesPerLevel();
+
+    // Create boxes
+    for (let i = 0; i < linesPerLevel; i++) {
+        const box = document.createElement('div');
+        box.className = 'progress-box';
+        box.setAttribute('data-index', i.toString());
+        container.appendChild(box);
+    }
+}
+
 // Wait for DOM to be ready
 document.addEventListener('DOMContentLoaded', () => {
     const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
@@ -52,6 +82,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const settingsState: GameSettings = loadSettings();
     applyTheme(settingsState.theme);
+
+    // Create progress boxes dynamically based on lines per level
+    setupProgressBoxes();
 
     // Make canvas responsive to window height
     setupResponsiveCanvas(canvas);
@@ -251,12 +284,16 @@ function setupResponsiveUI(canvas: HTMLCanvasElement): void {
         const canvasWidth = canvas.offsetWidth;
         const topStats = document.getElementById('top-stats');
         const highScores = document.getElementById('high-scores');
+        const buttonContainer = document.getElementById('button-container');
         
         if (topStats) {
             topStats.style.width = `${canvasWidth}px`;
         }
         if (highScores) {
             highScores.style.width = `${canvasWidth}px`;
+        }
+        if (buttonContainer) {
+            buttonContainer.style.width = `${canvasWidth}px`;
         }
         
         // Dynamically adjust font sizes based on canvas width
@@ -285,11 +322,28 @@ function setupResponsiveUI(canvas: HTMLCanvasElement): void {
             progressContainer.style.height = `${progressBarHeight}px`;
         }
         
-        // Update progress box border radius to match height
+        // Update progress boxes to be square and fill horizontal space
         const progressBoxes = document.querySelectorAll('.progress-box');
+        const linesPerLevel = getLinesPerLevel();
         const borderRadius = Math.max(3, Math.min(6, progressBarHeight * 0.125));
+        
+        // Calculate box size: fill width with gaps between boxes
+        // Container has 2px padding, boxes have 2px gap between them (1px margin on each side)
+        const containerPadding = 4; // 2px on each side
+        const totalGaps = (linesPerLevel - 1) * 2; // 2px gap between each box (1px margin each side)
+        const availableWidth = canvasWidth - containerPadding - totalGaps;
+        const boxSize = Math.floor(availableWidth / linesPerLevel);
+        
+        // Ensure boxes are square and don't exceed container height
+        const maxBoxSize = progressBarHeight - 4; // Account for 2px margin top and bottom
+        const finalBoxSize = Math.min(boxSize, maxBoxSize);
+        
         progressBoxes.forEach(box => {
-            (box as HTMLElement).style.borderRadius = `${borderRadius}px`;
+            const boxEl = box as HTMLElement;
+            boxEl.style.borderRadius = `${borderRadius}px`;
+            boxEl.style.width = `${finalBoxSize}px`;
+            boxEl.style.height = `${finalBoxSize}px`;
+            boxEl.style.flex = '0 0 auto'; // Don't flex, use fixed size
         });
     };
     

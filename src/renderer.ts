@@ -91,9 +91,29 @@ export class Renderer {
      * Gets a CSS variable value from the document body (where theme is applied)
      */
     private getCSSVariable(name: string): string {
+        // Try multiple methods to get the CSS variable
+        // First try body (which has data-theme attribute)
         const body = document.body;
-        if (!body) return '';
-        return getComputedStyle(body).getPropertyValue(name).trim();
+        if (body) {
+            let value = getComputedStyle(body).getPropertyValue(name).trim();
+            if (value) return value;
+        }
+        
+        // Try :root as fallback
+        const root = document.documentElement;
+        let value = getComputedStyle(root).getPropertyValue(name).trim();
+        if (value) return value;
+        
+        // If still empty, try reading directly from body's style attribute or computed style
+        // This handles cases where the variable might be set but not immediately available
+        if (body) {
+            // Force a reflow to ensure styles are computed
+            void body.offsetHeight;
+            value = getComputedStyle(body).getPropertyValue(name).trim();
+            if (value) return value;
+        }
+        
+        return '';
     }
 
     /**
@@ -153,7 +173,18 @@ export class Renderer {
      * Draws the 8x8 game grid
      */
     drawGrid(): void {
-        this.ctx.strokeStyle = '#e0e0e0';
+        // Get grid color from CSS variable (theme-aware)
+        // Try multiple times to ensure we get the correct value on responsive designs
+        let gridColor = this.getCSSVariable('--grid-color');
+        if (!gridColor) {
+            // Force a small delay and retry (helps with responsive design timing)
+            gridColor = this.getCSSVariable('--grid-color');
+        }
+        // Fallback to light gray if still not found
+        if (!gridColor) {
+            gridColor = '#e0e0e0';
+        }
+        this.ctx.strokeStyle = gridColor;
         this.ctx.lineWidth = 1;
 
         // Draw vertical lines
@@ -592,13 +623,11 @@ export class Renderer {
      * Draws the queue of upcoming shapes beneath the board
      * @param queue - Array of shapes in the queue
      */
-    drawQueue(queue: Shape[]): void {
+    drawQueue(queue: (Shape | null)[]): void {
         const queueAreaTop = BOARD_PIXEL_SIZE;
 
         // Get theme colors for queue area (re-read on each render to catch theme changes)
         const queueStripBg = this.getCSSVariable('--queue-strip-bg') || '#f5f5f5';
-        const queueCardBg = this.getCSSVariable('--queue-card-bg') || '#ffffff';
-        const queueCardBorder = this.getCSSVariable('--queue-card-border') || '#dddddd';
         const queueShapeBorder = this.getCSSVariable('--queue-shape-border') || '#333333';
         const queuePointText = this.getCSSVariable('--queue-point-text') || '#999999';
 
@@ -606,59 +635,73 @@ export class Renderer {
         this.ctx.fillStyle = queueStripBg;
         this.ctx.fillRect(0, queueAreaTop, CANVAS_WIDTH, QUEUE_AREA_HEIGHT);
 
-        for (let i = 0; i < queue.length; i++) {
-            const shape = queue[i];
-            const shapeColor = getShapeColor(getShapeIndex(shape));
-            const rect = getQueueItemRect(i, queue.length);
+        // Target 70% of the playing surface block size, but clamp to fit slot with padding
+        const maxCellSize = CELL_SIZE * 0.7;
 
-            // Card background
-            this.ctx.fillStyle = queueCardBg;
-            this.ctx.fillRect(rect.x, rect.y, rect.width, QUEUE_ITEM_HEIGHT);
-            this.ctx.strokeStyle = queueCardBorder;
-            this.ctx.lineWidth = 2;
-            this.ctx.strokeRect(rect.x, rect.y, rect.width, QUEUE_ITEM_HEIGHT);
+        // Always draw 3 fixed areas - shapes stay in their positions even when one is removed
+        const QUEUE_SIZE = 3;
+        for (let i = 0; i < QUEUE_SIZE; i++) {
+            // Get the fixed rectangle for this queue slot (always uses QUEUE_SIZE = 3)
+            const rect = getQueueItemRect(i, QUEUE_SIZE);
+            
+            // Only draw if there's a shape at this index and it's valid
+            if (i < queue.length) {
+                const shape = queue[i];
+                if (!shape || shape.length === 0) {
+                    continue;
+                }
+                const shapeColor = getShapeColor(getShapeIndex(shape));
 
-            const minX = Math.min(...shape.map(b => b.x));
-            const maxX = Math.max(...shape.map(b => b.x));
-            const minY = Math.min(...shape.map(b => b.y));
-            const maxY = Math.max(...shape.map(b => b.y));
-            const shapeWidth = maxX - minX + 1;
-            const shapeHeight = maxY - minY + 1;
+                // Calculate shape dimensions
+                const minX = Math.min(...shape.map(b => b.x));
+                const maxX = Math.max(...shape.map(b => b.x));
+                const minY = Math.min(...shape.map(b => b.y));
+                const maxY = Math.max(...shape.map(b => b.y));
+                const shapeWidth = maxX - minX + 1;
+                const shapeHeight = maxY - minY + 1;
 
-            const offsetX =
-                rect.x +
-                (rect.width - shapeWidth * QUEUE_CELL_SIZE) / 2 -
-                minX * QUEUE_CELL_SIZE;
-            const offsetY =
-                rect.y +
-                (QUEUE_ITEM_HEIGHT - shapeHeight * QUEUE_CELL_SIZE) / 2 -
-                minY * QUEUE_CELL_SIZE;
-
-            for (const block of shape) {
-                const x = offsetX + block.x * QUEUE_CELL_SIZE;
-                const y = offsetY + block.y * QUEUE_CELL_SIZE;
-                const blockX = x + 1; // Reduced padding - almost to edge
-                const blockY = y + 1; // Reduced padding - almost to edge
-                const blockSize = QUEUE_CELL_SIZE - 2; // Almost full size
-
-                this.drawBlock(blockX, blockY, blockSize, shapeColor, queueShapeBorder);
-            }
-
-            // Draw point value in bottom right corner if setting is enabled
-            if (this.settings.showPointValues) {
-                const shapeIndex = getShapeIndex(shape);
-                // Note: Queue shows base point value, not level-adjusted
-                const pointValue = getShapePointValue(shapeIndex, 0);
-                this.ctx.fillStyle = queuePointText;
-                this.ctx.font = '14px sans-serif';
-                this.ctx.textAlign = 'right';
-                this.ctx.textBaseline = 'bottom';
-                this.ctx.fillText(
-                    pointValue.toString(),
-                    rect.x + rect.width - 6,
-                    rect.y + QUEUE_ITEM_HEIGHT - 6
+                // Compute cell size constrained by slot with small padding
+                const padding = 4;
+                const availableWidth = rect.width - padding * 2;
+                const availableHeight = QUEUE_ITEM_HEIGHT - padding * 2;
+                const cellSize = Math.min(
+                    maxCellSize,
+                    availableWidth / shapeWidth,
+                    availableHeight / shapeHeight
                 );
+
+                // Center the shape in the fixed area using the uniform cell size
+                const totalShapeWidth = shapeWidth * cellSize;
+                const totalShapeHeight = shapeHeight * cellSize;
+                const offsetX = rect.x + (rect.width - totalShapeWidth) / 2 - minX * cellSize;
+                const offsetY = rect.y + (QUEUE_ITEM_HEIGHT - totalShapeHeight) / 2 - minY * cellSize;
+
+                // Draw each block in the shape
+                for (const block of shape) {
+                    const x = offsetX + block.x * cellSize;
+                    const y = offsetY + block.y * cellSize;
+                    const blockSize = cellSize; // Use uniform cell size for all blocks
+
+                    this.drawBlock(x, y, blockSize, shapeColor, queueShapeBorder);
+                }
+
+                // Draw point value in bottom right corner if setting is enabled
+                if (this.settings.showPointValues) {
+                    const shapeIndex = getShapeIndex(shape);
+                    // Note: Queue shows base point value, not level-adjusted
+                    const pointValue = getShapePointValue(shapeIndex, 0);
+                    this.ctx.fillStyle = queuePointText;
+                    this.ctx.font = '14px sans-serif';
+                    this.ctx.textAlign = 'right';
+                    this.ctx.textBaseline = 'bottom';
+                    this.ctx.fillText(
+                        pointValue.toString(),
+                        rect.x + rect.width - 6,
+                        rect.y + QUEUE_ITEM_HEIGHT - 6
+                    );
+                }
             }
+            // If no shape at this index, the area remains empty but still occupies its fixed position
         }
     }
 
@@ -1170,7 +1213,7 @@ export class Renderer {
         const gridY = 150; // Below the "GAME OVER" text
 
         this.ctx.save();
-        this.ctx.globalAlpha = progress * 0.9; // Slightly transparent
+        this.ctx.globalAlpha = progress; // Full opacity when progress is 1
 
         // Draw 4x4 grid
         for (let gridYIdx = 0; gridYIdx < 4; gridYIdx++) {
@@ -1180,7 +1223,7 @@ export class Renderer {
                 const boardStartY = gridYIdx * 2;
                 
                 // Find the darkest color in this 2x2 area
-                let darkestColor = '#000000';
+                let darkestColor: string | null = null;
                 let darkestBrightness = 255;
                 
                 for (let by = 0; by < 2; by++) {
@@ -1211,10 +1254,22 @@ export class Renderer {
                 const y = gridY + gridYIdx * cellSize;
                 
                 // Draw rounded rectangle for the cell
-                this.ctx.fillStyle = darkestColor;
-                this.ctx.beginPath();
-                this.ctx.roundRect(x, y, cellSize, cellSize, 4);
-                this.ctx.fill();
+                if (darkestColor) {
+                    // Draw filled cell with the darkest color from the 2x2 area
+                    this.ctx.fillStyle = darkestColor;
+                    this.ctx.beginPath();
+                    this.ctx.roundRect(x, y, cellSize, cellSize, 4);
+                    this.ctx.fill();
+                } else {
+                    // Draw empty cell with a subtle border to show it's empty
+                    this.ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+                    this.ctx.beginPath();
+                    this.ctx.roundRect(x, y, cellSize, cellSize, 4);
+                    this.ctx.fill();
+                    this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+                    this.ctx.lineWidth = 1;
+                    this.ctx.stroke();
+                }
             }
         }
 
@@ -1289,7 +1344,7 @@ export class Renderer {
     render(
         board: Board,
         placedBlocks: PlacedBlock[],
-        queue: Shape[],
+        queue: (Shape | null)[],
         dragState: DragState,
         gameOver: boolean,
         animatingCells: AnimatingCell[] = [],

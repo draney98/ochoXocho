@@ -23,13 +23,13 @@ export class InputHandler {
     private onRemoveFromQueue: (shapeIndex: number) => void;
     private onRestoreToQueue: (shapeIndex: number, shape: Shape) => void;
     private board: Board;
-    private queue: Shape[];
+    private queue: (Shape | null)[];
     private originalQueueIndex: number = -1; // Track where the shape was originally in the queue
 
     constructor(
         canvas: HTMLCanvasElement,
         board: Board,
-        queue: Shape[],
+        queue: (Shape | null)[],
         onPlaceShape: (shapeIndex: number, position: Position) => void,
         onRemoveFromQueue: (shapeIndex: number) => void,
         onRestoreToQueue: (shapeIndex: number, shape: Shape) => void
@@ -74,7 +74,7 @@ export class InputHandler {
      * Updates the queue reference when new shapes are generated
      * @param newQueue - The new queue of shapes
      */
-    updateQueue(newQueue: Shape[]): void {
+    updateQueue(newQueue: (Shape | null)[]): void {
         this.queue = newQueue;
     }
 
@@ -109,22 +109,27 @@ export class InputHandler {
         const { x: canvasX, y: canvasY } = this.screenToCanvas(event.clientX, event.clientY);
 
         // Check if click is within any queue card under the board
+        // Use fixed queue size (3) for hit detection so areas don't move
+        const QUEUE_SIZE = 3;
         if (canvasY >= BOARD_PIXEL_SIZE && canvasY <= CANVAS_HEIGHT) {
-            for (let i = 0; i < this.queue.length; i++) {
-                const rect = getQueueItemRect(i, this.queue.length);
+            for (let i = 0; i < QUEUE_SIZE; i++) {
+                const rect = getQueueItemRect(i, QUEUE_SIZE);
                 if (
                     canvasX >= rect.x &&
                     canvasX <= rect.x + rect.width &&
                     canvasY >= rect.y &&
                     canvasY <= rect.y + rect.height
                 ) {
-                    this.dragState.isDragging = true;
-                    this.dragState.shapeIndex = i;
-                    this.dragState.shape = this.queue[i];
-                    this.originalQueueIndex = i; // Store original position
-                    // Remove shape from queue immediately when selected
-                    this.onRemoveFromQueue(i);
-                    break;
+                    // Only allow dragging if there's actually a shape at this index
+                    if (i < this.queue.length && this.queue[i]) {
+                        this.dragState.isDragging = true;
+                        this.dragState.shapeIndex = i;
+                        this.dragState.shape = this.queue[i];
+                        this.originalQueueIndex = i; // Store original position
+                        // Remove shape from queue immediately when selected
+                        this.onRemoveFromQueue(i);
+                        break;
+                    }
                 }
             }
         }
@@ -256,22 +261,27 @@ export class InputHandler {
         const { x: canvasX, y: canvasY } = this.screenToCanvas(touch.clientX, touch.clientY);
 
         // Check if touch is within any queue card under the board
+        // Use fixed queue size (3) for hit detection so areas don't move
+        const QUEUE_SIZE = 3;
         if (canvasY >= BOARD_PIXEL_SIZE && canvasY <= CANVAS_HEIGHT) {
-            for (let i = 0; i < this.queue.length; i++) {
-                const rect = getQueueItemRect(i, this.queue.length);
+            for (let i = 0; i < QUEUE_SIZE; i++) {
+                const rect = getQueueItemRect(i, QUEUE_SIZE);
                 if (
                     canvasX >= rect.x &&
                     canvasX <= rect.x + rect.width &&
                     canvasY >= rect.y &&
                     canvasY <= rect.y + rect.height
                 ) {
-                    this.dragState.isDragging = true;
-                    this.dragState.shapeIndex = i;
-                    this.dragState.shape = this.queue[i];
-                    this.originalQueueIndex = i; // Store original position
-                    // Remove shape from queue immediately when selected
-                    this.onRemoveFromQueue(i);
-                    break;
+                    // Only allow dragging if there's actually a shape at this index
+                    if (i < this.queue.length && this.queue[i]) {
+                        this.dragState.isDragging = true;
+                        this.dragState.shapeIndex = i;
+                        this.dragState.shape = this.queue[i];
+                        this.originalQueueIndex = i; // Store original position
+                        // Remove shape from queue immediately when selected
+                        this.onRemoveFromQueue(i);
+                        break;
+                    }
                 }
             }
         }

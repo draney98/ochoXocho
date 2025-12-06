@@ -56,6 +56,12 @@ export const EASY_MODE_CONFIG = {
 
 /**
  * Sound configuration
+ * Volume multipliers normalize perceived loudness across different waveforms and durations
+ * 
+ * To use audio files instead of synthesized sounds:
+ * 1. Place audio files in public/sounds/ directory
+ * 2. Set the 'file' property to the filename (e.g., 'place.mp3')
+ * 3. If file is set, it will be used; otherwise, synthesized sound will be used as fallback
  */
 export const SOUND_CONFIG = {
     masterGain: 0.15,
@@ -63,6 +69,8 @@ export const SOUND_CONFIG = {
         frequency: 360,
         duration: 0.11,
         waveform: 'triangle' as const,
+        volume: 1.0, // Triangle is moderate, no adjustment needed
+        file: '434130__89o__place.wav', // Audio file for place sound
     },
     clear: {
         baseFrequency: 460,
@@ -72,17 +80,25 @@ export const SOUND_CONFIG = {
         boardClearedDuration: 0.35,
         baseWaveform: 'square' as const,
         boardClearedWaveform: 'sawtooth' as const,
+        baseVolume: 0.7, // Square is louder, reduce to match others
+        boardClearedVolume: 0.8, // Sawtooth is loud, reduce slightly more
+        baseFile: '268822__kwahmah_02__woodblock.wav', // Audio file for line clear sound
+        boardClearedFile: '404764__owlstorm__retro-video-game-sfx-plop.wav', // Audio file for board cleared sound
     },
     gameOver: {
         frequency: 220,
         duration: 0.45,
         waveform: 'sine' as const,
+        volume: 1.3, // Sine is quieter, especially with long duration, boost it
+        file: '553521__newlocknew__pop-down-impact_1-2without-attack4lrsmltprcssng.wav', // Audio file for game over sound
     },
     pop: {
         baseFrequency: 440,
         randomRange: 100,
         duration: 0.08,
         waveform: 'square' as const,
+        volume: 0.75, // Square is louder, reduce to match others
+        file: '220180__gameaudio__click-pop.wav', // Audio file for pop sound
     },
 } as const;
 
@@ -120,10 +136,11 @@ export const HIGH_SCORE_CONFIG = {
 
 /**
  * Responsive canvas configuration
+ * Optimized for mobile (360x640)
  */
 export const RESPONSIVE_CANVAS_LIMITS = {
-    minHeight: 500,
+    minHeight: 400,
     maxHeight: 900,
-    verticalPadding: 300,
-    horizontalPadding: 80,
+    verticalPadding: 100, // Reduced for mobile
+    horizontalPadding: 10, // Reduced for mobile
 } as const;

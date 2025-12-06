@@ -12,12 +12,12 @@ export const QUEUE_AREA_HEIGHT = 220;
 export const CANVAS_WIDTH = BOARD_PIXEL_SIZE;
 export const CANVAS_HEIGHT = BOARD_PIXEL_SIZE + QUEUE_AREA_HEIGHT;
 
-export const QUEUE_AREA_PADDING = 20;
-export const QUEUE_LABEL_HEIGHT = 30;
+export const QUEUE_AREA_PADDING = 10; // Reduced buffer
+export const QUEUE_LABEL_HEIGHT = 20; // Reduced
 export const QUEUE_ITEM_WIDTH = 150;
 export const QUEUE_ITEM_HEIGHT = 150;
-export const QUEUE_ITEM_GAP = 20;
-export const QUEUE_CELL_SIZE = 35; // pixel size for each cell within queue preview (increased for larger shapes)
+export const QUEUE_ITEM_GAP = 10; // (unused now, kept for compatibility)
+export const QUEUE_CELL_SIZE = 42; // (unused for sizing, kept for compatibility)
 
 /**
  * Calculates the rectangle for a queue item positioned horizontally under the board.
@@ -25,16 +25,18 @@ export const QUEUE_CELL_SIZE = 35; // pixel size for each cell within queue prev
  * @param totalItems - number of items in the queue (default 3)
  */
 export function getQueueItemRect(index: number, totalItems: number = 3) {
-    const totalWidth =
-        totalItems * QUEUE_ITEM_WIDTH + (totalItems - 1) * QUEUE_ITEM_GAP;
+    // Each slot gets equal width (approx 33% of canvas) with 2% canvas gap between slots
+    const gap = CANVAS_WIDTH * 0.02;
+    const slotWidth = (CANVAS_WIDTH - gap * (totalItems - 1)) / totalItems;
+    const totalWidth = slotWidth * totalItems + gap * (totalItems - 1);
     const startX = (CANVAS_WIDTH - totalWidth) / 2;
-    const x = startX + index * (QUEUE_ITEM_WIDTH + QUEUE_ITEM_GAP);
+    const x = startX + index * (slotWidth + gap);
     const y = BOARD_PIXEL_SIZE + QUEUE_AREA_PADDING + QUEUE_LABEL_HEIGHT;
 
     return {
         x,
         y,
-        width: QUEUE_ITEM_WIDTH,
+        width: slotWidth,
         height: QUEUE_ITEM_HEIGHT,
     };
 }

@@ -9,6 +9,7 @@
     --button-hover: #1e40af;
     --button-active: #1e3a8a;
     --canvas-border: #dbeafe;
+    --grid-color: #e0e0e0;
     --queue-strip-bg: #eff6ff;
     --queue-card-bg: #ffffff;
     --queue-card-border: #dbeafe;
@@ -32,6 +33,7 @@ body[data-theme="classic"] {
     --button-hover: #1e40af;
     --button-active: #1e3a8a;
     --canvas-border: #dbeafe;
+    --grid-color: #e0e0e0;
     --queue-strip-bg: #eff6ff;
     --queue-card-bg: #ffffff;
     --queue-card-border: #dbeafe;
@@ -55,6 +57,7 @@ body[data-theme="midnight"] {
     --button-hover: #69cbdc;
     --button-active: #4aa7b4;
     --canvas-border: #3e3a60;
+    --grid-color: #4a4560;
     --queue-strip-bg: #1a1830;
     --queue-card-bg: #252342;
     --queue-card-border: #3e3a60;
@@ -79,6 +82,7 @@ body[data-theme="sunset"] {
     --button-hover: #f45b4b;
     --button-active: #d94d3f;
     --canvas-border: #ffc4b2;
+    --grid-color: #e0e0e0;
     --queue-strip-bg: #ffe9e0;
     --queue-card-bg: #fff4ed;
     --queue-card-border: #ffc4b2;
@@ -102,41 +106,44 @@ body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
     background: var(--bg-gradient);
     min-height: 100vh;
-    max-height: 100vh;
     display: flex;
     justify-content: center;
-    align-items: center;
-    padding: 20px;
+    align-items: flex-start;
+    padding: 0;
+    margin: 0;
     color: var(--text-color);
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: auto;
 }
 
 #app {
     display: flex;
     flex-direction: column;
     align-items: center;
-    max-height: 100vh;
     width: 100%;
+    padding-top: 0;
+    margin-top: 0;
 }
 
 #game-container {
     background: var(--container-bg);
-    border-radius: 12px;
-    padding: 20px;
-    box-shadow: 0 10px 40px var(--container-shadow);
+    border-radius: 0;
+    padding: 0;
+    box-shadow: none;
     max-width: 100%;
-    max-height: calc(100vh - 40px);
     display: flex;
     flex-direction: column;
     align-items: center;
-    overflow: hidden;
+    overflow: visible;
 }
 
 #top-stats {
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    margin-bottom: 15px;
+    gap: 5px;
+    margin-bottom: 5px;
+    margin-top: 0;
+    padding-top: 0;
     width: 600px; /* Match board width, will be updated dynamically */
     max-width: 100%;
 }
@@ -213,22 +220,26 @@ body {
     width: 100%;
     height: 32px;
     display: flex;
-    gap: 2px;
+    gap: 0;
     padding: 2px;
     background-color: rgba(0, 0, 0, 0.1);
     border-radius: 4px;
     overflow: hidden;
     position: relative;
+    justify-content: center;
+    align-items: center;
 }
 
 .progress-box {
-    flex: 1;
-    height: calc(100% - 4px);
-    margin: 2px 0;
+    flex: 0 0 auto;
+    /* Width and height will be set dynamically by JavaScript to ensure squares and fill space */
+    margin: 2px 1px;
     border-radius: 4px;
     background-color: rgba(0, 0, 0, 0.1);
     border: 2px solid rgba(0, 0, 0, 0.2);
     transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+    /* Ensure boxes maintain square aspect ratio */
+    aspect-ratio: 1;
 }
 
 .progress-box.filled {
@@ -262,22 +273,31 @@ body {
     cursor: grabbing;
 }
 
-#restart-button {
+#button-container {
+    display: flex;
+    gap: 10px;
+    width: 600px; /* Match board width, will be updated dynamically */
+    max-width: 100%;
+    margin-top: 15px;
+}
+
+#restart-button,
+#settings-button {
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
-    width: 100%;
-    margin-top: 15px;
-    padding: 10px 20px;
+    flex: 1;
+    padding: 12px 24px;
     background: var(--accent-color);
     color: var(--accent-color-contrast);
     border: none;
-    border-radius: 6px;
+    border-radius: 8px;
     font-size: 16px;
     font-weight: 600;
     cursor: pointer;
     transition: background 0.2s ease, transform 0.1s ease;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 body[data-theme="midnight"] #restart-button {
@@ -288,24 +308,31 @@ body[data-theme="midnight"] #restart-button .restart-icon {
     stroke: var(--restart-button-text, #0f2027);
 }
 
-#restart-button .restart-icon {
+body[data-theme="midnight"] #settings-button {
+    color: var(--restart-button-text, #0f2027);
+}
+
+body[data-theme="midnight"] #settings-button svg {
+    fill: var(--restart-button-text, #0f2027);
+}
+
+#restart-button .restart-icon,
+#settings-button svg {
     width: 20px;
     height: 20px;
     flex-shrink: 0;
 }
 
-#restart-button:hover {
+#restart-button:hover,
+#settings-button:hover {
     background: var(--button-hover);
     transform: translateY(-1px);
 }
 
-#restart-button:active {
+#restart-button:active,
+#settings-button:active {
     background: var(--button-active);
     transform: translateY(0);
-}
-
-#restart-button:not(:has-text) {
-    color: var(--accent-color-contrast);
 }
 
 #high-scores {
@@ -334,6 +361,12 @@ body[data-theme="midnight"] #restart-button .restart-icon {
     flex: 0 0 auto;
 }
 
+#high-score-today-display span,
+#high-score-week-display span,
+#high-score-year-display span {
+    color: var(--accent-color);
+}
+
 #high-score-week-display,
 #high-score-year-display {
     font-size: 20px;
@@ -355,35 +388,7 @@ body[data-theme="midnight"] #restart-button .restart-icon {
     flex: 0 0 auto;
 }
 
-#settings-button {
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    width: 44px;
-    height: 44px;
-    border: none;
-    border-radius: 50%;
-    background: var(--settings-button-bg);
-    box-shadow: 0 10px 25px var(--settings-button-shadow);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--settings-button-color);
-    transition: transform 0.2s ease, box-shadow 0.2s ease, color 0.2s ease;
-    z-index: 20;
-}
-
-#settings-button:hover {
-    transform: scale(1.08);
-    box-shadow: 0 14px 30px var(--settings-button-shadow);
-}
-
-#settings-button svg {
-    width: 22px;
-    height: 22px;
-    fill: currentColor;
-}
+/* Settings button styling is now combined with restart button above */
 
 #settings-backdrop {
     position: fixed;
@@ -486,10 +491,40 @@ body[data-theme="midnight"] #restart-button .restart-icon {
     background: rgba(var(--panel-bg), 0.5);
 }
 
+/* Prevent landscape orientation on mobile */
+@media screen and (orientation: landscape) and (max-width: 768px) {
+    body {
+        transform: rotate(90deg);
+        transform-origin: center center;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        margin: -50vh 0 0 -50vw;
+        width: 100vh;
+        height: 100vw;
+        overflow: hidden;
+    }
+    
+    body::before {
+        content: 'Please rotate your device to portrait mode';
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%) rotate(-90deg);
+        font-size: 24px;
+        color: var(--text-color);
+        z-index: 9999;
+        background: var(--container-bg);
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+}
+
 /* Mobile responsive */
 @media (max-width: 768px) {
     body {
-        background: transparent !important;
+        background: var(--bg-gradient) !important;
         padding: 0;
     }
     
@@ -500,6 +535,12 @@ body[data-theme="midnight"] #restart-button .restart-icon {
         border-radius: 0;
     }
     
+    #top-stats {
+        margin-top: 0;
+        margin-bottom: 3px;
+        gap: 3px;
+    }
+    
     #score-display,
     #turn-display,
     #lines-display,
@@ -507,7 +548,24 @@ body[data-theme="midnight"] #restart-button .restart-icon {
     #high-score-week-display,
     #high-score-year-display,
     #mode-display {
-        font-size: 18px;
+        font-size: 16px;
+    }
+    
+    #button-container {
+        margin-top: 10px;
+        gap: 8px;
+    }
+    
+    #restart-button,
+    #settings-button {
+        padding: 10px 16px;
+        font-size: 14px;
+    }
+    
+    #restart-button .restart-icon,
+    #settings-button svg {
+        width: 16px;
+        height: 16px;
     }
     
     /* Canvas size is controlled by JavaScript to maintain square board */

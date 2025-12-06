@@ -2,7 +2,9 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="screen-orientation" content="portrait">
+    <meta name="mobile-web-app-capable" content="yes">
     <title>Block Placement Puzzle</title>
     <link rel="stylesheet" href="/styles/main.css">
 </head>
@@ -18,32 +20,26 @@
                 <div id="top-stats-row-2">
                     <div id="level-display">
                         <div id="level-progress-container">
-                            <div class="progress-box" data-index="0"></div>
-                            <div class="progress-box" data-index="1"></div>
-                            <div class="progress-box" data-index="2"></div>
-                            <div class="progress-box" data-index="3"></div>
-                            <div class="progress-box" data-index="4"></div>
-                            <div class="progress-box" data-index="5"></div>
-                            <div class="progress-box" data-index="6"></div>
-                            <div class="progress-box" data-index="7"></div>
-                            <div class="progress-box" data-index="8"></div>
-                            <div class="progress-box" data-index="9"></div>
-                            <div class="progress-box" data-index="10"></div>
-                            <div class="progress-box" data-index="11"></div>
-                            <div class="progress-box" data-index="12"></div>
-                            <div class="progress-box" data-index="13"></div>
-                            <div class="progress-box" data-index="14"></div>
+                            <!-- Progress boxes will be dynamically created by JavaScript -->
                         </div>
                     </div>
                 </div>
             </div>
             <canvas id="game-canvas"></canvas>
-            <button id="restart-button" aria-label="Restart game">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="restart-icon">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-                </svg>
-                <span>Restart</span>
-            </button>
+            <div id="button-container">
+                <button id="restart-button" aria-label="Restart game">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="restart-icon">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                    </svg>
+                    <span>Restart</span>
+                </button>
+                <button id="settings-button" aria-label="Game settings">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm8.94-3.5a6.92 6.92 0 0 0-.14-1.39l2.11-1.64-2-3.46-2.49 1A7.14 7.14 0 0 0 16 4.57l-.38-2.64h-4.8L10.44 4.6A7.14 7.14 0 0 0 7.58 6.5l-2.5-1-2 3.47L5.18 9.6A7.52 7.52 0 0 0 5 12a7.52 7.52 0 0 0 .16 1.91l-2.1 1.63 2 3.46 2.49-1A7.14 7.14 0 0 0 10 19.43l.38 2.64h4.8l.38-2.64a7.14 7.14 0 0 0 2.86-1.9l2.49 1 2-3.46-2.11-1.64a6.92 6.92 0 0 0 .14-1.39Z"/>
+                    </svg>
+                    <span>Settings</span>
+                </button>
+            </div>
             <div id="high-scores">
                 <div id="high-scores-row">
                     <div id="high-score-today-display">Today <span id="high-score-today">0</span></div>
@@ -54,11 +50,6 @@
             </div>
         </div>
     </div>
-    <button id="settings-button" aria-label="Game settings">
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm8.94-3.5a6.92 6.92 0 0 0-.14-1.39l2.11-1.64-2-3.46-2.49 1A7.14 7.14 0 0 0 16 4.57l-.38-2.64h-4.8L10.44 4.6A7.14 7.14 0 0 0 7.58 6.5l-2.5-1-2 3.47L5.18 9.6A7.52 7.52 0 0 0 5 12a7.52 7.52 0 0 0 .16 1.91l-2.1 1.63 2 3.46 2.49-1A7.14 7.14 0 0 0 10 19.43l.38 2.64h4.8l.38-2.64a7.14 7.14 0 0 0 2.86-1.9l2.49 1 2-3.46-2.11-1.64a6.92 6.92 0 0 0 .14-1.39Z"/>
-        </svg>
-    </button>
     <div id="settings-backdrop" aria-hidden="true"></div>
     <section id="settings-panel" role="dialog" aria-labelledby="settings-title" aria-modal="true" aria-hidden="true">
         <header class="settings-header">

@@ -36,7 +36,7 @@ export interface PlacedBlock {
  */
 export interface GameState {
     board: boolean[][];           // 8x8 grid, true = filled, false = empty
-    queue: Shape[];                // Current queue of 3 shapes to place
+    queue: (Shape | null)[];      // Current queue of 3 shapes to place (null = empty slot)
     placedBlocks: PlacedBlock[];   // All blocks currently on the board
     score: number;                 // Current score
     gameOver: boolean;             // Whether the game has ended

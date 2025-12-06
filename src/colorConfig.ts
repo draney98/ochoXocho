@@ -117,3 +117,126 @@ export function getColorSet(level: number): ColorSet {
     return COLOR_SETS[index];
 }
 
+/**
+ * Converts hex color to RGB
+ */
+function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result
+        ? {
+              r: parseInt(result[1], 16),
+              g: parseInt(result[2], 16),
+              b: parseInt(result[3], 16),
+          }
+        : null;
+}
+
+/**
+ * Calculates the relative luminance of a color (for contrast checking)
+ * Based on WCAG 2.0 formula
+ */
+function getLuminance(hex: string): number {
+    const rgb = hexToRgb(hex);
+    if (!rgb) return 0;
+
+    const [r, g, b] = [rgb.r / 255, rgb.g / 255, rgb.b / 255].map((val) => {
+        return val <= 0.03928 ? val / 12.92 : Math.pow((val + 0.055) / 1.055, 2.4);
+    });
+
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/**
+ * Gets a contrasting color from the level's color set that works well with the theme
+ * For light themes: picks the darkest/most saturated color
+ * For dark themes: picks the lightest/most saturated color
+ * @param level - Current game level
+ * @param theme - Current theme name
+ * @returns A hex color string that contrasts well with the theme background
+ */
+export function getUIColorForLevel(level: number, theme: 'classic' | 'midnight' | 'sunset'): string {
+    const colorSet = getColorSet(level);
+    const isDarkTheme = theme === 'midnight';
+
+    if (isDarkTheme) {
+        // For dark themes, pick the lightest/most saturated color
+        // Find the color with the highest luminance
+        let bestColor = colorSet.colors[0];
+        let maxLuminance = getLuminance(bestColor);
+
+        for (const color of colorSet.colors) {
+            const luminance = getLuminance(color);
+            if (luminance > maxLuminance) {
+                maxLuminance = luminance;
+                bestColor = color;
+            }
+        }
+        return bestColor;
+    } else {
+        // For light themes, pick the darkest/most saturated color
+        // Find the color with the lowest luminance
+        let bestColor = colorSet.colors[0];
+        let minLuminance = getLuminance(bestColor);
+
+        for (const color of colorSet.colors) {
+            const luminance = getLuminance(color);
+            if (luminance < minLuminance) {
+                minLuminance = luminance;
+                bestColor = color;
+            }
+        }
+        return bestColor;
+    }
+}
+
+/**
+ * Gets a darker version of a color for hover states
+ */
+function darkenColor(hex: string, amount: number = 0.2): string {
+    const rgb = hexToRgb(hex);
+    if (!rgb) return hex;
+
+    return `#${[rgb.r, rgb.g, rgb.b]
+        .map((val) => Math.max(0, Math.floor(val * (1 - amount))))
+        .map((val) => val.toString(16).padStart(2, '0'))
+        .join('')}`;
+}
+
+/**
+ * Gets a lighter version of a color for hover states (for dark themes)
+ */
+function lightenColor(hex: string, amount: number = 0.2): string {
+    const rgb = hexToRgb(hex);
+    if (!rgb) return hex;
+
+    return `#${[rgb.r, rgb.g, rgb.b]
+        .map((val) => Math.min(255, Math.floor(val + (255 - val) * amount)))
+        .map((val) => val.toString(16).padStart(2, '0'))
+        .join('')}`;
+}
+
+/**
+ * Gets hover and active colors for buttons based on the base color and theme
+ */
+export function getButtonColors(baseColor: string, theme: 'classic' | 'midnight' | 'sunset'): {
+    base: string;
+    hover: string;
+    active: string;
+    contrast: string;
+} {
+    const isDarkTheme = theme === 'midnight';
+    const hover = isDarkTheme ? lightenColor(baseColor, 0.15) : darkenColor(baseColor, 0.15);
+    const active = isDarkTheme ? lightenColor(baseColor, 0.25) : darkenColor(baseColor, 0.25);
+
+    // Determine contrast color (white or black) based on luminance
+    const luminance = getLuminance(baseColor);
+    const contrast = luminance > 0.5 ? '#000000' : '#ffffff';
+
+    return {
+        base: baseColor,
+        hover,
+        active,
+        contrast,
+    };
+}
+

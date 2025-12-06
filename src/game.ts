@@ -12,6 +12,7 @@ import { checkGameOver } from './gameOver';
 import { SoundManager } from './sound';
 import { recordScore } from './highScores';
 import { GAMEPLAY_CONFIG, ANIMATION_CONFIG, GAME_OVER_CONFIG } from './config';
+import { getUIColorForLevel, getButtonColors } from './colorConfig';
 
 /**
  * Game class orchestrates all game systems and manages the game loop
@@ -92,9 +93,15 @@ export class Game {
      */
     updateSettings(updatedSettings: GameSettings): void {
         const modeChanged = this.settings.mode !== updatedSettings.mode;
+        const themeChanged = this.settings.theme !== updatedSettings.theme;
         this.settings = { ...updatedSettings };
         this.renderer.updateSettings(this.settings);
         this.soundManager.setEnabled(this.settings.soundEnabled);
+
+        // Update UI colors if theme changed
+        if (themeChanged) {
+            this.updateUIColors();
+        }
 
         if (!this.settings.enableAnimations) {
             // Immediately drop any active animations so the board stays in sync
@@ -214,7 +221,8 @@ export class Game {
         if (shapeIndex < 0 || shapeIndex >= this.state.queue.length) {
             return;
         }
-        this.state.queue.splice(shapeIndex, 1);
+        // Leave a hole instead of shifting positions so queue slots stay fixed
+        this.state.queue[shapeIndex] = null;
         this.inputHandler.updateQueue(this.state.queue);
     }
 
@@ -224,12 +232,14 @@ export class Game {
      * @param shape - The shape to restore
      */
     private restoreShapeToQueue(shapeIndex: number, shape: Shape): void {
-        if (shapeIndex < 0 || shapeIndex > this.state.queue.length) {
-            // If index is out of bounds, append to end
-            this.state.queue.push(shape);
-        } else {
-            this.state.queue.splice(shapeIndex, 0, shape);
+        if (shapeIndex < 0) {
+            return;
         }
+        // Ensure the queue has a slot at this index
+        while (this.state.queue.length < 3) {
+            this.state.queue.push(null);
+        }
+        this.state.queue[shapeIndex] = shape;
         this.inputHandler.updateQueue(this.state.queue);
     }
 
@@ -296,16 +306,18 @@ export class Game {
                 : generateShapes();
             
             // Check for game over at the beginning of each new round (after queue regeneration)
-            if (this.state.queue.length > 0) {
-                const isGameOver = checkGameOver(this.board, this.state.queue);
+            const activeQueue = this.state.queue.filter((q): q is Shape => !!q);
+            if (activeQueue.length > 0) {
+                const isGameOver = checkGameOver(this.board, activeQueue);
                 if (isGameOver) {
                     this.triggerGameOver();
                 }
             }
         } else {
             // Check for game over after placing a shape (in case lines cleared made room)
-            if (this.state.queue.length > 0) {
-                const isGameOver = checkGameOver(this.board, this.state.queue);
+            const activeQueue = this.state.queue.filter((q): q is Shape => !!q);
+            if (activeQueue.length > 0) {
+                const isGameOver = checkGameOver(this.board, activeQueue);
                 if (isGameOver) {
                     this.triggerGameOver();
                 }
@@ -495,6 +507,8 @@ export class Game {
             this.state.placedBlocks.forEach(block => {
                 block.color = getShapeColor(block.shapeIndex);
             });
+            // Update UI colors to match new level
+            this.updateUIColors();
             // Start level up animation
             this.levelUpStartTime = Date.now();
             // Force a re-render to show new colors in queue
@@ -549,12 +563,32 @@ export class Game {
     }
 
     /**
+     * Updates UI colors (buttons, score displays, high scores) to match the current level's color scheme
+     */
+    private updateUIColors(): void {
+        const uiColor = getUIColorForLevel(this.state.level, this.settings.theme);
+        const buttonColors = getButtonColors(uiColor, this.settings.theme);
+
+        // Update CSS variables on body element (where theme is applied)
+        // This ensures our dynamic values override the theme-specific CSS rules
+        const body = document.body;
+        if (body) {
+            body.style.setProperty('--accent-color', buttonColors.base);
+            body.style.setProperty('--button-hover', buttonColors.hover);
+            body.style.setProperty('--button-active', buttonColors.active);
+            body.style.setProperty('--accent-color-contrast', buttonColors.contrast);
+            body.style.setProperty('--settings-button-color', buttonColors.base);
+        }
+    }
+
+    /**
      * Updates the level display in the UI
      */
     private updateLevelDisplay(): void {
-        // Update 15 rounded boxes based on progress (0-100%)
+        // Calculate number of boxes (one per line to complete level)
+        const linesPerLevel = Math.ceil(GAMEPLAY_CONFIG.levelProgressThreshold / GAMEPLAY_CONFIG.levelProgressPerLine);
         const progressBoxes = document.querySelectorAll('.progress-box');
-        const filledCount = Math.floor((this.state.levelProgress / 100) * 15);
+        const filledCount = Math.floor((this.state.levelProgress / GAMEPLAY_CONFIG.levelProgressThreshold) * linesPerLevel);
         
         progressBoxes.forEach((box, index) => {
             if (index < filledCount) {
@@ -773,6 +807,8 @@ export class Game {
         this.renderer.updateSettings(this.settings);
         // Initialize color scheme for starting level
         updateColorScheme(this.state.level);
+        // Initialize UI colors for starting level
+        this.updateUIColors();
         this.updateScoreDisplay();
         this.updateTurnDisplay();
         this.updateLinesDisplay();

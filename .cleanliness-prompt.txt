@@ -1,0 +1,27 @@
+    Perform a full end-of-project cleanup on this codebase. Before making any change, check whether the step is already complete; if it is, skip it. Only modify the code when it improves clarity, correctness, maintainability, or test coverage. Do not make cosmetic or unnecessary changes. Execute the steps in this order:
+
+    1. Refactor for clarity and maintainability: simplify logic, remove duplication, and standardize naming. Skip if the code already follows good structure.
+
+    2. Remove unused code: eliminate dead functions, imports, variables, or unreachable paths, but only if they are confirmed unused.
+
+    3. Apply linting/style rules: fix violations only when doing so adds real value; avoid noise-only diffs.
+
+    4. Add or improve docstrings and comments explaining intent. Skip parts that are already well documented.
+
+    5. Generate or update unit tests for public functions, but only where coverage is missing.
+
+    6. Add or refine integration tests for key workflows, adding only what’s necessary.
+
+    7. Review error handling and improve it only if real gaps exist.
+
+    8. Update README/API documentation to match current behavior, skipping sections that are already accurate.
+
+    9. Audit dependencies: remove unused ones and propose upgrades only when safe and beneficial.
+
+    10. Perform a lightweight security review and fix only genuine issues.
+
+    11. Prepare release materials (CHANGELOG, release notes, version bump) based on any actual changes made.
+
+    Validate deployment configuration and ensure the project builds cleanly.
+    
+    At each step, summarize what was changed, what was skipped as already complete, and anything requiring my approval.
