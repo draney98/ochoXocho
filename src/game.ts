@@ -795,4 +795,12 @@ export class Game {
     resumeSoundContext(): void {
         this.soundManager.resumeContext();
     }
+
+    /**
+     * Checks if a game is currently in session (not game over and has started)
+     * @returns true if game is active and in progress
+     */
+    isGameInSession(): boolean {
+        return !this.state.gameOver && (this.state.placedBlocks.length > 0 || this.state.turn > 0);
+    }
 }

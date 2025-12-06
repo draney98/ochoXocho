@@ -11,7 +11,7 @@ import {
     HIGH_SCORE_CONFIG,
     RESPONSIVE_CANVAS_LIMITS,
 } from './config';
-import { CANVAS_WIDTH, CANVAS_HEIGHT } from './constants';
+import { CANVAS_WIDTH, CANVAS_HEIGHT, BOARD_PIXEL_SIZE, QUEUE_AREA_HEIGHT } from './constants';
 
 /**
  * Loads settings from localStorage, falling back to defaults
@@ -56,23 +56,28 @@ document.addEventListener('DOMContentLoaded', () => {
     // Make canvas responsive to window height
     setupResponsiveCanvas(canvas);
 
+    // Sync UI element widths with canvas width
+    setupResponsiveUI(canvas);
+
     // Initialize the game
     const game = new Game(canvas, settingsState);
     game.start();
 
     const updateHighScoreMode = setupHighScores(game, settingsState);
-    setupSettingsControls(game, settingsState, updateHighScoreMode);
+    const { updateModeSelectState } = setupSettingsControls(game, settingsState, updateHighScoreMode);
 
     // Restart button provides explicit control over resetting the board
     const restartButton = document.getElementById('restart-button');
     if (restartButton) {
         restartButton.addEventListener('click', () => {
             game.reset(true);
+            // Update mode select state after reset
+            updateModeSelectState();
         });
     }
 });
 
-function setupSettingsControls(game: Game, initialSettings: GameSettings, updateHighScoreMode?: (mode: GameMode) => void): void {
+function setupSettingsControls(game: Game, initialSettings: GameSettings, updateHighScoreMode?: (mode: GameMode) => void): { updateModeSelectState: () => void } {
     const panel = document.getElementById('settings-panel');
     const backdrop = document.getElementById('settings-backdrop');
     const openButton = document.getElementById('settings-button');
@@ -118,6 +123,26 @@ function setupSettingsControls(game: Game, initialSettings: GameSettings, update
         game.updateSettings(updatedSettings);
         saveSettings(updatedSettings); // Save to localStorage
     };
+
+    // Update mode select disabled state based on game session
+    // Note: Only the difficulty (mode) select is disabled during play.
+    // The settings button and panel remain fully accessible.
+    const updateModeSelectState = () => {
+        const isInSession = game.isGameInSession();
+        if (modeSelect) {
+            modeSelect.disabled = isInSession;
+            if (isInSession) {
+                modeSelect.title = 'Cannot change difficulty while a game is in progress';
+            } else {
+                modeSelect.title = '';
+            }
+        }
+        // Settings button and panel are never disabled - only the mode select is restricted
+    };
+
+    // Check game state periodically to update mode select
+    setInterval(updateModeSelectState, 500);
+    updateModeSelectState(); // Initial check
 
     [gridInput, ghostInput, animationInput, soundInput, pointValuesInput].forEach(input => {
         input?.addEventListener('change', pushToGame);
@@ -165,6 +190,9 @@ function setupSettingsControls(game: Game, initialSettings: GameSettings, update
             togglePanel(false);
         }
     });
+
+    // Return the update function so it can be called from outside
+    return { updateModeSelectState };
 }
 
 function applyTheme(theme: ThemeName): void {
@@ -183,27 +211,90 @@ function setupResponsiveCanvas(canvas: HTMLCanvasElement): void {
         const availableHeight = window.innerHeight - RESPONSIVE_CANVAS_LIMITS.verticalPadding;
         const availableWidth = window.innerWidth - RESPONSIVE_CANVAS_LIMITS.horizontalPadding;
         
-        // Calculate scale based on available height, maintaining aspect ratio
-        const targetHeight = Math.min(
-            Math.max(availableHeight, RESPONSIVE_CANVAS_LIMITS.minHeight),
-            RESPONSIVE_CANVAS_LIMITS.maxHeight
-        );
-        const scale = targetHeight / CANVAS_HEIGHT;
+        // The board itself is square (BOARD_PIXEL_SIZE x BOARD_PIXEL_SIZE)
+        // To ensure the board stays square, we need to scale based on the smaller dimension
+        // that would fit the square board portion
         
-        // Calculate width based on aspect ratio
-        const targetWidth = CANVAS_WIDTH * scale;
-        
-        // Make sure it fits in available width too
+        // Calculate scale based on width (to keep board square)
         const widthScale = availableWidth / CANVAS_WIDTH;
-        const finalScale = Math.min(scale, widthScale);
+        
+        // Calculate scale based on height (accounting for queue area)
+        // We want the board to be square, so we need to fit square board + queue
+        // If we scale by widthScale, the queue height becomes: QUEUE_AREA_HEIGHT * widthScale
+        // So available height for board = availableHeight - (QUEUE_AREA_HEIGHT * widthScale)
+        const heightForBoard = availableHeight - (QUEUE_AREA_HEIGHT * widthScale);
+        const heightScale = heightForBoard / BOARD_PIXEL_SIZE;
+        
+        // Use the smaller scale to ensure everything fits and board stays square
+        const finalScale = Math.min(widthScale, heightScale);
+        
+        // Clamp to min/max limits
+        const minScale = RESPONSIVE_CANVAS_LIMITS.minHeight / CANVAS_HEIGHT;
+        const maxScale = RESPONSIVE_CANVAS_LIMITS.maxHeight / CANVAS_HEIGHT;
+        const clampedScale = Math.max(minScale, Math.min(finalScale, maxScale));
         
         // Apply scale to canvas, maintaining aspect ratio
-        canvas.style.width = `${CANVAS_WIDTH * finalScale}px`;
-        canvas.style.height = `${CANVAS_HEIGHT * finalScale}px`;
+        canvas.style.width = `${CANVAS_WIDTH * clampedScale}px`;
+        canvas.style.height = `${CANVAS_HEIGHT * clampedScale}px`;
     };
     
     updateCanvasSize();
     window.addEventListener('resize', updateCanvasSize);
+}
+
+function setupResponsiveUI(canvas: HTMLCanvasElement): void {
+    const updateUIWidth = () => {
+        const canvasWidth = canvas.offsetWidth;
+        const topStats = document.getElementById('top-stats');
+        const highScores = document.getElementById('high-scores');
+        
+        if (topStats) {
+            topStats.style.width = `${canvasWidth}px`;
+        }
+        if (highScores) {
+            highScores.style.width = `${canvasWidth}px`;
+        }
+        
+        // Dynamically adjust font sizes based on canvas width
+        // Base font size scales with canvas width (600px = 20px font)
+        const baseFontSize = Math.max(14, Math.min(24, (canvasWidth / 600) * 20));
+        const progressBarHeight = Math.max(24, Math.min(40, (canvasWidth / 600) * 32));
+        
+        // Update font sizes
+        const scoreDisplay = document.getElementById('score-display');
+        const turnDisplay = document.getElementById('turn-display');
+        const linesDisplay = document.getElementById('lines-display');
+        const highScoreToday = document.getElementById('high-score-today-display');
+        const highScoreWeek = document.getElementById('high-score-week-display');
+        const highScoreYear = document.getElementById('high-score-year-display');
+        const modeDisplay = document.getElementById('mode-display');
+        
+        [scoreDisplay, turnDisplay, linesDisplay, highScoreToday, highScoreWeek, highScoreYear, modeDisplay].forEach(el => {
+            if (el) {
+                el.style.fontSize = `${baseFontSize}px`;
+            }
+        });
+        
+        // Update progress bar height
+        const progressContainer = document.getElementById('level-progress-container');
+        if (progressContainer) {
+            progressContainer.style.height = `${progressBarHeight}px`;
+        }
+        
+        // Update progress box border radius to match height
+        const progressBoxes = document.querySelectorAll('.progress-box');
+        const borderRadius = Math.max(3, Math.min(6, progressBarHeight * 0.125));
+        progressBoxes.forEach(box => {
+            (box as HTMLElement).style.borderRadius = `${borderRadius}px`;
+        });
+    };
+    
+    updateUIWidth();
+    window.addEventListener('resize', updateUIWidth);
+    
+    // Also update when canvas size changes
+    const resizeObserver = new ResizeObserver(updateUIWidth);
+    resizeObserver.observe(canvas);
 }
 
 function setupHighScores(game: Game, initialSettings: GameSettings): (mode: GameMode) => void {

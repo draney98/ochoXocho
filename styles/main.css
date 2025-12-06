@@ -66,6 +66,7 @@ body[data-theme="midnight"] {
     --settings-button-color: #8ae2ff;
     --settings-button-shadow: rgba(0, 0, 0, 0.4);
     --control-border: rgba(255, 255, 255, 0.25);
+    --restart-button-text: #0f2027;
 }
 
 body[data-theme="sunset"] {
@@ -136,7 +137,8 @@ body {
     flex-direction: column;
     gap: 10px;
     margin-bottom: 15px;
-    width: 100%;
+    width: 600px; /* Match board width, will be updated dynamically */
+    max-width: 100%;
 }
 
 #top-stats-row-1 {
@@ -278,6 +280,14 @@ body {
     transition: background 0.2s ease, transform 0.1s ease;
 }
 
+body[data-theme="midnight"] #restart-button {
+    color: var(--restart-button-text, #0f2027);
+}
+
+body[data-theme="midnight"] #restart-button .restart-icon {
+    stroke: var(--restart-button-text, #0f2027);
+}
+
 #restart-button .restart-icon {
     width: 20px;
     height: 20px;
@@ -300,7 +310,8 @@ body {
 
 #high-scores {
     margin-top: 15px;
-    width: 100%;
+    width: 600px; /* Match board width, will be updated dynamically */
+    max-width: 100%;
 }
 
 #high-scores-row {
@@ -469,10 +480,24 @@ body {
     min-width: 140px;
 }
 
+.settings-row select:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: rgba(var(--panel-bg), 0.5);
+}
+
 /* Mobile responsive */
 @media (max-width: 768px) {
+    body {
+        background: transparent !important;
+        padding: 0;
+    }
+    
     #game-container {
-        padding: 10px;
+        padding: 0;
+        background: transparent;
+        box-shadow: none;
+        border-radius: 0;
     }
     
     #score-display,

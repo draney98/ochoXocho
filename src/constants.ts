@@ -17,7 +17,7 @@ export const QUEUE_LABEL_HEIGHT = 30;
 export const QUEUE_ITEM_WIDTH = 150;
 export const QUEUE_ITEM_HEIGHT = 150;
 export const QUEUE_ITEM_GAP = 20;
-export const QUEUE_CELL_SIZE = 26; // pixel size for each cell within queue preview
+export const QUEUE_CELL_SIZE = 35; // pixel size for each cell within queue preview (increased for larger shapes)
 
 /**
  * Calculates the rectangle for a queue item positioned horizontally under the board.

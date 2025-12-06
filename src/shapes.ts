@@ -267,10 +267,10 @@ function getRandomShape(weightedForEasy: boolean = false): Shape {
         // Normal random selection
         const index = Math.floor(Math.random() * SHAPES_WITHOUT_MONOMINO.length);
         const baseShape = SHAPES_WITHOUT_MONOMINO[index];
-        
-        // Apply random rotation (0, 90, 180, or 270 degrees)
-        const rotations = Math.floor(Math.random() * 4);
-        
+    
+    // Apply random rotation (0, 90, 180, or 270 degrees)
+    const rotations = Math.floor(Math.random() * 4);
+    
         return rotateShape(baseShape, rotations);
     }
     

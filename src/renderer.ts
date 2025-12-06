@@ -310,8 +310,8 @@ export class Renderer {
                 
                 // Use a semi-transparent white for less contrast
                 this.ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-                // Font size should almost fill the cell (about 80% of cell size)
-                const fontSize = Math.floor(CELL_SIZE * 0.8);
+                // Font size should be slightly smaller (about 65% of cell size)
+                const fontSize = Math.floor(CELL_SIZE * 0.65);
                 this.ctx.font = `bold ${fontSize}px sans-serif`;
                 
                 // Set text alignment for perfect centering
@@ -637,9 +637,9 @@ export class Renderer {
             for (const block of shape) {
                 const x = offsetX + block.x * QUEUE_CELL_SIZE;
                 const y = offsetY + block.y * QUEUE_CELL_SIZE;
-                const blockX = x + 2;
-                const blockY = y + 2;
-                const blockSize = QUEUE_CELL_SIZE - 4;
+                const blockX = x + 1; // Reduced padding - almost to edge
+                const blockY = y + 1; // Reduced padding - almost to edge
+                const blockSize = QUEUE_CELL_SIZE - 2; // Almost full size
 
                 this.drawBlock(blockX, blockY, blockSize, shapeColor, queueShapeBorder);
             }
@@ -709,9 +709,11 @@ export class Renderer {
             
             // Draw expanding cell
             this.ctx.fillStyle = cell.color;
-            this.ctx.fillRect(x + 2 + offsetX, y + 2 + offsetY, size, size);
+            this.ctx.beginPath();
+            this.ctx.roundRect(x + 2 + offsetX, y + 2 + offsetY, size, size, 2);
+            this.ctx.fill();
             
-            // Draw particles (small squares radiating outward)
+            // Draw particles (small rounded squares radiating outward)
             const particleCount = 8;
             for (let i = 0; i < particleCount; i++) {
                 const angle = (i / particleCount) * Math.PI * 2;
@@ -721,7 +723,9 @@ export class Renderer {
                 const particleSize = (CELL_SIZE - 4) * 0.3 * (1 - cell.progress);
                 
                 this.ctx.fillStyle = cell.color;
-                this.ctx.fillRect(particleX - particleSize / 2, particleY - particleSize / 2, particleSize, particleSize);
+                this.ctx.beginPath();
+                this.ctx.roundRect(particleX - particleSize / 2, particleY - particleSize / 2, particleSize, particleSize, Math.max(1, particleSize * 0.1));
+                this.ctx.fill();
             }
             
             this.ctx.restore();
@@ -975,14 +979,18 @@ export class Renderer {
                 const pixelCount = Math.floor(baseSize / pixelSize);
                 this.ctx.globalAlpha = alpha;
                 this.ctx.fillStyle = cell.color;
+                const cornerRadius = Math.max(1, pixelSize * 0.1);
                 for (let px = 0; px < pixelCount; px++) {
                     for (let py = 0; py < pixelCount; py++) {
-                        this.ctx.fillRect(
+                        this.ctx.beginPath();
+                        this.ctx.roundRect(
                             x + 2 + px * pixelSize,
                             y + 2 + py * pixelSize,
                             pixelSize - 1,
-                            pixelSize - 1
+                            pixelSize - 1,
+                            cornerRadius
                         );
+                        this.ctx.fill();
                     }
                 }
                 break;
@@ -1034,11 +1042,14 @@ export class Renderer {
                 const checkerProgress = Math.floor(progress * 10);
                 this.ctx.globalAlpha = alpha;
                 this.ctx.fillStyle = cell.color;
+                const cornerRadius = Math.max(1, checkerSize * 0.2);
                 for (let cx = 0; cx < baseSize; cx += checkerSize) {
                     for (let cy = 0; cy < baseSize; cy += checkerSize) {
                         const checkerIndex = Math.floor(cx / checkerSize) + Math.floor(cy / checkerSize);
                         if (checkerIndex % 2 === checkerProgress % 2) {
-                            this.ctx.fillRect(x + 2 + cx, y + 2 + cy, checkerSize, checkerSize);
+                            this.ctx.beginPath();
+                            this.ctx.roundRect(x + 2 + cx, y + 2 + cy, checkerSize, checkerSize, cornerRadius);
+                            this.ctx.fill();
                         }
                     }
                 }
@@ -1052,8 +1063,9 @@ export class Renderer {
     /**
      * Draws game over overlay with animation
      * @param progress - Animation progress from 0 to 1
+     * @param placedBlocks - Final board state to render as 4x4 grid
      */
-    drawGameOver(progress: number = 1): void {
+    drawGameOver(progress: number = 1, placedBlocks: PlacedBlock[] = []): void {
         // Animated overlay - fade in from 0 to 0.8 opacity
         const overlayAlpha = 0.8 * progress;
         this.ctx.fillStyle = `rgba(0, 0, 0, ${overlayAlpha})`;
@@ -1069,7 +1081,7 @@ export class Renderer {
         this.ctx.scale(textScale, textScale);
         this.ctx.translate(-BOARD_PIXEL_SIZE / 2, -BOARD_PIXEL_SIZE / 2);
 
-        // Game over text with glow effect
+        // Game over text with glow effect - positioned at top
         this.ctx.fillStyle = '#fff';
         this.ctx.font = 'bold 48px sans-serif';
         this.ctx.textAlign = 'center';
@@ -1078,21 +1090,134 @@ export class Renderer {
         // Add text shadow for glow
         this.ctx.shadowColor = '#ff6b6b';
         this.ctx.shadowBlur = 20;
-        this.ctx.fillText('GAME OVER', BOARD_PIXEL_SIZE / 2, BOARD_PIXEL_SIZE / 2 - 30);
+        this.ctx.fillText('GAME OVER', BOARD_PIXEL_SIZE / 2, 80);
         
         // Reset shadow
         this.ctx.shadowBlur = 0;
         
-        // Restart prompt static text for clarity
+        this.ctx.restore();
+
+        // Draw 4x4 grid representing final board state - positioned below game over text
+        if (placedBlocks.length > 0) {
+            this.drawFinalBoardGrid(placedBlocks, progress);
+        }
+        
+        // Restart prompt static text for clarity - positioned at bottom
+        this.ctx.save();
+        this.ctx.globalAlpha = textAlpha;
         this.ctx.font = '24px sans-serif';
         this.ctx.fillStyle = '#4ECDC4';
         this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
         this.ctx.fillText(
             'Use the Restart button to play again',
             BOARD_PIXEL_SIZE / 2,
-            BOARD_PIXEL_SIZE / 2 + 50
+            BOARD_PIXEL_SIZE - 50
         );
+        this.ctx.restore();
+    }
+
+    /**
+     * Draws a 4x4 grid representing the final board state
+     * Each cell in the 4x4 represents a 2x2 area on the 8x8 board
+     * Uses the darkest color from each 2x2 area
+     * @param placedBlocks - Final board state
+     * @param progress - Animation progress for fade-in
+     */
+    private drawFinalBoardGrid(placedBlocks: PlacedBlock[], progress: number): void {
+        // Create a map of cell positions to their darkened colors
+        const cellMap = new Map<string, string>();
         
+        for (const block of placedBlocks) {
+            for (const cell of block.shape) {
+                const absoluteX = block.position.x + cell.x;
+                const absoluteY = block.position.y + cell.y;
+                const key = `${absoluteX},${absoluteY}`;
+                
+                // Get the darkened color for this cell
+                const darkenedColor = this.darkenColor(block.color, block.darkness);
+                
+                // Calculate brightness of the darkened color (lower = darker)
+                const hex = darkenedColor.replace('#', '');
+                const r = parseInt(hex.substring(0, 2), 16);
+                const g = parseInt(hex.substring(2, 4), 16);
+                const b = parseInt(hex.substring(4, 6), 16);
+                const brightness = (r + g + b) / 3;
+                
+                // Store if this is the darkest cell in this position, or if position is empty
+                const existing = cellMap.get(key);
+                if (!existing) {
+                    cellMap.set(key, darkenedColor);
+                } else {
+                    // Compare brightness - keep the darker one
+                    const existingHex = existing.replace('#', '');
+                    const existingR = parseInt(existingHex.substring(0, 2), 16);
+                    const existingG = parseInt(existingHex.substring(2, 4), 16);
+                    const existingB = parseInt(existingHex.substring(4, 6), 16);
+                    const existingBrightness = (existingR + existingG + existingB) / 3;
+                    
+                    if (brightness < existingBrightness) {
+                        cellMap.set(key, darkenedColor);
+                    }
+                }
+            }
+        }
+
+        // Calculate 4x4 grid size and position (centered below game over text)
+        const gridSize = 120; // Total size of 4x4 grid
+        const cellSize = gridSize / 4;
+        const gridX = BOARD_PIXEL_SIZE / 2 - gridSize / 2;
+        const gridY = 150; // Below the "GAME OVER" text
+
+        this.ctx.save();
+        this.ctx.globalAlpha = progress * 0.9; // Slightly transparent
+
+        // Draw 4x4 grid
+        for (let gridYIdx = 0; gridYIdx < 4; gridYIdx++) {
+            for (let gridXIdx = 0; gridXIdx < 4; gridXIdx++) {
+                // Each 4x4 cell represents a 2x2 area on the 8x8 board
+                const boardStartX = gridXIdx * 2;
+                const boardStartY = gridYIdx * 2;
+                
+                // Find the darkest color in this 2x2 area
+                let darkestColor = '#000000';
+                let darkestBrightness = 255;
+                
+                for (let by = 0; by < 2; by++) {
+                    for (let bx = 0; bx < 2; bx++) {
+                        const boardX = boardStartX + bx;
+                        const boardY = boardStartY + by;
+                        const key = `${boardX},${boardY}`;
+                        const cellColor = cellMap.get(key);
+                        
+                        if (cellColor) {
+                            // Calculate brightness of this color
+                            const hex = cellColor.replace('#', '');
+                            const r = parseInt(hex.substring(0, 2), 16);
+                            const g = parseInt(hex.substring(2, 4), 16);
+                            const b = parseInt(hex.substring(4, 6), 16);
+                            const brightness = (r + g + b) / 3;
+                            
+                            if (brightness < darkestBrightness) {
+                                darkestBrightness = brightness;
+                                darkestColor = cellColor;
+                            }
+                        }
+                    }
+                }
+
+                // Draw the cell
+                const x = gridX + gridXIdx * cellSize;
+                const y = gridY + gridYIdx * cellSize;
+                
+                // Draw rounded rectangle for the cell
+                this.ctx.fillStyle = darkestColor;
+                this.ctx.beginPath();
+                this.ctx.roundRect(x, y, cellSize, cellSize, 4);
+                this.ctx.fill();
+            }
+        }
+
         this.ctx.restore();
     }
 
@@ -1192,7 +1317,7 @@ export class Renderer {
         }
 
         if (gameOver) {
-            this.drawGameOver(gameOverProgress);
+            this.drawGameOver(gameOverProgress, placedBlocks);
         }
         
         if (levelUpProgress > 0 && levelUpProgress < 1) {
