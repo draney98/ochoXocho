@@ -13,6 +13,7 @@ import { SoundManager } from './sound';
 import { recordScore } from './highScores';
 import { GAMEPLAY_CONFIG, ANIMATION_CONFIG, GAME_OVER_CONFIG } from './config';
 import { getUIColorForLevel, getButtonColors } from './colorConfig';
+import { findOptimalPlacementOrder } from './boardUtils';
 
 /**
  * Game class orchestrates all game systems and manages the game loop
@@ -28,6 +29,7 @@ export class Game {
     private linesElement: HTMLElement | null;
     private levelElement: HTMLElement | null;
     private levelProgressElement: HTMLElement | null;
+    private emojiBoardElement: HTMLElement | null;
     private animationFrameId: number | null = null;
     private shapesPlacedThisTurn: number = 0;
     private animatingCells: AnimatingCell[] = [];
@@ -78,6 +80,7 @@ export class Game {
         this.linesElement = document.getElementById('lines-value');
         this.levelElement = null; // Level number removed, only progress bar shown
         this.levelProgressElement = null; // No longer using single progress bar element
+        this.emojiBoardElement = null; // Emoji board is now only shown on game over screen
         this.soundManager = new SoundManager(initialSettings.soundEnabled);
         // Initialize color scheme for starting level
         updateColorScheme(this.state.level);
@@ -201,7 +204,9 @@ export class Game {
             gameOverProgress,
             this.state.totalShapesPlaced,
             levelUpProgress,
-            this.state.level
+            this.state.level,
+            this.state.score,
+            this.state.linesCleared
         );
     }
 
@@ -599,6 +604,124 @@ export class Game {
         });
     }
 
+
+    /**
+     * Automatically places all three pieces in the queue using optimal placement order
+     */
+    autoPlacePieces(): void {
+        if (this.state.gameOver) {
+            return;
+        }
+
+        // Find optimal placement order
+        const placementOrder = findOptimalPlacementOrder(this.board, this.state.queue);
+        
+        if (!placementOrder || placementOrder.length === 0) {
+            console.warn('[AUTO-PLACE] No valid placement order found');
+            return;
+        }
+
+        // Place each shape in the optimal order
+        // We need to place them one at a time, waiting for line clears between each
+        // For now, we'll place them sequentially with a small delay
+        placementOrder.forEach(({ shapeIndex, position }, index) => {
+            setTimeout(() => {
+                const shape = this.state.queue[shapeIndex];
+                if (!shape) {
+                    return;
+                }
+
+                // Temporarily restore the shape to queue if it was removed
+                this.state.queue[shapeIndex] = shape;
+                this.inputHandler.updateQueue(this.state.queue);
+
+                // Create a temporary drag state to simulate placement
+                const dragState = this.inputHandler.getDragState();
+                // We need to manually trigger placement since we're bypassing drag
+                // For now, we'll directly call handlePlaceShape logic
+                this.placeShapeDirectly(shape, position, shapeIndex);
+            }, index * 100); // Small delay between placements
+        });
+    }
+
+    /**
+     * Directly places a shape on the board (used by auto-place)
+     */
+    private placeShapeDirectly(shape: Shape, position: Position, queueIndex: number): void {
+        if (this.state.gameOver) {
+            return;
+        }
+
+        // Remove shape from queue
+        this.state.queue[queueIndex] = null;
+        this.inputHandler.updateQueue(this.state.queue);
+
+        const shapeIndexInPool = getShapeIndex(shape);
+        const shapeColor = getShapeColor(shapeIndexInPool);
+        const basePointValue = getShapePointValue(shapeIndexInPool, 0);
+
+        // Place the shape on the board
+        this.board.placeShape(shape, position);
+
+        // Add to placed blocks
+        const placedBlock: PlacedBlock = {
+            shape,
+            position,
+            color: shapeColor,
+            pointValue: basePointValue,
+            lineClearBonuses: 0,
+            totalShapesPlacedAtPlacement: this.state.totalShapesPlaced,
+            shapeIndex: shapeIndexInPool,
+            darkness: 1.0,
+        };
+        this.state.placedBlocks.push(placedBlock);
+        this.soundManager.resumeContext();
+        this.soundManager.playPlace();
+
+        this.shapesPlacedThisTurn++;
+        this.state.totalShapesPlaced++;
+        this.state.turn++;
+        this.updateTurnDisplay();
+
+        // Check for full rows and columns
+        this.checkAndClearLines();
+
+        // If required number of shapes have been placed, generate new queue
+        if (this.shapesPlacedThisTurn >= GAMEPLAY_CONFIG.shapesPerTurn) {
+            this.shapesPlacedThisTurn = 0;
+            this.state.queue = this.settings.mode === 'easy'
+                ? generateEasyShapes(this.board)
+                : generateShapes();
+            // Update input handler with new queue
+            this.inputHandler.updateQueue(this.state.queue);
+            
+            const activeQueue = this.state.queue.filter((q): q is Shape => !!q);
+            if (activeQueue.length > 0) {
+                const isGameOver = checkGameOver(this.board, activeQueue);
+                if (isGameOver) {
+                    this.triggerGameOver();
+                }
+            }
+        } else {
+            // Update input handler with current queue state
+            this.inputHandler.updateQueue(this.state.queue);
+            
+            const activeQueue = this.state.queue.filter((q): q is Shape => !!q);
+            if (activeQueue.length > 0) {
+                const isGameOver = checkGameOver(this.board, activeQueue);
+                if (isGameOver) {
+                    this.triggerGameOver();
+                }
+            } else {
+                // If queue is empty, game is not over yet (waiting for new shapes)
+                this.state.gameOver = false;
+                this.gameOverStartTime = null;
+            }
+        }
+
+        this.updateScoreDisplay();
+    }
+
     /**
      * Awards bonus points for remaining cells when the game ends, animating them one at a time.
      */
@@ -805,6 +928,8 @@ export class Game {
         this.inputHandler.updateBoard(this.board);
         this.inputHandler.updateQueue(this.state.queue);
         this.renderer.updateSettings(this.settings);
+        // Reset final board snapshot when game resets
+        this.renderer.resetFinalBoardSnapshot();
         // Initialize color scheme for starting level
         updateColorScheme(this.state.level);
         // Initialize UI colors for starting level

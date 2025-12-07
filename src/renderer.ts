@@ -14,9 +14,9 @@ import {
     CANVAS_HEIGHT,
     QUEUE_AREA_HEIGHT,
     QUEUE_AREA_PADDING,
-    QUEUE_CELL_SIZE,
     QUEUE_ITEM_HEIGHT,
     getQueueItemRect,
+    LIFT_OFFSET_PIXELS,
 } from './constants';
 import { GAMEPLAY_CONFIG, ANIMATION_CONFIG } from './config';
 
@@ -27,9 +27,16 @@ export class Renderer {
     private canvas: HTMLCanvasElement;
     private ctx: CanvasRenderingContext2D;
     private settings: GameSettings;
+    private finalBoardState: PlacedBlock[] | null = null; // Final board state stored when game over starts
+    private finalTotalShapesPlaced: number = 0; // Total shapes placed when game ended (for point value calculation)
+    private finalScore: number = 0; // Final score when game ended
+    private finalLinesCleared: number = 0; // Final lines cleared when game ended
+    private finalLevel: number = 1; // Final level when game ended
     private currentLevel: number = 1;
     private blockIconImage: HTMLImageElement | null = null;
     private blockIconLoaded: boolean = false;
+    private copyLinkBounds: { x: number; y: number; width: number; height: number } | null = null; // Bounds for copy link click detection
+    private copyLinkText: string = '📋 Copy'; // Current text for copy link
 
     constructor(canvas: HTMLCanvasElement, settings: GameSettings) {
         this.canvas = canvas;
@@ -46,6 +53,46 @@ export class Renderer {
         
         // Load block icon
         this.loadBlockIcon();
+        
+        // Set up copy link click handler
+        this.canvas.addEventListener('click', (e) => {
+            const rect = this.canvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) * (this.canvas.width / rect.width);
+            const y = (e.clientY - rect.top) * (this.canvas.height / rect.height);
+            if (this.isPointInCopyLink(x, y)) {
+                this.copyEmojiBoard().then(success => {
+                    if (success) {
+                        // Change text to "copied" for visual feedback
+                        this.copyLinkText = '✓ Copied';
+                        // Reset back to "Copy" after 2 seconds
+                        setTimeout(() => {
+                            this.copyLinkText = '📋 Copy';
+                        }, 2000);
+                    }
+                });
+            }
+        });
+        
+        // Also handle touch events for mobile
+        this.canvas.addEventListener('touchend', (e) => {
+            const rect = this.canvas.getBoundingClientRect();
+            const touch = e.changedTouches[0];
+            const x = (touch.clientX - rect.left) * (this.canvas.width / rect.width);
+            const y = (touch.clientY - rect.top) * (this.canvas.height / rect.height);
+            if (this.isPointInCopyLink(x, y)) {
+                e.preventDefault();
+                this.copyEmojiBoard().then(success => {
+                    if (success) {
+                        // Change text to "copied" for visual feedback
+                        this.copyLinkText = '✓ Copied';
+                        // Reset back to "Copy" after 2 seconds
+                        setTimeout(() => {
+                            this.copyLinkText = '📋 Copy';
+                        }, 2000);
+                    }
+                });
+            }
+        });
     }
 
     /**
@@ -167,6 +214,168 @@ export class Renderer {
      */
     clear(): void {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    }
+
+    /**
+     * Resets the final board state (called when game resets)
+     */
+    resetFinalBoardSnapshot(): void {
+        this.finalBoardState = null;
+        this.finalTotalShapesPlaced = 0;
+        this.finalScore = 0;
+        this.finalLinesCleared = 0;
+        this.finalLevel = 1;
+        this.copyLinkBounds = null;
+        this.copyLinkText = '📋 Copy'; // Reset copy link text
+    }
+
+    /**
+     * Checks if a point is within the copy link bounds
+     */
+    isPointInCopyLink(x: number, y: number): boolean {
+        if (!this.copyLinkBounds) return false;
+        return x >= this.copyLinkBounds.x &&
+               x <= this.copyLinkBounds.x + this.copyLinkBounds.width &&
+               y >= this.copyLinkBounds.y &&
+               y <= this.copyLinkBounds.y + this.copyLinkBounds.height;
+    }
+
+    /**
+     * Generates a 4x4 emoji representation of the final board state with 4 distinct colors
+     * Uses the convertTo4x4Grid logic to map 8x8 to 4x4
+     */
+    generateEmojiBoard(): string {
+        if (!this.finalBoardState || this.finalBoardState.length === 0) {
+            return '';
+        }
+
+        // Get the 4x4 grid representation
+        const grid4x4 = this.convertTo4x4Grid();
+        
+        // Get the color set for the final level
+        const colorSet = getColorSet(this.finalLevel);
+        
+        // Find the darkest color in the color set (lowest brightness)
+        const getBrightness = (hex: string): number => {
+            const r = parseInt(hex.substring(1, 3), 16);
+            const g = parseInt(hex.substring(3, 5), 16);
+            const b = parseInt(hex.substring(5, 7), 16);
+            // Calculate relative luminance (simplified brightness)
+            return (r * 299 + g * 587 + b * 114) / 1000;
+        };
+        
+        let darkestColor = colorSet.colors[0];
+        let darkestBrightness = getBrightness(darkestColor);
+        for (const color of colorSet.colors) {
+            const brightness = getBrightness(color);
+            if (brightness < darkestBrightness) {
+                darkestBrightness = brightness;
+                darkestColor = color;
+            }
+        }
+        
+        // Convert darkest color to HSL to determine hue
+        const hex = darkestColor.replace('#', '');
+        const r = parseInt(hex.substring(0, 2), 16) / 255;
+        const g = parseInt(hex.substring(2, 4), 16) / 255;
+        const b = parseInt(hex.substring(4, 6), 16) / 255;
+        
+        const max = Math.max(r, g, b);
+        const min = Math.min(r, g, b);
+        const delta = max - min;
+        
+        let h = 0;
+        if (delta !== 0) {
+            if (max === r) {
+                h = ((g - b) / delta) % 6;
+            } else if (max === g) {
+                h = (b - r) / delta + 2;
+            } else {
+                h = (r - g) / delta + 4;
+            }
+        }
+        h = Math.round(h * 60);
+        if (h < 0) h += 360;
+        
+        // Map hue to closest emoji square color
+        // This ensures the 4-block emoji matches the darkest color's hue
+        let levelEmoji: string;
+        if ((h >= 0 && h < 30) || (h >= 330 && h <= 360)) {
+            levelEmoji = '🟥'; // Red
+        } else if (h >= 30 && h < 60) {
+            levelEmoji = '🟧'; // Orange
+        } else if (h >= 60 && h < 90) {
+            levelEmoji = '🟨'; // Yellow
+        } else if (h >= 90 && h < 150) {
+            levelEmoji = '🟩'; // Green
+        } else if (h >= 150 && h < 210) {
+            levelEmoji = '🟦'; // Cyan/Blue
+        } else if (h >= 210 && h < 270) {
+            levelEmoji = '🟦'; // Blue
+        } else if (h >= 270 && h < 300) {
+            levelEmoji = '🟪'; // Purple
+        } else {
+            levelEmoji = '🟪'; // Magenta/Purple
+        }
+        
+        // Map fill count to emoji: 0-1 blocks = white, 2-3 blocks = gray, 4 blocks = unique level emoji
+        const getEmojiForFillCount = (fillCount: number): string => {
+            if (fillCount === 0 || fillCount === 1) {
+                return '⬜'; // White (0-1 blocks)
+            } else if (fillCount === 2 || fillCount === 3) {
+                return '⬛'; // Gray/Black (2-3 blocks)
+            } else {
+                // 4 blocks = unique emoji for this level
+                return levelEmoji;
+            }
+        };
+
+        // Convert 4x4 grid to emoji string
+        let emojiString = '';
+        for (let r = 0; r < 4; r++) {
+            for (let c = 0; c < 4; c++) {
+                const cell = grid4x4[r][c];
+                emojiString += getEmojiForFillCount(cell.fillCount);
+            }
+            emojiString += '\n';
+        }
+
+        // Add score, lines, and level
+        emojiString += `\nScore: ${this.finalScore.toLocaleString()}\n`;
+        emojiString += `Lines: ${this.finalLinesCleared.toLocaleString()}\n`;
+        emojiString += `Level: ${this.finalLevel}`;
+
+        return emojiString;
+    }
+
+    /**
+     * Copies the emoji board representation to clipboard
+     */
+    async copyEmojiBoard(): Promise<boolean> {
+        const emojiString = this.generateEmojiBoard();
+        if (!emojiString) return false;
+
+        try {
+            await navigator.clipboard.writeText(emojiString);
+            return true;
+        } catch (err) {
+            console.error('Failed to copy to clipboard:', err);
+            // Fallback for older browsers
+            const textArea = document.createElement('textarea');
+            textArea.value = emojiString;
+            textArea.style.position = 'fixed';
+            textArea.style.opacity = '0';
+            document.body.appendChild(textArea);
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                return true;
+            } catch (fallbackErr) {
+                document.body.removeChild(textArea);
+                return false;
+            }
+        }
     }
 
     /**
@@ -707,24 +916,53 @@ export class Renderer {
 
     /**
      * Draws the currently dragged shape with ghost placement preview
+     * The shape is visually offset upward so it appears above the cursor/finger
      * @param dragState - Current drag state
      */
     drawDragPreview(dragState: DragState): void {
-        if (!dragState.isDragging || !dragState.shape || !dragState.hasBoardPosition) return;
+        if (!dragState.isDragging || !dragState.shape || !dragState.anchorPoint) return;
 
-        const position = dragState.mousePosition;
         const shapeIndex = getShapeIndex(dragState.shape);
         const color = getShapeColor(shapeIndex);
 
-        if (dragState.isValidPosition) {
-            // Draw valid placement (green tint)
-            this.drawShape(dragState.shape, position, color, true);
-        } else {
-            // Draw invalid placement (red tint)
-            this.ctx.globalAlpha = 0.3;
-            this.drawShape(dragState.shape, position, '#ff0000', true);
-            this.ctx.globalAlpha = 1.0;
+        // Calculate effectivePosition: anchor + lift offset
+        // This is the hotspot - the actual position of the lifted piece
+        const effectivePosition = {
+            x: dragState.anchorPoint.x,
+            y: dragState.anchorPoint.y - LIFT_OFFSET_PIXELS
+        };
+
+        // Draw the visual copy at effectivePosition
+        // The shape is drawn in pixel space, centered on the effectivePosition
+        this.ctx.save();
+        this.ctx.translate(effectivePosition.x, effectivePosition.y);
+        
+        // Center the shape on the effectivePosition
+        const minX = Math.min(...dragState.shape.map(b => b.x));
+        const minY = Math.min(...dragState.shape.map(b => b.y));
+        const maxX = Math.max(...dragState.shape.map(b => b.x));
+        const maxY = Math.max(...dragState.shape.map(b => b.y));
+        const shapeWidth = (maxX - minX + 1) * CELL_SIZE;
+        const shapeHeight = (maxY - minY + 1) * CELL_SIZE;
+        
+        // Center the shape
+        this.ctx.translate(-shapeWidth / 2, -shapeHeight / 2);
+        
+        // Draw each block in pixel space
+        // Use red color if position is invalid, otherwise use shape color
+        const drawColor = (dragState.hasBoardPosition && !dragState.isValidPosition) ? '#ff0000' : color;
+        this.ctx.globalAlpha = 0.7;
+        for (const block of dragState.shape) {
+            const x = block.x * CELL_SIZE;
+            const y = block.y * CELL_SIZE;
+            const blockX = x + 2;
+            const blockY = y + 2;
+            const blockSize = CELL_SIZE - 4;
+            this.drawBlock(blockX, blockY, blockSize, drawColor);
         }
+        
+        this.ctx.globalAlpha = 1.0;
+        this.ctx.restore();
     }
 
     /**
@@ -1104,6 +1342,127 @@ export class Renderer {
     }
 
     /**
+     * Converts 8x8 board state to 4x4 grid representation
+     * Each 4x4 cell represents a 2x2 block from the original board
+     * @returns 4x4 grid with color, darkness, and fill count (0-4) information
+     */
+    private convertTo4x4Grid(): Array<Array<{ color: string; darkness: number; fillCount: number }>> {
+        if (!this.finalBoardState || this.finalBoardState.length === 0) {
+            return Array(4).fill(null).map(() => Array(4).fill({ color: '#ffffff', darkness: 1.0, fillCount: 0 }));
+        }
+
+        // Create an 8x8 boolean grid to track filled cells
+        const grid8x8: Array<Array<{ filled: boolean; color: string }>> = Array(BOARD_CELL_COUNT)
+            .fill(null)
+            .map(() => Array(BOARD_CELL_COUNT).fill({ filled: false, color: '#ffffff' }));
+
+        // Fill the 8x8 grid with blocks from final board state
+        // Use original color (before darkness) - we'll apply darkness based on fill count
+        for (const block of this.finalBoardState) {
+            for (const cell of block.shape) {
+                const x = block.position.x + cell.x;
+                const y = block.position.y + cell.y;
+                if (x >= 0 && x < BOARD_CELL_COUNT && y >= 0 && y < BOARD_CELL_COUNT) {
+                    grid8x8[y][x] = { filled: true, color: block.color };
+                }
+            }
+        }
+
+        // Convert to 4x4 grid
+        const grid4x4: Array<Array<{ color: string; darkness: number; fillCount: number }>> = Array(4)
+            .fill(null)
+            .map(() => Array(4).fill({ color: '#ffffff', darkness: 1.0, fillCount: 0 }));
+
+        for (let r = 0; r < 4; r++) {
+            for (let c = 0; c < 4; c++) {
+                // Top-left corner of 2x2 block in 8x8 grid
+                const startY = r * 2;
+                const startX = c * 2;
+
+                // Count filled cells in this 2x2 block
+                let filledCount = 0;
+                let representativeColor = '#ffffff';
+                const colorsInBlock: string[] = [];
+
+                for (let dy = 0; dy < 2; dy++) {
+                    for (let dx = 0; dx < 2; dx++) {
+                        const y = startY + dy;
+                        const x = startX + dx;
+                        if (grid8x8[y][x].filled) {
+                            filledCount++;
+                            colorsInBlock.push(grid8x8[y][x].color);
+                        }
+                    }
+                }
+
+                // Determine darkness based on fill count
+                // 0 = light (1.0), 1 = mid (0.7), 2 = dark (0.5), 3+ = darkest (0.3)
+                let darkness: number;
+                if (filledCount === 0) {
+                    darkness = 1.0; // light
+                } else if (filledCount === 1) {
+                    darkness = 0.7; // mid
+                } else if (filledCount === 2) {
+                    darkness = 0.5; // dark
+                } else {
+                    darkness = 0.3; // darkest (3 or 4 filled)
+                }
+
+                // Use the most common color in the block, or first color if all are different
+                if (colorsInBlock.length > 0) {
+                    // Find the most frequent color
+                    const colorCounts = new Map<string, number>();
+                    for (const color of colorsInBlock) {
+                        colorCounts.set(color, (colorCounts.get(color) || 0) + 1);
+                    }
+                    let maxCount = 0;
+                    for (const [color, count] of colorCounts.entries()) {
+                        if (count > maxCount) {
+                            maxCount = count;
+                            representativeColor = color;
+                        }
+                    }
+                }
+
+                grid4x4[r][c] = { color: representativeColor, darkness, fillCount: filledCount };
+            }
+        }
+
+        return grid4x4;
+    }
+
+    /**
+     * Draws the 4x4 converted board representation
+     * @param x - X position to draw at
+     * @param y - Y position to draw at
+     * @param size - Size of the 4x4 grid
+     */
+    private draw4x4Board(x: number, y: number, size: number): void {
+        const grid4x4 = this.convertTo4x4Grid();
+        const cellSize = size / 4;
+
+        for (let r = 0; r < 4; r++) {
+            for (let c = 0; c < 4; c++) {
+                const cell = grid4x4[r][c];
+                const cellX = x + c * cellSize;
+                const cellY = y + r * cellSize;
+
+                // Apply darkness to the color
+                const darkenedColor = this.darkenColor(cell.color, cell.darkness);
+
+                // Draw the cell
+                this.ctx.fillStyle = darkenedColor;
+                this.ctx.fillRect(cellX, cellY, cellSize, cellSize);
+
+                // Draw border
+                this.ctx.strokeStyle = '#333';
+                this.ctx.lineWidth = 1;
+                this.ctx.strokeRect(cellX, cellY, cellSize, cellSize);
+            }
+        }
+    }
+
+    /**
      * Draws game over overlay with animation
      * @param progress - Animation progress from 0 to 1
      * @param placedBlocks - Final board state to render as 4x4 grid
@@ -1113,6 +1472,56 @@ export class Renderer {
         const overlayAlpha = 0.8 * progress;
         this.ctx.fillStyle = `rgba(0, 0, 0, ${overlayAlpha})`;
         this.ctx.fillRect(0, 0, BOARD_PIXEL_SIZE, BOARD_PIXEL_SIZE);
+
+        // Draw the emoji board representation if we have final board state
+        if (progress > 0 && this.finalBoardState && this.finalBoardState.length > 0) {
+            this.ctx.save();
+            this.ctx.globalAlpha = progress; // Fade in with overlay
+            
+            // Generate emoji board text
+            const emojiText = this.generateEmojiBoard();
+            
+            // Draw emoji text centered
+            this.ctx.font = 'bold 32px monospace';
+            this.ctx.fillStyle = '#fff';
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'top';
+            
+            // Split emoji text into lines and draw each line
+            const lines = emojiText.split('\n');
+            const lineHeight = 40;
+            const startY = BOARD_PIXEL_SIZE / 2 - (lines.length * lineHeight) / 2;
+            
+            lines.forEach((line, index) => {
+                const y = startY + index * lineHeight;
+                this.ctx.fillText(line, BOARD_PIXEL_SIZE / 2, y);
+            });
+            
+            this.ctx.restore();
+            
+            // Draw copy button below the emoji board
+            this.ctx.save();
+            this.ctx.globalAlpha = progress;
+            this.ctx.font = '18px sans-serif';
+            this.ctx.fillStyle = '#4ECDC4';
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'middle';
+            const copyLinkY = startY + lines.length * lineHeight + 20;
+            this.ctx.fillText(this.copyLinkText, BOARD_PIXEL_SIZE / 2, copyLinkY);
+            
+            // Store bounds for click detection
+            const textMetrics = this.ctx.measureText(this.copyLinkText);
+            this.copyLinkBounds = {
+                x: BOARD_PIXEL_SIZE / 2 - textMetrics.width / 2,
+                y: copyLinkY - 10,
+                width: textMetrics.width,
+                height: 20
+            };
+            
+            this.ctx.restore();
+        } else {
+            this.copyLinkBounds = null;
+        }
 
         // Animated text - fade in and scale up
         const textAlpha = progress;
@@ -1139,11 +1548,6 @@ export class Renderer {
         this.ctx.shadowBlur = 0;
         
         this.ctx.restore();
-
-        // Draw 4x4 grid representing final board state - positioned below game over text
-        if (placedBlocks.length > 0) {
-            this.drawFinalBoardGrid(placedBlocks, progress);
-        }
         
         // Restart prompt static text for clarity - positioned at bottom
         this.ctx.save();
@@ -1207,13 +1611,14 @@ export class Renderer {
         }
 
         // Calculate 4x4 grid size and position (centered below game over text)
-        const gridSize = 120; // Total size of 4x4 grid
+        const gridSize = 160; // Increased size for better visibility
         const cellSize = gridSize / 4;
         const gridX = BOARD_PIXEL_SIZE / 2 - gridSize / 2;
         const gridY = 150; // Below the "GAME OVER" text
 
         this.ctx.save();
-        this.ctx.globalAlpha = progress; // Full opacity when progress is 1
+        // Use full opacity (not affected by progress) so grid is always visible
+        this.ctx.globalAlpha = 1.0;
 
         // Draw 4x4 grid
         for (let gridYIdx = 0; gridYIdx < 4; gridYIdx++) {
@@ -1256,17 +1661,22 @@ export class Renderer {
                 // Draw rounded rectangle for the cell
                 if (darkestColor) {
                     // Draw filled cell with the darkest color from the 2x2 area
+                    // Add a subtle border for better visibility
                     this.ctx.fillStyle = darkestColor;
                     this.ctx.beginPath();
                     this.ctx.roundRect(x, y, cellSize, cellSize, 4);
                     this.ctx.fill();
+                    // Add border for contrast
+                    this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+                    this.ctx.lineWidth = 1;
+                    this.ctx.stroke();
                 } else {
                     // Draw empty cell with a subtle border to show it's empty
-                    this.ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+                    this.ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
                     this.ctx.beginPath();
                     this.ctx.roundRect(x, y, cellSize, cellSize, 4);
                     this.ctx.fill();
-                    this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+                    this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
                     this.ctx.lineWidth = 1;
                     this.ctx.stroke();
                 }
@@ -1351,7 +1761,9 @@ export class Renderer {
         gameOverProgress: number = 0,
         totalShapesPlaced: number = 0,
         levelUpProgress: number = 0,
-        level: number = 1
+        level: number = 1,
+        score: number = 0,
+        linesCleared: number = 0
     ): void {
         // Update current level for highlight color calculation
         this.currentLevel = level;
@@ -1361,6 +1773,15 @@ export class Renderer {
         }
         this.drawBoard(placedBlocks, animatingCells, totalShapesPlaced);
         
+        // Draw grid ghost preview if dragging (shows where piece would land on grid)
+        // This must be based on effectivePosition (lifted piece), not raw mouse position
+        if (dragState.isDragging && dragState.shape && dragState.hasBoardPosition) {
+            const shapeIndex = getShapeIndex(dragState.shape);
+            const color = getShapeColor(shapeIndex);
+            const ghostColor = dragState.isValidPosition ? color : '#ff0000';
+            this.drawShape(dragState.shape, dragState.mousePosition, ghostColor, true);
+        }
+        
         // Draw preview line highlights if dragging and position would clear lines
         if (dragState.isDragging && dragState.isValidPosition && dragState.previewLinesCleared) {
             this.drawPreviewLineHighlights(dragState.previewLinesCleared, placedBlocks);
@@ -1369,6 +1790,23 @@ export class Renderer {
         this.drawQueue(queue);
         if (this.settings.showGhostPreview) {
             this.drawDragPreview(dragState);
+        }
+
+        // Store final board state when game over just starts (before pop animations begin)
+        // Capture when gameOver is true but no animations have started yet (animatingCells is empty)
+        if (gameOver && animatingCells.length === 0 && this.finalBoardState === null) {
+            // Store a deep copy of the placed blocks state
+            this.finalBoardState = placedBlocks.map(block => ({
+                ...block,
+                shape: block.shape.map(cell => ({ ...cell })),
+                position: { ...block.position }
+            }));
+            // Store the total shapes placed for point value calculation
+            this.finalTotalShapesPlaced = totalShapesPlaced;
+            // Store score and lines cleared for copy functionality
+            this.finalScore = score;
+            this.finalLinesCleared = linesCleared;
+            this.finalLevel = level;
         }
 
         if (gameOver) {

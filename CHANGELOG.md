@@ -1,6 +1,11 @@
 # Changelog
 
-# Changelog
+## 1.1.1 - 2025-12-04
+
+- Code cleanup and refactoring:
+  - Removed unused imports (`COLOR_SETS`, `QUEUE_CELL_SIZE`, `BOARD_PIXEL_SIZE`, `QUEUE_AREA_HEIGHT`)
+  - Extracted duplicate shape dimension calculation logic into `calculateGridPositionFromEffectivePosition` helper method
+  - Improved code maintainability by reducing duplication in drag-and-drop handlers
 
 ## 1.1.0 - 2025-12-04
 

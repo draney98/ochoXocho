@@ -1,0 +1,230 @@
+# OchoXocho Project Rules
+
+## Project Overview
+This is a TypeScript-based block placement puzzle game built with Vite. The game features an 8x8 grid where players place tetromino and pentomino shapes to clear rows and columns.
+
+## Architecture Principles
+
+### Separation of Concerns
+- **Game Logic** (`game.ts`, `board.ts`, `shapes.ts`, `validator.ts`, `scoring.ts`, `gameOver.ts`): Pure TypeScript with no DOM dependencies. Framework-agnostic and reusable.
+- **Rendering** (`renderer.ts`): Uses HTML Canvas API exclusively. No game logic, only drawing operations.
+- **Input Handling** (`input.ts`): Manages mouse and touch events. Converts screen coordinates to canvas/grid coordinates.
+- **State Management**: Centralized in `Game` class. State is immutable where possible.
+
+### File Organization
+- `src/types.ts`: All shared TypeScript interfaces and types
+- `src/constants.ts`: All layout and sizing constants
+- `src/config.ts`: Game configuration and settings defaults
+- `src/colorConfig.ts`: Color theme definitions
+- Each module should have a single, clear responsibility
+
+## Code Style
+
+### TypeScript
+- Use strict mode (enforced by tsconfig.json)
+- Prefer explicit types over `any`
+- Use interfaces for object shapes, types for unions/intersections
+- Export types/interfaces from `types.ts` when shared across modules
+
+### Naming Conventions
+- Classes: PascalCase (`Renderer`, `InputHandler`, `Game`)
+- Functions: camelCase (`calculateScore`, `canPlaceShape`)
+- Constants: UPPER_SNAKE_CASE (`CELL_SIZE`, `LIFT_OFFSET_PIXELS`)
+- Private methods: camelCase with leading underscore optional (prefer just camelCase)
+- Interfaces: PascalCase (`DragState`, `GameState`, `PlacedBlock`)
+
+### Comments and Documentation
+- Use JSDoc comments for all public functions and classes
+- Include parameter types and return types in JSDoc
+- Explain "why" not "what" in comments
+- Keep comments up-to-date with code changes
+
+## Drag and Drop System
+
+### Critical Pattern: effectivePosition
+The drag system uses an `effectivePosition` concept where:
+- `effectivePosition = mousePosition + LIFT_OFFSET_PIXELS`
+- **Always use `effectivePosition` for grid calculations, validation, and placement**
+- **Never use raw mouse/touch coordinates for grid operations**
+- The lifted piece (effectivePosition) is the source of truth for placement
+- The anchor point tracks raw touch/cursor position but is only used to calculate effectivePosition
+
+### Helper Method
+Use `calculateGridPositionFromEffectivePosition()` in `input.ts` to convert effectivePosition to grid coordinates. Do not duplicate this logic.
+
+## Constants and Configuration
+
+### Layout Constants
+- All board/canvas sizing in `constants.ts`
+- Use `CELL_SIZE`, `BOARD_PIXEL_SIZE`, `CANVAS_WIDTH`, `CANVAS_HEIGHT` from constants
+- Never hardcode pixel values; use constants
+
+### Game Configuration
+- Gameplay settings in `config.ts` under `GAMEPLAY_CONFIG`
+- Animation settings in `ANIMATION_CONFIG`
+- Sound settings in `SOUND_CONFIG`
+- Access via imports, not magic numbers
+
+## Error Handling
+
+### localStorage Operations
+- Always wrap in try-catch blocks
+- Log warnings but don't throw errors
+- Provide sensible defaults when storage fails
+
+### DOM Operations
+- Check for null/undefined before accessing DOM elements
+- Use early returns: `if (!element) return;`
+- Log errors when critical elements are missing
+
+### Audio Operations
+- Handle AudioContext suspension (autoplay policy)
+- Provide fallback to synthesized sounds when files fail
+- Never throw errors from sound operations
+
+## Testing
+
+### Test Structure
+- Unit tests in `src/test/` directory
+- Test pure functions (scoring, validation, board operations)
+- Mock localStorage and AudioContext in test setup
+- Use Vitest for all testing
+
+### What to Test
+- Core game logic (scoring, validation, board operations)
+- Configuration loading and defaults
+- Shape generation and placement validation
+- Do not test rendering or DOM manipulation directly
+
+## Anti-Patterns
+
+### Don't Do This:
+- ❌ Hardcode pixel values instead of using constants
+- ❌ Mix game logic with rendering code
+- ❌ Use raw mouse coordinates for grid calculations
+- ❌ Duplicate shape dimension calculation logic
+- ❌ Access DOM without null checks
+- ❌ Throw errors from localStorage operations
+- ❌ Use `any` type without justification
+- ❌ Create circular dependencies between modules
+- ❌ Modify game state directly in renderer
+- ❌ Use `innerHTML` with user-generated content (safe for controlled containers only)
+
+### Do This Instead:
+- ✅ Use constants from `constants.ts`
+- ✅ Keep game logic pure and testable
+- ✅ Always use `effectivePosition` for grid operations
+- ✅ Extract duplicate logic into helper methods
+- ✅ Check for null/undefined before DOM access
+- ✅ Catch and log storage errors gracefully
+- ✅ Use explicit types or `unknown` before `any`
+- ✅ Maintain clear module boundaries
+- ✅ Update state through Game class methods
+- ✅ Use `textContent` or `createElement` for dynamic content
+
+## Performance Considerations
+
+### Rendering
+- Batch canvas operations when possible
+- Use `requestAnimationFrame` for animations (already implemented)
+- Avoid redrawing entire canvas unnecessarily
+- Cache computed values (shape dimensions, colors)
+
+### Memory
+- Clean up event listeners when components are destroyed
+- Avoid memory leaks in drag state management
+- Clear intervals/timeouts on game reset
+
+## Mobile Considerations
+
+### Touch Events
+- Always call `event.preventDefault()` on touch events to prevent scrolling
+- Handle both mouse and touch events (already implemented)
+- Test drag operations on touch devices
+- The drag system is designed for mobile with the lift offset
+
+### Responsive Design
+- Canvas scaling handled in `main.ts` via `setupResponsiveCanvas()`
+- UI elements scale with canvas width
+- Test on various screen sizes
+
+## Feature Development Guidelines
+
+### Adding New Shapes
+- Add to `ALL_SHAPES` array in `shapes.ts`
+- Update `SHAPE_POINT_VALUES` if needed
+- Shapes are arrays of `{ x: number, y: number }` relative to origin
+
+### Adding New Themes
+- Add color set to `COLOR_SETS` in `colorConfig.ts`
+- Follow existing structure with `colors` array and `name`
+- Update theme selector in `main.ts` if needed
+
+### Adding New Settings
+- Add to `GameSettings` interface in `types.ts`
+- Add default to `DEFAULT_SETTINGS` in `config.ts`
+- Persist via `saveSettings()` in `main.ts`
+- Update settings panel UI in `setupSettingsControls()`
+
+### Modifying Scoring
+- Update `calculateScore()` in `scoring.ts`
+- Maintain backward compatibility with existing score calculation
+- Update tests in `scoring.test.ts`
+
+## Code Review Checklist
+
+Before submitting changes:
+- [ ] No unused imports or variables
+- [ ] All public functions have JSDoc comments
+- [ ] Constants used instead of magic numbers
+- [ ] Error handling for localStorage and DOM operations
+- [ ] No circular dependencies
+- [ ] TypeScript compiles without errors
+- [ ] Build completes successfully (`npm run build`)
+- [ ] No linter errors
+- [ ] Drag-and-drop uses effectivePosition pattern
+- [ ] Game logic remains pure (no DOM dependencies)
+
+## Common Patterns
+
+### Getting Shape Dimensions
+```typescript
+const minX = Math.min(...shape.map(b => b.x));
+const minY = Math.min(...shape.map(b => b.y));
+const maxX = Math.max(...shape.map(b => b.x));
+const maxY = Math.max(...shape.map(b => b.y));
+const shapeWidth = (maxX - minX + 1) * CELL_SIZE;
+const shapeHeight = (maxY - minY + 1) * CELL_SIZE;
+```
+
+### Checking Board Bounds
+```typescript
+if (position.x >= 0 && position.x < BOARD_CELL_COUNT && 
+    position.y >= 0 && position.y < BOARD_CELL_COUNT) {
+    // Valid position
+}
+```
+
+### Loading Settings with Fallback
+```typescript
+function loadSettings(): GameSettings {
+    try {
+        const stored = localStorage.getItem(STORAGE_KEYS.settings);
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            return { ...DEFAULT_SETTINGS, ...parsed };
+        }
+    } catch (e) {
+        console.warn('Failed to load settings:', e);
+    }
+    return { ...DEFAULT_SETTINGS };
+}
+```
+
+## Version and Release
+
+- Update `CHANGELOG.md` for user-facing changes
+- Version follows semantic versioning (MAJOR.MINOR.PATCH)
+- Build artifacts go to `dist/` directory
+- Test build before committing: `npm run build`
+

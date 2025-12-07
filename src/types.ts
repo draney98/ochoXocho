@@ -57,6 +57,10 @@ export interface DragState {
     mousePosition: Position;       // Current mouse position in grid coordinates
     isValidPosition: boolean;      // Whether current position is valid for placement
     hasBoardPosition: boolean;     // Whether the cursor has entered the board area
+    anchorPoint?: {                // Canvas coordinates of the drag anchor (exact touch point)
+        x: number;
+        y: number;
+    };
     previewLinesCleared?: {       // Lines/columns that would be cleared if placed here
         rows: number[];
         columns: number[];

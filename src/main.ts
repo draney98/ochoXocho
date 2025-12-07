@@ -12,7 +12,7 @@ import {
     RESPONSIVE_CANVAS_LIMITS,
     GAMEPLAY_CONFIG,
 } from './config';
-import { CANVAS_WIDTH, CANVAS_HEIGHT, BOARD_PIXEL_SIZE, QUEUE_AREA_HEIGHT } from './constants';
+import { CANVAS_WIDTH, CANVAS_HEIGHT } from './constants';
 
 /**
  * Loads settings from localStorage, falling back to defaults
@@ -106,6 +106,14 @@ document.addEventListener('DOMContentLoaded', () => {
             game.reset(true);
             // Update mode select state after reset
             updateModeSelectState();
+        });
+    }
+
+    // Auto-place button automatically places all three pieces
+    const autoPlaceButton = document.getElementById('auto-place-button');
+    if (autoPlaceButton) {
+        autoPlaceButton.addEventListener('click', () => {
+            game.autoPlacePieces();
         });
     }
 });

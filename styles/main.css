@@ -282,6 +282,7 @@ body {
 }
 
 #restart-button,
+#auto-place-button,
 #settings-button {
     display: flex;
     align-items: center;
@@ -316,6 +317,10 @@ body[data-theme="midnight"] #settings-button svg {
     fill: var(--restart-button-text, #0f2027);
 }
 
+body[data-theme="midnight"] #auto-place-button {
+    color: var(--restart-button-text, #0f2027);
+}
+
 #restart-button .restart-icon,
 #settings-button svg {
     width: 20px;
@@ -324,12 +329,14 @@ body[data-theme="midnight"] #settings-button svg {
 }
 
 #restart-button:hover,
+#auto-place-button:hover,
 #settings-button:hover {
     background: var(--button-hover);
     transform: translateY(-1px);
 }
 
 #restart-button:active,
+#auto-place-button:active,
 #settings-button:active {
     background: var(--button-active);
     transform: translateY(0);

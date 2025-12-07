@@ -3,14 +3,14 @@
  */
 
 import { Position, DragState, Shape } from './types';
-import { snapToGrid } from './validator';
+import { snapToGrid, canPlaceShape } from './validator';
 import { Board } from './board';
-import { canPlaceShape } from './validator';
 import {
     BOARD_PIXEL_SIZE,
     CELL_SIZE,
     CANVAS_HEIGHT,
     getQueueItemRect,
+    LIFT_OFFSET_PIXELS,
 } from './constants';
 
 /**
@@ -47,6 +47,7 @@ export class InputHandler {
             mousePosition: { x: 0, y: 0 },
             isValidPosition: false,
             hasBoardPosition: false,
+            anchorPoint: undefined,
             previewLinesCleared: undefined,
         };
 
@@ -136,56 +137,73 @@ export class InputHandler {
     }
 
     /**
+     * Calculates the grid position for a shape based on its effective position (lifted piece position)
+     * @param effectivePosition - The on-screen position of the lifted piece (anchor + offset)
+     * @param shape - The shape being dragged
+     * @returns The grid position where the shape would be placed, or null if outside board
+     */
+    private calculateGridPositionFromEffectivePosition(effectivePosition: { x: number; y: number }, shape: Shape): Position | null {
+        // Check if effectivePosition (lifted piece) is over the board
+        if (effectivePosition.x < 0 || effectivePosition.x >= BOARD_PIXEL_SIZE || 
+            effectivePosition.y < 0 || effectivePosition.y >= BOARD_PIXEL_SIZE) {
+            return null;
+        }
+
+        // Find the top-left block of the shape
+        const minX = Math.min(...shape.map(b => b.x));
+        const minY = Math.min(...shape.map(b => b.y));
+        const maxX = Math.max(...shape.map(b => b.x));
+        const maxY = Math.max(...shape.map(b => b.y));
+        const shapeWidth = (maxX - minX + 1) * CELL_SIZE;
+        const shapeHeight = (maxY - minY + 1) * CELL_SIZE;
+
+        // Calculate where the top-left block is in pixel space
+        // Shape is centered on effectivePosition
+        const topLeftBlockPixelX = effectivePosition.x - shapeWidth / 2 + minX * CELL_SIZE;
+        const topLeftBlockPixelY = effectivePosition.y - shapeHeight / 2 + minY * CELL_SIZE;
+
+        // Convert the top-left block position to grid coordinates
+        const gridPos = snapToGrid(topLeftBlockPixelX, topLeftBlockPixelY, CELL_SIZE);
+
+        // Adjust grid position to account for the shape's internal offset
+        return {
+            x: gridPos.x - minX,
+            y: gridPos.y - minY
+        };
+    }
+
+    /**
      * Handles mouse move event - updates drag position and validates placement
      * @param event - Mouse event
      */
     private handleMouseMove(event: MouseEvent): void {
-        if (!this.dragState.isDragging) return;
+        if (!this.dragState.isDragging || !this.dragState.shape) return;
 
         const { x: canvasX, y: canvasY } = this.screenToCanvas(event.clientX, event.clientY);
 
-        // Only allow dragging over the game board area
-        if (canvasX >= 0 && canvasX < BOARD_PIXEL_SIZE && canvasY >= 0 && canvasY < BOARD_PIXEL_SIZE) {
-            const gridPos = snapToGrid(canvasX, canvasY, CELL_SIZE);
+        // Update anchor point to follow the finger/cursor exactly
+        this.dragState.anchorPoint = { x: canvasX, y: canvasY };
+        
+        // Calculate effectivePosition: mouse position + lift offset
+        // This is the hotspot - the actual position of the lifted piece
+        const effectivePosition = {
+            x: canvasX,
+            y: canvasY - LIFT_OFFSET_PIXELS
+        };
+
+        const gridPos = this.calculateGridPositionFromEffectivePosition(effectivePosition, this.dragState.shape);
+        
+        if (gridPos) {
             this.dragState.mousePosition = gridPos;
             this.dragState.hasBoardPosition = true;
-
-            if (this.dragState.shape) {
-                this.dragState.isValidPosition = canPlaceShape(
-                    this.board,
-                    this.dragState.shape,
-                    gridPos
-                );
-                
-                // Check which lines/columns would be cleared if placed here
-                if (this.dragState.isValidPosition) {
-                    const previewLines = this.board.getFullLinesIfPlaced(this.dragState.shape, gridPos);
-                    const hadLines = this.dragState.previewLinesCleared && 
-                        (this.dragState.previewLinesCleared.rows.length > 0 || 
-                         this.dragState.previewLinesCleared.columns.length > 0);
-                    const hasLines = previewLines.rows.length > 0 || previewLines.columns.length > 0;
-                    
-                    // Debug: log detected lines
-                    if (hasLines) {
-                        console.log(`[PREVIEW] Would clear ${previewLines.rows.length} row(s): [${previewLines.rows.join(', ')}], ${previewLines.columns.length} column(s): [${previewLines.columns.join(', ')}]`);
-                    }
-                    
-                    this.dragState.previewLinesCleared = previewLines;
-                    
-                    // Vibrate when lines would be cleared (only on first detection, not every move)
-                    if (hasLines && !hadLines && 'vibrate' in navigator) {
-                        navigator.vibrate(30); // Short vibration for preview
-                    }
-                } else {
-                    this.dragState.previewLinesCleared = undefined;
-                }
-            }
+            this.dragState.isValidPosition = canPlaceShape(this.board, this.dragState.shape, gridPos);
         } else {
-            // Cursor is outside the board area - clear board position flag
+            // Effective position (lifted piece) is outside the board
             this.dragState.hasBoardPosition = false;
             this.dragState.isValidPosition = false;
-            this.dragState.previewLinesCleared = undefined;
+            this.dragState.mousePosition = { x: 0, y: 0 };
         }
+        this.dragState.previewLinesCleared = undefined;
     }
 
     /**
@@ -193,17 +211,28 @@ export class InputHandler {
      * @param event - Mouse event
      */
     private handleMouseUp(event: MouseEvent): void {
-        if (!this.dragState.isDragging) return;
+        if (!this.dragState.isDragging || !this.dragState.shape || !this.dragState.anchorPoint) return;
 
+        // Update anchor to final position
         const { x: canvasX, y: canvasY } = this.screenToCanvas(event.clientX, event.clientY);
+        this.dragState.anchorPoint = { x: canvasX, y: canvasY };
 
-        // Only place if released over the game board area and position is valid
+        // Calculate effectivePosition: mouse position + lift offset
+        // This is the hotspot - the actual position of the lifted piece
+        const effectivePosition = {
+            x: canvasX,
+            y: canvasY - LIFT_OFFSET_PIXELS
+        };
+
+        const gridPos = this.calculateGridPositionFromEffectivePosition(effectivePosition, this.dragState.shape);
+
+        // Check if the effectivePosition (lifted piece) is over the board and placement is valid
         let shapePlaced = false;
-        if (canvasX >= 0 && canvasX < BOARD_PIXEL_SIZE && canvasY >= 0 && canvasY < BOARD_PIXEL_SIZE) {
-            if (this.dragState.isValidPosition && this.dragState.shape) {
-                const gridPos = snapToGrid(canvasX, canvasY, CELL_SIZE);
+        if (gridPos && effectivePosition.x >= 0 && effectivePosition.x < BOARD_PIXEL_SIZE && 
+            effectivePosition.y >= 0 && effectivePosition.y < BOARD_PIXEL_SIZE) {
+            
+            if (canPlaceShape(this.board, this.dragState.shape, gridPos)) {
                 // Pass -1 as shapeIndex since shape was already removed from queue
-                // The handler will get the shape from dragState
                 this.onPlaceShape(-1, gridPos);
                 shapePlaced = true;
             }
@@ -223,6 +252,7 @@ export class InputHandler {
             mousePosition: { x: 0, y: 0 },
             isValidPosition: false,
             hasBoardPosition: false,
+            anchorPoint: undefined,
             previewLinesCleared: undefined,
         };
     }
@@ -245,6 +275,7 @@ export class InputHandler {
             mousePosition: { x: 0, y: 0 },
             isValidPosition: false,
             hasBoardPosition: false,
+            anchorPoint: undefined,
             previewLinesCleared: undefined,
         };
     }
@@ -278,6 +309,8 @@ export class InputHandler {
                         this.dragState.shapeIndex = i;
                         this.dragState.shape = this.queue[i];
                         this.originalQueueIndex = i; // Store original position
+                        // Set anchor point to exact touch location (don't move it to board)
+                        this.dragState.anchorPoint = { x: canvasX, y: canvasY };
                         // Remove shape from queue immediately when selected
                         this.onRemoveFromQueue(i);
                         break;
@@ -298,48 +331,16 @@ export class InputHandler {
         const touch = event.touches[0];
         const { x: canvasX, y: canvasY } = this.screenToCanvas(touch.clientX, touch.clientY);
 
-        // Only allow dragging over the game board area
-        if (canvasX >= 0 && canvasX < BOARD_PIXEL_SIZE && canvasY >= 0 && canvasY < BOARD_PIXEL_SIZE) {
-            const gridPos = snapToGrid(canvasX, canvasY, CELL_SIZE);
-            this.dragState.mousePosition = gridPos;
-            this.dragState.hasBoardPosition = true;
-
-            if (this.dragState.shape) {
-                this.dragState.isValidPosition = canPlaceShape(
-                    this.board,
-                    this.dragState.shape,
-                    gridPos
-                );
-                
-                // Check which lines/columns would be cleared if placed here
-                if (this.dragState.isValidPosition) {
-                    const previewLines = this.board.getFullLinesIfPlaced(this.dragState.shape, gridPos);
-                    const hadLines = this.dragState.previewLinesCleared && 
-                        (this.dragState.previewLinesCleared.rows.length > 0 || 
-                         this.dragState.previewLinesCleared.columns.length > 0);
-                    const hasLines = previewLines.rows.length > 0 || previewLines.columns.length > 0;
-                    
-                    // Debug: log detected lines
-                    if (hasLines) {
-                        console.log(`[PREVIEW] Would clear ${previewLines.rows.length} row(s): [${previewLines.rows.join(', ')}], ${previewLines.columns.length} column(s): [${previewLines.columns.join(', ')}]`);
-                    }
-                    
-                    this.dragState.previewLinesCleared = previewLines;
-                    
-                    // Vibrate when lines would be cleared (only on first detection, not every move)
-                    if (hasLines && !hadLines && 'vibrate' in navigator) {
-                        navigator.vibrate(30); // Short vibration for preview
-                    }
-                } else {
-                    this.dragState.previewLinesCleared = undefined;
-                }
-            }
-        } else {
-            // Touch is outside the board area - clear board position flag
-            this.dragState.hasBoardPosition = false;
-            this.dragState.isValidPosition = false;
-            this.dragState.previewLinesCleared = undefined;
-        }
+        // Update anchor point to follow the finger exactly
+        // Anchor is always in pixel coordinates, never converted to grid during drag
+        this.dragState.anchorPoint = { x: canvasX, y: canvasY };
+        
+        // Clear grid position and validation flags during drag
+        // Grid position is only calculated on release
+        this.dragState.hasBoardPosition = false;
+        this.dragState.isValidPosition = false;
+        this.dragState.mousePosition = { x: 0, y: 0 };
+        this.dragState.previewLinesCleared = undefined;
     }
 
     /**
@@ -350,16 +351,32 @@ export class InputHandler {
         event.preventDefault();
         if (!this.dragState.isDragging) return;
 
-        // Use last known position if touch ended outside
-        const { x: canvasX, y: canvasY } = this.dragState.hasBoardPosition
-            ? { x: this.dragState.mousePosition.x * CELL_SIZE, y: this.dragState.mousePosition.y * CELL_SIZE }
-            : this.screenToCanvas(event.changedTouches[0]?.clientX ?? 0, event.changedTouches[0]?.clientY ?? 0);
+        // Update anchor to final position
+        const { x: canvasX, y: canvasY } = this.screenToCanvas(
+            event.changedTouches[0]?.clientX ?? 0, 
+            event.changedTouches[0]?.clientY ?? 0
+        );
+        this.dragState.anchorPoint = { x: canvasX, y: canvasY };
 
-        // Only place if released over the game board area and position is valid
+        if (!this.dragState.shape) {
+            return;
+        }
+
+        // Calculate effectivePosition: mouse position + lift offset
+        // This is the hotspot - the actual position of the lifted piece
+        const effectivePosition = {
+            x: canvasX,
+            y: canvasY - LIFT_OFFSET_PIXELS
+        };
+
+        const gridPos = this.calculateGridPositionFromEffectivePosition(effectivePosition, this.dragState.shape);
+
+        // Check if the effectivePosition (lifted piece) is over the board and placement is valid
         let shapePlaced = false;
-        if (canvasX >= 0 && canvasX < BOARD_PIXEL_SIZE && canvasY >= 0 && canvasY < BOARD_PIXEL_SIZE) {
-            if (this.dragState.isValidPosition && this.dragState.shape) {
-                const gridPos = this.dragState.mousePosition;
+        if (gridPos && effectivePosition.x >= 0 && effectivePosition.x < BOARD_PIXEL_SIZE && 
+            effectivePosition.y >= 0 && effectivePosition.y < BOARD_PIXEL_SIZE) {
+            
+            if (canPlaceShape(this.board, this.dragState.shape, gridPos)) {
                 // Pass -1 as shapeIndex since shape was already removed from queue
                 this.onPlaceShape(-1, gridPos);
                 shapePlaced = true;
@@ -380,6 +397,7 @@ export class InputHandler {
             mousePosition: { x: 0, y: 0 },
             isValidPosition: false,
             hasBoardPosition: false,
+            anchorPoint: undefined,
             previewLinesCleared: undefined,
         };
     }
@@ -404,6 +422,7 @@ export class InputHandler {
             mousePosition: { x: 0, y: 0 },
             isValidPosition: false,
             hasBoardPosition: false,
+            anchorPoint: undefined,
             previewLinesCleared: undefined,
         };
     }

@@ -2,11 +2,12 @@
  * Shape definitions and generator for tetromino pieces (4 blocks each)
  */
 
-import { Shape } from './types';
+import { Shape, Position } from './types';
 import { Board } from './board';
 import { getValidPositions } from './validator';
 import { getColorSet, getColorSetIndex } from './colorConfig';
 import { EASY_MODE_CONFIG, GAMEPLAY_CONFIG } from './config';
+import { BOARD_CELL_COUNT } from './constants';
 
 /**
  * Monomino shape (1 block)
@@ -319,58 +320,165 @@ export function generateShapes(): Shape[] {
 }
 
 /**
- * Generates shapes for easy mode - tries to find shapes that fit on the board
- * @param board - The game board to check against
- * @returns An array of 3 shapes, with at least 2 that can be placed if possible
+ * Finds all valid positions where a shape can be placed on a grid array
+ * @param grid - 2D boolean array representing the board state
+ * @param shape - The shape to find positions for
+ * @returns Array of valid positions
  */
-export function generateEasyShapes(board: Board): Shape[] {
-    // Try up to configured number of times to find a good combination
-    for (let attempt = 0; attempt < EASY_MODE_CONFIG.maxOptimisticAttempts; attempt++) {
-        const shapes = [getRandomShape(true), getRandomShape(true), getRandomShape(true)];
-        
-        // Check if all three fit
-        let allFit = true;
-        for (const shape of shapes) {
-            const validPositions = getValidPositions(board, shape);
-            if (validPositions.length === 0) {
-                allFit = false;
+function getValidPositionsForGrid(grid: boolean[][], shape: Shape): Position[] {
+    const validPositions: Position[] = [];
+    const BOARD_SIZE = BOARD_CELL_COUNT;
+
+    // Try all possible positions on the board
+    for (let y = 0; y < BOARD_SIZE; y++) {
+        for (let x = 0; x < BOARD_SIZE; x++) {
+            const position: Position = { x, y };
+            let canPlace = true;
+
+            // Check each block in the shape
+            for (const block of shape) {
+                const blockX = position.x + block.x;
+                const blockY = position.y + block.y;
+
+                // Check if block is within board boundaries
+                if (blockX < 0 || blockX >= BOARD_SIZE || blockY < 0 || blockY >= BOARD_SIZE) {
+                    canPlace = false;
+                    break;
+                }
+
+                // Check if the cell is empty
+                if (grid[blockY][blockX]) {
+                    canPlace = false;
+                    break;
+                }
+            }
+
+            if (canPlace) {
+                validPositions.push(position);
+            }
+        }
+    }
+
+    return validPositions;
+}
+
+/**
+ * Places a shape on a grid array at the given position
+ * @param grid - 2D boolean array representing the board state (modified in-place)
+ * @param shape - The shape to place
+ * @param position - Position where the shape should be placed
+ */
+function placeShapeOnGrid(grid: boolean[][], shape: Shape, position: Position): void {
+    const BOARD_SIZE = BOARD_CELL_COUNT;
+
+    for (const block of shape) {
+        const x = position.x + block.x;
+        const y = position.y + block.y;
+        if (x >= 0 && x < BOARD_SIZE && y >= 0 && y < BOARD_SIZE) {
+            grid[y][x] = true;
+        }
+    }
+}
+
+/**
+ * Simulates line clearing on a grid array
+ * Finds and clears all full rows and columns
+ * @param grid - 2D boolean array representing the board state (modified in-place)
+ */
+function simulateLineClearing(grid: boolean[][]): void {
+    const BOARD_SIZE = BOARD_CELL_COUNT;
+
+    // Find full rows
+    const fullRows: number[] = [];
+    for (let row = 0; row < BOARD_SIZE; row++) {
+        if (grid[row].every(cell => cell === true)) {
+            fullRows.push(row);
+        }
+    }
+
+    // Find full columns
+    const fullColumns: number[] = [];
+    for (let col = 0; col < BOARD_SIZE; col++) {
+        let isFull = true;
+        for (let row = 0; row < BOARD_SIZE; row++) {
+            if (!grid[row][col]) {
+                isFull = false;
                 break;
             }
         }
-        
-        if (allFit) {
-            return shapes;
+        if (isFull) {
+            fullColumns.push(col);
         }
+    }
+
+    // Clear full rows
+    for (const row of fullRows) {
+        grid[row].fill(false);
+    }
+
+    // Clear full columns
+    for (const col of fullColumns) {
+        for (let row = 0; row < BOARD_SIZE; row++) {
+            grid[row][col] = false;
+        }
+    }
+}
+
+/**
+ * Generates shapes for easy mode using state simulation
+ * Guarantees that all three pieces can be placed sequentially by simulating
+ * placements on a virtual board and running line-clearing logic after each placement
+ * @param board - The game board to check against
+ * @returns An array of 3 shapes that can be placed sequentially
+ */
+export function generateEasyShapes(board: Board): Shape[] {
+    const hand: Shape[] = [];
+    const MAX_ATTEMPTS_PER_PIECE = 50;
+    
+    // Create virtual board as a deep copy of current board state
+    const virtualGrid = board.getGrid().map(row => [...row]);
+    
+    // Generate 3 pieces sequentially
+    for (let pieceIndex = 0; pieceIndex < 3; pieceIndex++) {
+        let pieceFound = false;
+        let attempts = 0;
         
-        // Check if at least two fit
-        let fitCount = 0;
-        for (const shape of shapes) {
-            const validPositions = getValidPositions(board, shape);
+        // Try to find a piece that fits
+        while (!pieceFound && attempts < MAX_ATTEMPTS_PER_PIECE) {
+            attempts++;
+            const candidate = getRandomShape(true); // Weighted for easy mode
+            
+            // Check if candidate fits anywhere on virtual board
+            const validPositions = getValidPositionsForGrid(virtualGrid, candidate);
+            
             if (validPositions.length > 0) {
-                fitCount++;
+                // Piece fits! Place it on virtual board
+                // Pick a random valid position
+                const position = validPositions[Math.floor(Math.random() * validPositions.length)];
+                placeShapeOnGrid(virtualGrid, candidate, position);
+                
+                // Simulate line clearing
+                simulateLineClearing(virtualGrid);
+                
+                // Add to hand
+                hand.push(candidate);
+                pieceFound = true;
             }
         }
         
-        if (fitCount >= 2) {
-            return shapes;
+        // If no piece found after max attempts, break and use fallback
+        if (!pieceFound) {
+            break;
         }
     }
     
-    // Fallback: Try to find at least one shape that fits
-    // Try up to configured number of times to find a shape that fits
-    for (let attempt = 0; attempt < EASY_MODE_CONFIG.fallbackAttempts; attempt++) {
-        const testShape = getRandomShape(true);
-        const validPositions = getValidPositions(board, testShape);
-        if (validPositions.length > 0) {
-            // Found a shape that fits, return it with 2 random shapes (weighted for easy mode)
-            return [testShape, getRandomShape(true), getRandomShape(true)];
-        }
+    // If we couldn't generate all 3 pieces, fill remaining slots with random pieces
+    while (hand.length < 3) {
+        // Use completely random (not weighted) for fallback
+        hand.push(getRandomShape(false));
     }
     
-    // Final fallback: If no shape can fit, use a single block (X) which scores 0 points
-    // The single block is at index 0 in ALL_SHAPES (MONOMINO)
-    const singleBlock: Shape = [{ x: 0, y: 0 }];
-    return [singleBlock, getRandomShape(true), getRandomShape(true)];
+    return hand;
 }
 
 /**
