@@ -113,6 +113,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
     theme: 'classic',
     mode: 'easy',
     showPointValues: true, // Dev setting: off by default
+    autoplaceEnabled: true, // Autoplace button enabled by default
 };
 
 /**

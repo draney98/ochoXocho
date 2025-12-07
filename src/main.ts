@@ -113,12 +113,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const autoPlaceButton = document.getElementById('auto-place-button');
     if (autoPlaceButton) {
         autoPlaceButton.addEventListener('click', () => {
-            game.autoPlacePieces();
+            // Double-check setting before executing (in case setting changed mid-game)
+            const currentSettings = loadSettings();
+            if (currentSettings.autoplaceEnabled) {
+                game.autoPlacePieces();
+            }
         });
     }
 });
 
-function setupSettingsControls(game: Game, initialSettings: GameSettings, updateHighScoreMode?: (mode: GameMode) => void): { updateModeSelectState: () => void } {
+function setupSettingsControls(game: Game, initialSettings: GameSettings, updateHighScoreMode?: (mode: GameMode) => void): { updateModeSelectState: () => void; updateAutoplaceButtonVisibility: (enabled: boolean) => void } {
     const panel = document.getElementById('settings-panel');
     const backdrop = document.getElementById('settings-backdrop');
     const openButton = document.getElementById('settings-button');
@@ -131,6 +135,7 @@ function setupSettingsControls(game: Game, initialSettings: GameSettings, update
     const soundInput = document.getElementById('setting-enable-sound') as HTMLInputElement | null;
     const modeSelect = document.getElementById('setting-mode') as HTMLSelectElement | null;
     const pointValuesInput = document.getElementById('setting-show-point-values') as HTMLInputElement | null;
+    const autoplaceInput = document.getElementById('setting-autoplace-enabled') as HTMLInputElement | null;
 
     // Sync inputs with initial settings so toggles reflect any future default changes
     if (gridInput) gridInput.checked = initialSettings.showGrid;
@@ -140,6 +145,7 @@ function setupSettingsControls(game: Game, initialSettings: GameSettings, update
     if (soundInput) soundInput.checked = initialSettings.soundEnabled;
     if (modeSelect) modeSelect.value = initialSettings.mode;
     if (pointValuesInput) pointValuesInput.checked = initialSettings.showPointValues;
+    if (autoplaceInput) autoplaceInput.checked = initialSettings.autoplaceEnabled;
 
     const pushToGame = () => {
         const themeValue = (themeSelect?.value as ThemeName) ?? initialSettings.theme;
@@ -160,10 +166,29 @@ function setupSettingsControls(game: Game, initialSettings: GameSettings, update
             theme: themeValue,
             mode: modeValue,
             showPointValues: pointValuesInput?.checked ?? false,
+            autoplaceEnabled: autoplaceInput?.checked ?? true,
         };
         game.updateSettings(updatedSettings);
         saveSettings(updatedSettings); // Save to localStorage
+        updateAutoplaceButtonVisibility(updatedSettings.autoplaceEnabled);
     };
+    
+    /**
+     * Updates the autoplace button visibility based on the setting
+     */
+    const updateAutoplaceButtonVisibility = (enabled: boolean): void => {
+        const autoPlaceButton = document.getElementById('auto-place-button');
+        if (autoPlaceButton) {
+            if (enabled) {
+                autoPlaceButton.style.display = '';
+            } else {
+                autoPlaceButton.style.display = 'none';
+            }
+        }
+    };
+    
+    // Initialize button visibility based on initial settings
+    updateAutoplaceButtonVisibility(initialSettings.autoplaceEnabled);
 
     // Update mode select disabled state based on game session
     // Note: Only the difficulty (mode) select is disabled during play.
@@ -185,7 +210,7 @@ function setupSettingsControls(game: Game, initialSettings: GameSettings, update
     setInterval(updateModeSelectState, 500);
     updateModeSelectState(); // Initial check
 
-    [gridInput, ghostInput, animationInput, soundInput, pointValuesInput].forEach(input => {
+    [gridInput, ghostInput, animationInput, soundInput, pointValuesInput, autoplaceInput].forEach(input => {
         input?.addEventListener('change', pushToGame);
     });
 
@@ -232,8 +257,8 @@ function setupSettingsControls(game: Game, initialSettings: GameSettings, update
         }
     });
 
-    // Return the update function so it can be called from outside
-    return { updateModeSelectState };
+    // Return the update functions so they can be called from outside
+    return { updateModeSelectState, updateAutoplaceButtonVisibility };
 }
 
 function applyTheme(theme: ThemeName): void {

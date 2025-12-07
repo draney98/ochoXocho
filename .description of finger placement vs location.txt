@@ -1,0 +1,26 @@
+The primary challenge encountered during the development of the block placement game involves maintaining synchronization between the player's touch input and the game's internal spatial logic. These issues manifest as a breakdown in the core drag-and-drop experience, particularly on mobile touchscreens.
+1. The Blinding Finger Problem (Initial Requirement)
+
+The fundamental UX issue was the player's hand/finger obscuring the piece being dragged.
+
+    Symptom: When a player touches a shape to move it, their finger completely covers the block(s), preventing them from accurately seeing the piece's structure or the specific grid cells it would occupy.
+
+    Result: This makes precise placement nearly impossible, forcing the player to guess where the shape will land relative to open spaces.
+
+2. The Coordinate Drift Problem
+
+This is a scaling or mapping error that causes the game's perception of the piece's position to separate from the player's visual perception. This issue typically worsens the further the piece moves from the grid's origin.
+
+    Symptom: The piece feels accurate when placed near the bottom of the grid, but as the player drags it towards the top of the screen, the piece's position becomes significantly misaligned. The piece moves faster in the game's logic than the finger moves on the screen.
+
+    Underlying Cause: The game fails to correctly account for the difference between the screen's physical pixel size (how big the canvas looks) and the canvas's internal drawing resolution (how the game calculates coordinates). Without proper coordinate normalization, the vertical position progressively drifts.
+
+3. The Logic-Visual Disconnect Problem
+
+This final issue occurs when the validity check (the game logic) ignores the visual corrections made to solve the first two problems.
+
+    Symptom: The player drags the lifted, correctly scaled piece over empty grid cells, yet the piece turns red (invalid placement).
+
+    Visual Evidence: A "ghost" or preview of the piece appears, which is typically used for collision detection. This ghost is drawn incorrectly, often floating one grid row above the lifted piece, overlapping an occupied cell.
+
+    Underlying Cause: The code separates the "rendering position" (the visual position shown to the player) from the "collision position" (the position used for grid snapping and validity checks). The logic is mistakenly using the raw finger coordinates or an uncorrected value, causing the piece to snap to a higher (invalid) row than where the player is visually aiming.

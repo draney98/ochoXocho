@@ -310,12 +310,12 @@ export class Renderer {
             levelEmoji = '🟩'; // Green
         } else if (h >= 150 && h < 210) {
             levelEmoji = '🟦'; // Cyan/Blue
-        } else if (h >= 210 && h < 270) {
+        } else if (h >= 210 && h < 250) {
             levelEmoji = '🟦'; // Blue
-        } else if (h >= 270 && h < 300) {
-            levelEmoji = '🟪'; // Purple
+        } else if (h >= 250 && h < 330) {
+            levelEmoji = '🟪'; // Purple/Magenta (includes purple hues around 260-300)
         } else {
-            levelEmoji = '🟪'; // Magenta/Purple
+            levelEmoji = '🟪'; // Purple (fallback for 330-360, though red handles most of this)
         }
         
         // Map fill count to emoji: 0-1 blocks = white, 2-3 blocks = gray, 4 blocks = unique level emoji
@@ -415,18 +415,26 @@ export class Renderer {
 
     /**
      * Draws all placed blocks on the board
+     * @param board - The game board (to check if cells are actually filled)
      * @param placedBlocks - Array of all placed blocks
      * @param animatingCells - Array of cells currently animating out
      * @param totalShapesPlaced - Total shapes placed (for calculating current point values)
      */
-    drawBoard(placedBlocks: PlacedBlock[], animatingCells: AnimatingCell[] = [], totalShapesPlaced: number = 0): void {
-        // Draw placed blocks, but skip cells that are animating
+    drawBoard(board: Board, placedBlocks: PlacedBlock[], animatingCells: AnimatingCell[] = [], totalShapesPlaced: number = 0): void {
+        // Draw placed blocks, but skip cells that are animating or have been cleared from the board
         for (const block of placedBlocks) {
             const cellsToDraw = block.shape.filter(cell => {
                 const absoluteX = block.position.x + cell.x;
                 const absoluteY = block.position.y + cell.y;
                 // Skip cells that are currently animating
-                return !animatingCells.some(ac => ac.x === absoluteX && ac.y === absoluteY);
+                if (animatingCells.some(ac => ac.x === absoluteX && ac.y === absoluteY)) {
+                    return false;
+                }
+                // Skip cells that have been cleared from the board (prevents brief reappearance after animation)
+                if (board.isCellEmpty({ x: absoluteX, y: absoluteY })) {
+                    return false;
+                }
+                return true;
             });
             
             if (cellsToDraw.length > 0) {
@@ -525,49 +533,70 @@ export class Renderer {
      */
     drawShape(shape: Shape, position: Position, color: string, isGhost: boolean = false, pointValue?: number): void {
         if (isGhost) {
-            this.ctx.globalAlpha = 0.5;
-        } else {
-            this.ctx.globalAlpha = 1.0;
-        }
-
-        for (const block of shape) {
-            const x = (position.x + block.x) * CELL_SIZE;
-            const y = (position.y + block.y) * CELL_SIZE;
-            const blockX = x + 2;
-            const blockY = y + 2;
-            const blockSize = CELL_SIZE - 4;
-
-            this.drawBlock(blockX, blockY, blockSize, color);
-
-            // Draw point value if provided and setting is enabled
-            if (pointValue !== undefined && !isGhost && this.settings.showPointValues) {
-                // Calculate center of the filled block (accounting for 2px padding)
+            // Ghost preview: draw with outline style for better visibility
+            this.ctx.globalAlpha = 0.3; // More transparent than before
+            this.ctx.strokeStyle = color;
+            this.ctx.lineWidth = 3;
+            this.ctx.setLineDash([4, 4]); // Dashed outline pattern
+            
+            for (const block of shape) {
+                const x = (position.x + block.x) * CELL_SIZE;
+                const y = (position.y + block.y) * CELL_SIZE;
                 const blockX = x + 2;
                 const blockY = y + 2;
                 const blockSize = CELL_SIZE - 4;
-                const centerX = blockX + blockSize / 2;
-                const centerY = blockY + blockSize / 2;
+
+                // Draw filled block with low opacity
+                this.ctx.fillStyle = color;
+                this.ctx.fillRect(blockX, blockY, blockSize, blockSize);
                 
-                // Use a semi-transparent white for less contrast
-                this.ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-                // Font size should be slightly smaller (about 65% of cell size)
-                const fontSize = Math.floor(CELL_SIZE * 0.65);
-                this.ctx.font = `bold ${fontSize}px sans-serif`;
-                
-                // Set text alignment for perfect centering
-                this.ctx.textAlign = 'center';
-                this.ctx.textBaseline = 'middle';
-                
-                // Draw text at exact center
-                this.ctx.fillText(
-                    pointValue.toString(),
-                    centerX,
-                    centerY
-                );
+                // Draw dashed outline for better visibility
+                this.ctx.strokeRect(blockX, blockY, blockSize, blockSize);
+            }
+            
+            // Reset line dash
+            this.ctx.setLineDash([]);
+            this.ctx.globalAlpha = 1.0;
+        } else {
+            this.ctx.globalAlpha = 1.0;
+
+            for (const block of shape) {
+                const x = (position.x + block.x) * CELL_SIZE;
+                const y = (position.y + block.y) * CELL_SIZE;
+                const blockX = x + 2;
+                const blockY = y + 2;
+                const blockSize = CELL_SIZE - 4;
+
+                this.drawBlock(blockX, blockY, blockSize, color);
+
+                // Draw point value if provided and setting is enabled
+                if (pointValue !== undefined && this.settings.showPointValues) {
+                    // Calculate center of the filled block (accounting for 2px padding)
+                    const blockX = x + 2;
+                    const blockY = y + 2;
+                    const blockSize = CELL_SIZE - 4;
+                    const centerX = blockX + blockSize / 2;
+                    const centerY = blockY + blockSize / 2;
+                    
+                    // Use a semi-transparent white for less contrast
+                    this.ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+                    // Font size should be slightly smaller (about 65% of cell size)
+                    const fontSize = Math.floor(CELL_SIZE * 0.65);
+                    this.ctx.font = `bold ${fontSize}px sans-serif`;
+                    
+                    // Set text alignment for perfect centering
+                    this.ctx.textAlign = 'center';
+                    this.ctx.textBaseline = 'middle';
+                    
+                    // Draw text at exact center
+                    this.ctx.fillText(
+                        pointValue.toString(),
+                        centerX,
+                        centerY
+                    );
+                }
             }
         }
-
-        this.ctx.globalAlpha = 1.0;
     }
 
     /**
@@ -1771,7 +1800,7 @@ export class Renderer {
         if (this.settings.showGrid) {
             this.drawGrid();
         }
-        this.drawBoard(placedBlocks, animatingCells, totalShapesPlaced);
+        this.drawBoard(board, placedBlocks, animatingCells, totalShapesPlaced);
         
         // Draw grid ghost preview if dragging (shows where piece would land on grid)
         // This must be based on effectivePosition (lifted piece), not raw mouse position

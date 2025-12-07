@@ -154,7 +154,11 @@ export class Game {
         const currentTime = Date.now();
         this.animatingCells = this.animatingCells.filter(cell => {
             const elapsed = currentTime - cell.startTime;
-            cell.progress = Math.min(elapsed / this.ANIMATION_DURATION, 1);
+            // Use different duration for explosions vs regular clears
+            const duration = cell.type === 'explosion' 
+                ? ANIMATION_CONFIG.explosionMs 
+                : this.ANIMATION_DURATION;
+            cell.progress = Math.min(elapsed / duration, 1);
             return cell.progress < 1; // Remove completed animations
         });
         
@@ -418,6 +422,17 @@ export class Game {
             const currentTime = Date.now();
             
             for (const block of this.state.placedBlocks) {
+                // Calculate current point value for this block (base + line clear bonuses + level increments)
+                // Include the current clear bonuses (linesCleared) since blocks are being cleared now
+                const placementLevel = Math.floor(block.totalShapesPlacedAtPlacement / GAMEPLAY_CONFIG.shapesPerValueTier);
+                const currentLevel = Math.floor(this.state.totalShapesPlaced / GAMEPLAY_CONFIG.shapesPerValueTier);
+                const levelIncrements = currentLevel - placementLevel;
+                // Include current clear bonuses in the calculation to match displayed value
+                const currentPointValue = block.pointValue + block.lineClearBonuses + linesCleared + (levelIncrements * GAMEPLAY_CONFIG.pointsPerTier);
+                
+                // Determine if this block should explode (point value > explosion threshold)
+                const shouldExplode = currentPointValue > GAMEPLAY_CONFIG.explosionThreshold;
+                
                 for (const cell of block.shape) {
                     const absoluteX = block.position.x + cell.x;
                     const absoluteY = block.position.y + cell.y;
@@ -440,6 +455,9 @@ export class Game {
                         // Use one animation per level (level-based, not cycling)
                         const animationIndex = (this.state.level - 1) % 17;
                         
+                        // Determine animation type based on point value
+                        const animationType = shouldExplode ? 'explosion' : 'clear';
+                        
                         // Add to animating cells with animation index and staggered start time
                         this.animatingCells.push({
                             x: absoluteX,
@@ -447,7 +465,7 @@ export class Game {
                             color: block.color,
                             startTime: currentTime + staggerDelay,
                             progress: 0,
-                            type: 'clear',
+                            type: animationType,
                             animationIndex: animationIndex
                         });
                     }
@@ -524,9 +542,11 @@ export class Game {
 
         // Remove cells from shapes after animation completes
         if (shouldAnimate && this.animatingCells.length > 0) {
+            // Wait for the longest animation to complete (explosions take longer than regular clears)
+            const maxAnimationDuration = Math.max(this.ANIMATION_DURATION, ANIMATION_CONFIG.explosionMs);
             setTimeout(() => {
                 this.removeCellsFromShapes(fullRows, fullColumns);
-            }, this.ANIMATION_DURATION);
+            }, maxAnimationDuration);
         } else {
             // No animations, clean up immediately
             this.removeCellsFromShapes(fullRows, fullColumns);
@@ -685,6 +705,9 @@ export class Game {
 
         // Check for full rows and columns
         this.checkAndClearLines();
+        
+        // Update input handler with current board state (critical for validation after auto-place)
+        this.inputHandler.updateBoard(this.board);
 
         // If required number of shapes have been placed, generate new queue
         if (this.shapesPlacedThisTurn >= GAMEPLAY_CONFIG.shapesPerTurn) {

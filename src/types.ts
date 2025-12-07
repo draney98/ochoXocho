@@ -94,5 +94,6 @@ export interface GameSettings {
     theme: ThemeName;
     mode: GameMode;
     showPointValues: boolean; // Dev setting: show point values on blocks and in queue
+    autoplaceEnabled: boolean; // Enable/disable autoplace button functionality
 }
 

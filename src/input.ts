@@ -88,16 +88,40 @@ export class InputHandler {
     }
 
     /**
-     * Converts screen coordinates to canvas coordinates accounting for CSS scaling
+     * Converts screen event coordinates to normalized canvas coordinates
+     * Uses getBoundingClientRect() to account for CSS scaling
+     * This ensures 1 pixel of movement on screen equals 1 pixel in canvas space
+     * @param event - MouseEvent or TouchEvent
+     * @returns Normalized canvas coordinates {x, y}
      */
-    private screenToCanvas(screenX: number, screenY: number): { x: number; y: number } {
+    private getCanvasCoordinates(event: MouseEvent | TouchEvent): { x: number; y: number } {
         const rect = this.canvas.getBoundingClientRect();
         const scaleX = this.canvas.width / rect.width;
         const scaleY = this.canvas.height / rect.height;
-        return {
-            x: (screenX - rect.left) * scaleX,
-            y: (screenY - rect.top) * scaleY,
-        };
+        
+        // Get client coordinates from event
+        let clientX: number;
+        let clientY: number;
+        
+        if (event instanceof MouseEvent) {
+            clientX = event.clientX;
+            clientY = event.clientY;
+        } else if (event instanceof TouchEvent) {
+            const touch = event.touches[0] || event.changedTouches[0];
+            if (!touch) {
+                return { x: 0, y: 0 };
+            }
+            clientX = touch.clientX;
+            clientY = touch.clientY;
+        } else {
+            return { x: 0, y: 0 };
+        }
+        
+        // Calculate normalized canvas coordinates
+        const x = (clientX - rect.left) * scaleX;
+        const y = (clientY - rect.top) * scaleY;
+        
+        return { x, y };
     }
 
     /**
@@ -107,7 +131,7 @@ export class InputHandler {
     private handleMouseDown(event: MouseEvent): void {
         // Don't allow dragging if game is over
         // (This will be checked via the game state, but we can add an early return)
-        const { x: canvasX, y: canvasY } = this.screenToCanvas(event.clientX, event.clientY);
+        const { x: canvasX, y: canvasY } = this.getCanvasCoordinates(event);
 
         // Check if click is within any queue card under the board
         // Use fixed queue size (3) for hit detection so areas don't move
@@ -179,13 +203,14 @@ export class InputHandler {
     private handleMouseMove(event: MouseEvent): void {
         if (!this.dragState.isDragging || !this.dragState.shape) return;
 
-        const { x: canvasX, y: canvasY } = this.screenToCanvas(event.clientX, event.clientY);
+        const { x: canvasX, y: canvasY } = this.getCanvasCoordinates(event);
 
-        // Update anchor point to follow the finger/cursor exactly
+        // Update anchor point to follow the finger/cursor exactly (normalized canvas coordinates)
         this.dragState.anchorPoint = { x: canvasX, y: canvasY };
         
-        // Calculate effectivePosition: mouse position + lift offset
+        // Calculate effectivePosition: normalized canvas position + lift offset (in canvas pixels)
         // This is the hotspot - the actual position of the lifted piece
+        // Both coordinates are in normalized canvas space, ensuring consistent mapping
         const effectivePosition = {
             x: canvasX,
             y: canvasY - LIFT_OFFSET_PIXELS
@@ -213,12 +238,12 @@ export class InputHandler {
     private handleMouseUp(event: MouseEvent): void {
         if (!this.dragState.isDragging || !this.dragState.shape || !this.dragState.anchorPoint) return;
 
-        // Update anchor to final position
-        const { x: canvasX, y: canvasY } = this.screenToCanvas(event.clientX, event.clientY);
+        // Update anchor to final position (normalized canvas coordinates)
+        const { x: canvasX, y: canvasY } = this.getCanvasCoordinates(event);
         this.dragState.anchorPoint = { x: canvasX, y: canvasY };
 
-        // Calculate effectivePosition: mouse position + lift offset
-        // This is the hotspot - the actual position of the lifted piece
+        // Calculate effectivePosition: normalized canvas position + lift offset (in canvas pixels)
+        // Both coordinates are in normalized canvas space, ensuring consistent mapping
         const effectivePosition = {
             x: canvasX,
             y: canvasY - LIFT_OFFSET_PIXELS
@@ -288,8 +313,7 @@ export class InputHandler {
         event.preventDefault(); // Prevent scrolling
         if (event.touches.length === 0) return;
         
-        const touch = event.touches[0];
-        const { x: canvasX, y: canvasY } = this.screenToCanvas(touch.clientX, touch.clientY);
+        const { x: canvasX, y: canvasY } = this.getCanvasCoordinates(event);
 
         // Check if touch is within any queue card under the board
         // Use fixed queue size (3) for hit detection so areas don't move
@@ -326,20 +350,32 @@ export class InputHandler {
      */
     private handleTouchMove(event: TouchEvent): void {
         event.preventDefault(); // Prevent scrolling
-        if (!this.dragState.isDragging || event.touches.length === 0) return;
+        if (!this.dragState.isDragging || event.touches.length === 0 || !this.dragState.shape) return;
 
-        const touch = event.touches[0];
-        const { x: canvasX, y: canvasY } = this.screenToCanvas(touch.clientX, touch.clientY);
+        const { x: canvasX, y: canvasY } = this.getCanvasCoordinates(event);
 
-        // Update anchor point to follow the finger exactly
-        // Anchor is always in pixel coordinates, never converted to grid during drag
+        // Update anchor point to follow the finger exactly (normalized canvas coordinates)
         this.dragState.anchorPoint = { x: canvasX, y: canvasY };
         
-        // Clear grid position and validation flags during drag
-        // Grid position is only calculated on release
-        this.dragState.hasBoardPosition = false;
-        this.dragState.isValidPosition = false;
-        this.dragState.mousePosition = { x: 0, y: 0 };
+        // Calculate effectivePosition: normalized canvas position + lift offset (in canvas pixels)
+        // Both coordinates are in normalized canvas space, ensuring consistent mapping
+        const effectivePosition = {
+            x: canvasX,
+            y: canvasY - LIFT_OFFSET_PIXELS
+        };
+
+        const gridPos = this.calculateGridPositionFromEffectivePosition(effectivePosition, this.dragState.shape);
+        
+        if (gridPos) {
+            this.dragState.mousePosition = gridPos;
+            this.dragState.hasBoardPosition = true;
+            this.dragState.isValidPosition = canPlaceShape(this.board, this.dragState.shape, gridPos);
+        } else {
+            // Effective position (lifted piece) is outside the board
+            this.dragState.hasBoardPosition = false;
+            this.dragState.isValidPosition = false;
+            this.dragState.mousePosition = { x: 0, y: 0 };
+        }
         this.dragState.previewLinesCleared = undefined;
     }
 
@@ -351,19 +387,16 @@ export class InputHandler {
         event.preventDefault();
         if (!this.dragState.isDragging) return;
 
-        // Update anchor to final position
-        const { x: canvasX, y: canvasY } = this.screenToCanvas(
-            event.changedTouches[0]?.clientX ?? 0, 
-            event.changedTouches[0]?.clientY ?? 0
-        );
+        // Update anchor to final position (normalized canvas coordinates)
+        const { x: canvasX, y: canvasY } = this.getCanvasCoordinates(event);
         this.dragState.anchorPoint = { x: canvasX, y: canvasY };
 
         if (!this.dragState.shape) {
             return;
         }
 
-        // Calculate effectivePosition: mouse position + lift offset
-        // This is the hotspot - the actual position of the lifted piece
+        // Calculate effectivePosition: normalized canvas position + lift offset (in canvas pixels)
+        // Both coordinates are in normalized canvas space, ensuring consistent mapping
         const effectivePosition = {
             x: canvasX,
             y: canvasY - LIFT_OFFSET_PIXELS
