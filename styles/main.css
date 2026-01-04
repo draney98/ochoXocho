@@ -724,6 +724,10 @@ body[data-theme="midnight"] #auto-place-button {
         padding: 0;
     }
     
+    #app {
+        padding: 15px 10px; /* Reduce horizontal padding on mobile */
+    }
+    
     #game-container {
         padding: 0;
         background: transparent;

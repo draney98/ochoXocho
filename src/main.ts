@@ -530,8 +530,11 @@ function updateModeDisplay(mode: GameMode): void {
 
 function setupResponsiveCanvas(canvas: HTMLCanvasElement): void {
     const updateCanvasSize = () => {
+        // Account for #app padding on mobile (10px each side = 20px total)
+        const isMobile = window.innerWidth <= 768;
+        const appPadding = isMobile ? 20 : 0;
         const availableHeight = window.innerHeight - RESPONSIVE_CANVAS_LIMITS.verticalPadding;
-        const availableWidth = window.innerWidth - RESPONSIVE_CANVAS_LIMITS.horizontalPadding;
+        const availableWidth = window.innerWidth - RESPONSIVE_CANVAS_LIMITS.horizontalPadding - appPadding;
         
         // The board itself is square (BOARD_PIXEL_SIZE x BOARD_PIXEL_SIZE = 600x600)
         // The canvas is 600px wide x 820px tall (600px board + 220px queue)
