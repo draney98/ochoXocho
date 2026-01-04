@@ -364,22 +364,31 @@ export class InputHandler {
         const { x: canvasX, y: canvasY } = this.getCanvasCoordinates(event);
         this.dragState.anchorPoint = { x: canvasX, y: canvasY };
 
-        // Calculate grid position directly from cursor (no offsets)
-        const gridPos = this.calculateGridPosition({ x: canvasX, y: canvasY }, this.dragState.shape);
-
-        // Check if cursor is over the board and placement is valid
+        // Check if cursor is over the queue area - if so, always restore to queue
+        const isOverQueueArea = canvasY >= BOARD_OFFSET_Y + BOARD_PIXEL_SIZE && canvasY <= CANVAS_HEIGHT;
+        
+        // Only allow placement on the playing surface (board area with valid empty cells)
         let shapePlaced = false;
-        if (gridPos && canvasX >= 0 && canvasX < BOARD_PIXEL_SIZE && 
-            canvasY >= 0 && canvasY < BOARD_PIXEL_SIZE) {
-            
-            if (canPlaceShape(this.board, this.dragState.shape, gridPos)) {
-                // Pass -1 as shapeIndex since shape was already removed from queue
-                this.onPlaceShape(-1, gridPos);
-                shapePlaced = true;
+        if (!isOverQueueArea) {
+            // Calculate grid position directly from cursor (accounting for board offset)
+            const gridPos = this.calculateGridPosition({ x: canvasX, y: canvasY }, this.dragState.shape);
+
+            // Check if cursor is over the board area and placement is valid
+            const adjustedX = canvasX - BOARD_OFFSET_X;
+            const adjustedY = canvasY - BOARD_OFFSET_Y;
+            if (gridPos && adjustedX >= 0 && adjustedX < BOARD_PIXEL_SIZE && 
+                adjustedY >= 0 && adjustedY < BOARD_PIXEL_SIZE) {
+                
+                // Only place if the position is valid (empty cells only - canPlaceShape checks this)
+                if (canPlaceShape(this.board, this.dragState.shape, gridPos)) {
+                    // Pass -1 as shapeIndex since shape was already removed from queue
+                    this.onPlaceShape(-1, gridPos);
+                    shapePlaced = true;
+                }
             }
         }
 
-        // If shape wasn't placed (invalid position or outside board), restore it to queue
+        // If shape wasn't placed (invalid position, over queue area, or outside board), restore it to queue
         if (!shapePlaced && this.dragState.shape && this.originalQueueIndex >= 0) {
             this.onRestoreToQueue(this.originalQueueIndex, this.dragState.shape);
         }
@@ -565,22 +574,31 @@ export class InputHandler {
             return;
         }
 
-        // Calculate grid position directly from cursor (no offsets)
-        const gridPos = this.calculateGridPosition({ x: canvasX, y: canvasY }, this.dragState.shape);
-
-        // Check if cursor is over the board and placement is valid
+        // Check if cursor is over the queue area - if so, always restore to queue
+        const isOverQueueArea = canvasY >= BOARD_OFFSET_Y + BOARD_PIXEL_SIZE && canvasY <= CANVAS_HEIGHT;
+        
+        // Only allow placement on the playing surface (board area with valid empty cells)
         let shapePlaced = false;
-        if (gridPos && canvasX >= 0 && canvasX < BOARD_PIXEL_SIZE && 
-            canvasY >= 0 && canvasY < BOARD_PIXEL_SIZE) {
-            
-            if (canPlaceShape(this.board, this.dragState.shape, gridPos)) {
-                // Pass -1 as shapeIndex since shape was already removed from queue
-                this.onPlaceShape(-1, gridPos);
-                shapePlaced = true;
+        if (!isOverQueueArea) {
+            // Calculate grid position directly from cursor (accounting for board offset)
+            const gridPos = this.calculateGridPosition({ x: canvasX, y: canvasY }, this.dragState.shape);
+
+            // Check if cursor is over the board area and placement is valid
+            const adjustedX = canvasX - BOARD_OFFSET_X;
+            const adjustedY = canvasY - BOARD_OFFSET_Y;
+            if (gridPos && adjustedX >= 0 && adjustedX < BOARD_PIXEL_SIZE && 
+                adjustedY >= 0 && adjustedY < BOARD_PIXEL_SIZE) {
+                
+                // Only place if the position is valid (empty cells only - canPlaceShape checks this)
+                if (canPlaceShape(this.board, this.dragState.shape, gridPos)) {
+                    // Pass -1 as shapeIndex since shape was already removed from queue
+                    this.onPlaceShape(-1, gridPos);
+                    shapePlaced = true;
+                }
             }
         }
 
-        // If shape wasn't placed (invalid position or outside board), restore it to queue
+        // If shape wasn't placed (invalid position, over queue area, or outside board), restore it to queue
         if (!shapePlaced && this.dragState.shape && this.originalQueueIndex >= 0) {
             this.onRestoreToQueue(this.originalQueueIndex, this.dragState.shape);
         }

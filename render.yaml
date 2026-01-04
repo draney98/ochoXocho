@@ -4,6 +4,10 @@ services:
     env: static
     buildCommand: npm install && npm run build
     staticPublishPath: ./dist
+    # IMPORTANT: Add environment variable in Render dashboard:
+    # Key: VITE_API_BASE_URL
+    # Value: https://your-backend-service.onrender.com
+    # (Replace with your actual backend service URL)
     headers:
       - path: /*
         name: X-Content-Type-Options

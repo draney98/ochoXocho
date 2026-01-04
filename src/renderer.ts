@@ -37,7 +37,7 @@ export class Renderer {
     private blockIconImage: HTMLImageElement | null = null;
     private blockIconLoaded: boolean = false;
     private copyLinkBounds: { x: number; y: number; width: number; height: number } | null = null; // Bounds for copy link click detection
-    private copyLinkText: string = '📋 Copy'; // Current text for copy link
+    private copyLinkText: string = 'Copy'; // Current text for copy link (emoji removed)
 
     constructor(canvas: HTMLCanvasElement, settings: GameSettings) {
         this.canvas = canvas;
@@ -67,7 +67,7 @@ export class Renderer {
                         this.copyLinkText = '✓ Copied';
                         // Reset back to "Copy" after 2 seconds
                         setTimeout(() => {
-                            this.copyLinkText = '📋 Copy';
+                            this.copyLinkText = 'Copy';
                         }, 2000);
                     }
                 });
@@ -88,7 +88,7 @@ export class Renderer {
                         this.copyLinkText = '✓ Copied';
                         // Reset back to "Copy" after 2 seconds
                         setTimeout(() => {
-                            this.copyLinkText = '📋 Copy';
+                            this.copyLinkText = 'Copy';
                         }, 2000);
                     }
                 });
@@ -227,7 +227,7 @@ export class Renderer {
         this.finalLinesCleared = 0;
         this.finalLevel = 1;
         this.copyLinkBounds = null;
-        this.copyLinkText = '📋 Copy'; // Reset copy link text
+        this.copyLinkText = 'Copy'; // Reset copy link text
     }
 
     /**
@@ -1497,136 +1497,105 @@ export class Renderer {
      * @param placedBlocks - Final board state to render as 4x4 grid
      */
     drawGameOver(progress: number = 1, placedBlocks: PlacedBlock[] = [], leaderboardRank: number | null = null): void {
-        // Animated overlay - fade in from 0 to 0.8 opacity
+        // Animated overlay - fade in from 0 to 0.8 opacity (cover the entire playing surface)
         const overlayAlpha = 0.8 * progress;
         this.ctx.fillStyle = `rgba(0, 0, 0, ${overlayAlpha})`;
-        this.ctx.fillRect(0, 0, BOARD_PIXEL_SIZE, BOARD_PIXEL_SIZE);
+        this.ctx.fillRect(BOARD_OFFSET_X, BOARD_OFFSET_Y, BOARD_PIXEL_SIZE, BOARD_PIXEL_SIZE);
 
-        // Animated text - fade in and scale up
         const textAlpha = progress;
-        const textScale = 0.5 + (progress * 0.5); // Scale from 0.5 to 1.0
-        
+        const centerX = BOARD_OFFSET_X + BOARD_PIXEL_SIZE / 2;
+        const baseFont = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+        let currentY = BOARD_OFFSET_Y + 30; // Start position
+
+        // Draw "GAME OVER" text - 100% larger than 27px (27px * 2 = 54px) and bold
         this.ctx.save();
         this.ctx.globalAlpha = textAlpha;
-        this.ctx.translate(BOARD_PIXEL_SIZE / 2, BOARD_PIXEL_SIZE / 2);
-        this.ctx.scale(textScale, textScale);
-        this.ctx.translate(-BOARD_PIXEL_SIZE / 2, -BOARD_PIXEL_SIZE / 2);
-
-        // Game over text with glow effect - positioned at top (larger font for title, increased by 20%)
+        this.ctx.font = `bold 54px ${baseFont}`;
         this.ctx.fillStyle = '#fff';
-        this.ctx.font = 'bold 48px sans-serif'; // 40px * 1.2 = 48px
         this.ctx.textAlign = 'center';
-        this.ctx.textBaseline = 'middle';
-        
-        // Add text shadow for glow
-        this.ctx.shadowColor = '#ff6b6b';
-        this.ctx.shadowBlur = 20;
-        this.ctx.fillText('GAME OVER', BOARD_OFFSET_X + BOARD_PIXEL_SIZE / 2, BOARD_OFFSET_Y + 40);
-        
-        // Reset shadow
-        this.ctx.shadowBlur = 0;
-        
+        this.ctx.textBaseline = 'top';
+        this.ctx.fillText('GAME OVER', centerX, currentY);
         this.ctx.restore();
+        
+        currentY += 54 + 28; // Space after "GAME OVER" (text height + blank line height)
 
         // Draw the emoji board representation if we have final board state
+        // Emoji colors already match the last level completed (via generateEmojiBoard using finalLevel)
         if (progress > 0 && this.finalBoardState && this.finalBoardState.length > 0) {
+            // Generate emoji board text (just the grid, no stats)
+            const emojiText = this.generateEmojiBoard();
+            const lines = emojiText.split('\n').filter(line => line.trim() !== '' && !line.includes('Score:') && !line.includes('Lines:') && !line.includes('Level:'));
+            
             this.ctx.save();
             this.ctx.globalAlpha = progress;
-            
-            // Generate emoji board text
-            const emojiText = this.generateEmojiBoard();
-            
-            // Draw emoji text centered - increased by 20% (14px * 1.2 = 16.8px, rounded to 17px)
-            this.ctx.font = '17px sans-serif';
+            // Emoji grid 30% larger (18px * 1.3 = 23.4px, round to 23px)
+            this.ctx.font = `23px ${baseFont}`;
             this.ctx.fillStyle = '#fff';
             this.ctx.textAlign = 'center';
             this.ctx.textBaseline = 'top';
             
-            // Split emoji text into lines and draw each line
-            const lines = emojiText.split('\n');
-            const lineHeight = 24; // Increased line height for better spacing
-            // Position emoji board to fill more of the center area
-            const emojiStartY = 100; // Start below "GAME OVER" text
-            const totalEmojiHeight = lines.length * lineHeight;
-            const availableHeight = BOARD_PIXEL_SIZE - emojiStartY - 120; // Leave room for bottom text
-            const scale = Math.min(1.5, availableHeight / totalEmojiHeight); // Scale up to fill space
-            
-            this.ctx.save();
-            this.ctx.translate(BOARD_PIXEL_SIZE / 2, emojiStartY);
-            this.ctx.scale(scale, scale);
-            this.ctx.translate(-BOARD_PIXEL_SIZE / 2, -emojiStartY);
-            
+            // Simple drawing - no scaling, no clipping, just draw the lines
+            const lineHeight = 28; // Increased for larger font
             lines.forEach((line, index) => {
-                const y = emojiStartY + index * lineHeight;
-                this.ctx.fillText(line, BOARD_PIXEL_SIZE / 2, y);
+                this.ctx.fillText(line, centerX, currentY + index * lineHeight);
             });
             
             this.ctx.restore();
+            currentY += lines.length * lineHeight + 25; // Space after emoji board
+        }
+
+        // Draw score, lines, and level - 30% larger (18px * 1.3 = 23.4px, round to 23px)
+        this.ctx.save();
+        this.ctx.globalAlpha = textAlpha;
+        this.ctx.font = `23px ${baseFont}`;
+        this.ctx.fillStyle = '#fff';
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'top';
+        const statsText = `Score: ${this.finalScore.toLocaleString()}, Lines: ${this.finalLinesCleared}, Level: ${this.finalLevel}`;
+        this.ctx.fillText(statsText, centerX, currentY);
+        this.ctx.restore();
+        
+        currentY += 40; // Space after stats
+        
+        // Draw leaderboard rank (if in top 10) - before copy button
+        const hasLeaderboardRank = leaderboardRank !== null && leaderboardRank <= 10;
+        if (hasLeaderboardRank) {
+            this.ctx.save();
+            this.ctx.globalAlpha = textAlpha;
+            this.ctx.font = `23px ${baseFont}`; // Same size as stats
+            this.ctx.fillStyle = '#FFD700';
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'top';
+            const rankText = `🏆 Rank #${leaderboardRank} on Leaderboard! 🏆`;
+            this.ctx.fillText(rankText, centerX, currentY);
             this.ctx.restore();
-            
-            // Draw copy button below the emoji board (increased by 20%)
+            currentY += 40; // Space after rank
+        }
+
+        // Draw copy button at the bottom of the screen
+        if (progress > 0 && this.finalBoardState && this.finalBoardState.length > 0) {
             this.ctx.save();
             this.ctx.globalAlpha = progress;
-            this.ctx.font = '17px sans-serif'; // 14px * 1.2 = 16.8px, rounded to 17px
+            this.ctx.font = `23px ${baseFont}`; // Same size as stats
             this.ctx.fillStyle = '#4ECDC4';
             this.ctx.textAlign = 'center';
-            this.ctx.textBaseline = 'middle';
-            const copyLinkY = emojiStartY + totalEmojiHeight * scale + 15;
-            this.ctx.fillText(this.copyLinkText, BOARD_OFFSET_X + BOARD_PIXEL_SIZE / 2, copyLinkY);
+            this.ctx.textBaseline = 'bottom'; // Align to bottom
+            const copyY = BOARD_OFFSET_Y + BOARD_PIXEL_SIZE - 20; // 20px from bottom
+            this.ctx.fillText(this.copyLinkText, centerX, copyY);
             
             // Store bounds for click detection
             const textMetrics = this.ctx.measureText(this.copyLinkText);
             this.copyLinkBounds = {
-                x: BOARD_OFFSET_X + BOARD_PIXEL_SIZE / 2 - textMetrics.width / 2,
-                y: copyLinkY - 10,
+                x: centerX - textMetrics.width / 2,
+                y: copyY - 20,
                 width: textMetrics.width,
-                height: 20
+                height: 25
             };
             
             this.ctx.restore();
         } else {
             this.copyLinkBounds = null;
         }
-        
-        // Leaderboard rank message (if in top 10) - positioned above restart prompt
-        const hasLeaderboardRank = leaderboardRank !== null && leaderboardRank <= 10;
-        if (hasLeaderboardRank) {
-            this.ctx.save();
-            this.ctx.globalAlpha = textAlpha;
-            this.ctx.font = 'bold 17px sans-serif'; // 14px * 1.2 = 16.8px, rounded to 17px
-            this.ctx.fillStyle = '#FFD700';
-            this.ctx.textAlign = 'center';
-            this.ctx.textBaseline = 'middle';
-            
-            // Add text shadow for glow
-            this.ctx.shadowColor = '#FFD700';
-            this.ctx.shadowBlur = 12;
-            
-            const rankText = `🏆 Rank #${leaderboardRank} on Leaderboard! 🏆`;
-            this.ctx.fillText(
-                rankText,
-                BOARD_OFFSET_X + BOARD_PIXEL_SIZE / 2,
-                BOARD_OFFSET_Y + BOARD_PIXEL_SIZE - 60
-            );
-            
-            // Reset shadow
-            this.ctx.shadowBlur = 0;
-            this.ctx.restore();
-        }
-        
-        // Restart prompt - positioned at bottom (increased by 20%)
-        this.ctx.save();
-        this.ctx.globalAlpha = textAlpha;
-        this.ctx.font = '17px sans-serif'; // 14px * 1.2 = 16.8px, rounded to 17px
-        this.ctx.fillStyle = '#4ECDC4';
-        this.ctx.textAlign = 'center';
-        this.ctx.textBaseline = 'middle';
-            this.ctx.fillText(
-                'Use the Restart button to play again',
-                BOARD_OFFSET_X + BOARD_PIXEL_SIZE / 2,
-                BOARD_OFFSET_Y + BOARD_PIXEL_SIZE - 30
-            );
-        this.ctx.restore();
     }
 
     /**
@@ -1678,8 +1647,8 @@ export class Renderer {
         // Calculate 4x4 grid size and position (centered below game over text)
         const gridSize = 160; // Increased size for better visibility
         const cellSize = gridSize / 4;
-        const gridX = BOARD_PIXEL_SIZE / 2 - gridSize / 2;
-        const gridY = 150; // Below the "GAME OVER" text
+        const gridX = BOARD_OFFSET_X + BOARD_PIXEL_SIZE / 2 - gridSize / 2;
+        const gridY = BOARD_OFFSET_Y + 150; // Below the "GAME OVER" text
 
         this.ctx.save();
         // Use full opacity (not affected by progress) so grid is always visible
