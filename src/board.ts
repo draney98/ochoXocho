@@ -27,9 +27,11 @@ export class Board {
      * @returns True if the cell is empty (within bounds and not filled)
      */
     isCellEmpty(pos: Position): boolean {
+        // Always check bounds first
         if (pos.x < 0 || pos.x >= BOARD_SIZE || pos.y < 0 || pos.y >= BOARD_SIZE) {
             return false;
         }
+        // Directly access the grid - no caching, always fresh
         return !this.grid[pos.y][pos.x];
     }
 

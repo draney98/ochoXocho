@@ -25,10 +25,19 @@ A complete block placement puzzle game built with TypeScript, HTML Canvas, and s
 npm install
 ```
 
-2. Start the development server:
+2. Start the development server (starts both frontend and backend):
 ```bash
 npm run dev
 ```
+
+   This will start:
+   - Frontend dev server (usually on `http://localhost:5173`)
+   - Backend API server (on `http://localhost:3000`)
+
+   **Note**: For the leaderboard to work, create a `.env` file in the project root with:
+   ```
+   VITE_API_BASE_URL=http://localhost:3000
+   ```
 
 3. Open your browser and navigate to the URL shown in the terminal (typically `http://localhost:5173`)
 

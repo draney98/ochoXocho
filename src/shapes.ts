@@ -313,10 +313,26 @@ function getRandomShape(weightedForEasy: boolean = false): Shape {
 /**
  * Generates three random shapes for the player's queue
  * Each shape is randomly rotated
- * @returns An array of 3 shapes
+ * @returns An array of 3 shapes (guaranteed to have 3 valid shapes)
  */
 export function generateShapes(): Shape[] {
-    return [getRandomShape(), getRandomShape(), getRandomShape()];
+    const shapes: Shape[] = [];
+    for (let i = 0; i < 3; i++) {
+        const shape = getRandomShape();
+        // Validate shape is not empty
+        if (!shape || !Array.isArray(shape) || shape.length === 0) {
+            console.error(`[SHAPES] Generated invalid shape at index ${i}, retrying...`);
+            // Retry once
+            const retryShape = getRandomShape();
+            if (!retryShape || !Array.isArray(retryShape) || retryShape.length === 0) {
+                throw new Error(`[SHAPES] Failed to generate valid shape after retry. This should never happen.`);
+            }
+            shapes.push(retryShape);
+        } else {
+            shapes.push(shape);
+        }
+    }
+    return shapes;
 }
 
 /**
@@ -475,7 +491,31 @@ export function generateEasyShapes(board: Board): Shape[] {
     // If we couldn't generate all 3 pieces, fill remaining slots with random pieces
     while (hand.length < 3) {
         // Use completely random (not weighted) for fallback
-        hand.push(getRandomShape(false));
+        const fallbackShape = getRandomShape(false);
+        // Validate fallback shape is valid
+        if (!fallbackShape || !Array.isArray(fallbackShape) || fallbackShape.length === 0) {
+            console.error(`[SHAPES] Fallback shape generation failed, retrying...`);
+            // Retry once
+            const retryShape = getRandomShape(false);
+            if (!retryShape || !Array.isArray(retryShape) || retryShape.length === 0) {
+                throw new Error(`[SHAPES] Failed to generate valid fallback shape after retry. This should never happen.`);
+            }
+            hand.push(retryShape);
+        } else {
+            hand.push(fallbackShape);
+        }
+    }
+    
+    // Final validation - ensure we have exactly 3 valid shapes
+    if (hand.length !== 3) {
+        throw new Error(`[SHAPES] generateEasyShapes returned ${hand.length} shapes instead of 3. This should never happen.`);
+    }
+    
+    // Validate all shapes are non-empty arrays
+    for (let i = 0; i < hand.length; i++) {
+        if (!hand[i] || !Array.isArray(hand[i]) || hand[i].length === 0) {
+            throw new Error(`[SHAPES] Shape at index ${i} is invalid. This should never happen.`);
+        }
     }
     
     return hand;

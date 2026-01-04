@@ -121,8 +121,9 @@ body {
     flex-direction: column;
     align-items: center;
     width: 100%;
-    padding-top: 0;
-    margin-top: 0;
+    padding: 15px 15px 15px 15px; /* Add padding on all sides */
+    margin: 0;
+    box-sizing: border-box;
 }
 
 #game-container {
@@ -142,10 +143,13 @@ body {
     flex-direction: column;
     gap: 5px;
     margin-bottom: 5px;
-    margin-top: 0;
+    margin-top: 10px; /* Increased space above */
     padding-top: 0;
     width: 600px; /* Match board width, will be updated dynamically */
     max-width: 100%;
+    padding-left: 10px; /* Add left padding */
+    padding-right: 10px; /* Add right padding */
+    box-sizing: border-box;
 }
 
 #top-stats-row-1 {
@@ -278,16 +282,23 @@ body {
     gap: 10px;
     width: 600px; /* Match board width, will be updated dynamically */
     max-width: 100%;
-    margin-top: 15px;
+    margin-top: 8px; /* Reduced space between scoring text and buttons */
+    margin-bottom: 0;
+    padding-left: 10px; /* Add left padding */
+    padding-right: 10px; /* Add right padding */
+    box-sizing: border-box;
 }
 
 #restart-button,
 #auto-place-button,
-#settings-button {
+#settings-button,
+#leaderboard-button,
+#debug-reset-button {
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: 4px;
     flex: 1;
     padding: 12px 24px;
     background: var(--accent-color);
@@ -299,6 +310,37 @@ body {
     cursor: pointer;
     transition: background 0.2s ease, transform 0.1s ease;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.button-icon-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+}
+
+.button-text-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    font-size: inherit;
+}
+
+.button-icon-row svg {
+    width: 20px;
+    height: 20px;
+}
+
+.button-icon-row span {
+    font-size: 20px;
+    line-height: 1;
+}
+
+#debug-reset-button {
+    background: #ff6b6b; /* Red color to indicate debug button */
+    flex: 0 0 auto; /* Don't flex, fixed size */
+    min-width: 100px;
 }
 
 body[data-theme="midnight"] #restart-button {
@@ -321,31 +363,32 @@ body[data-theme="midnight"] #auto-place-button {
     color: var(--restart-button-text, #0f2027);
 }
 
-#restart-button .restart-icon,
-#settings-button svg {
-    width: 20px;
-    height: 20px;
-    flex-shrink: 0;
-}
+/* Icon sizes are now handled by .button-icon-row svg */
 
 #restart-button:hover,
 #auto-place-button:hover,
-#settings-button:hover {
+#settings-button:hover,
+#leaderboard-button:hover {
     background: var(--button-hover);
     transform: translateY(-1px);
 }
 
 #restart-button:active,
 #auto-place-button:active,
-#settings-button:active {
+#settings-button:active,
+#leaderboard-button:active {
     background: var(--button-active);
     transform: translateY(0);
 }
 
 #high-scores {
     margin-top: 15px;
+    margin-bottom: 10px; /* Increased space below */
     width: 600px; /* Match board width, will be updated dynamically */
     max-width: 100%;
+    padding-left: 10px; /* Add left padding */
+    padding-right: 10px; /* Add right padding */
+    box-sizing: border-box;
 }
 
 #high-scores-row {
@@ -397,7 +440,8 @@ body[data-theme="midnight"] #auto-place-button {
 
 /* Settings button styling is now combined with restart button above */
 
-#settings-backdrop {
+#settings-backdrop,
+#leaderboard-backdrop {
     position: fixed;
     inset: 0;
     background: rgba(0, 0, 0, 0.35);
@@ -407,12 +451,14 @@ body[data-theme="midnight"] #auto-place-button {
     z-index: 15;
 }
 
-#settings-backdrop.is-visible {
+#settings-backdrop.is-visible,
+#leaderboard-backdrop.is-visible {
     opacity: 1;
     pointer-events: auto;
 }
 
-#settings-panel {
+#settings-panel,
+#leaderboard-panel {
     position: fixed;
     top: 50%;
     right: 20px;
@@ -430,7 +476,8 @@ body[data-theme="midnight"] #auto-place-button {
     max-height: 90vh;
 }
 
-#settings-panel.is-visible {
+#settings-panel.is-visible,
+#leaderboard-panel.is-visible {
     transform: translate(0, -50%);
 }
 
@@ -446,7 +493,8 @@ body[data-theme="midnight"] #auto-place-button {
     color: var(--panel-text-color);
 }
 
-#close-settings-button {
+#close-settings-button,
+#close-leaderboard-button {
     border: none;
     background: transparent;
     color: var(--muted-text-color);
@@ -457,7 +505,8 @@ body[data-theme="midnight"] #auto-place-button {
     transition: color 0.2s ease;
 }
 
-#close-settings-button:hover {
+#close-settings-button:hover,
+#close-leaderboard-button:hover {
     color: var(--panel-text-color);
 }
 
@@ -496,6 +545,146 @@ body[data-theme="midnight"] #auto-place-button {
     opacity: 0.5;
     cursor: not-allowed;
     background: rgba(var(--panel-bg), 0.5);
+}
+
+.settings-row input[type="text"] {
+    border: 1px solid var(--control-border);
+    border-radius: 6px;
+    padding: 6px 10px;
+    background: var(--panel-bg);
+    color: var(--panel-text-color);
+    font-size: 14px;
+    min-width: 140px;
+    flex: 1;
+    max-width: 200px;
+}
+
+/* Arcade-style 3-character player name input */
+#setting-player-name {
+    font-family: 'Courier New', monospace;
+    font-weight: bold;
+    letter-spacing: 0.2em;
+    text-align: center;
+    width: 80px !important;
+    min-width: 80px !important;
+    max-width: 80px !important;
+    flex: 0 0 80px !important;
+}
+
+#leaderboard-section {
+    margin-top: 24px;
+    padding-top: 24px;
+    border-top: 1px solid var(--control-border);
+}
+
+#leaderboard-section h3 {
+    font-size: 18px;
+    color: var(--panel-text-color);
+    margin-bottom: 12px;
+}
+
+#leaderboard-mode-selector {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+#leaderboard-period-selector {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.leaderboard-mode-btn,
+.leaderboard-period-btn {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid var(--control-border);
+    border-radius: 6px;
+    background: var(--panel-bg);
+    color: var(--muted-text-color);
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.leaderboard-mode-btn:hover,
+.leaderboard-period-btn:hover {
+    background: rgba(var(--accent-color), 0.1);
+}
+
+.leaderboard-mode-btn.active,
+.leaderboard-period-btn.active {
+    background: var(--accent-color);
+    color: var(--accent-color-contrast);
+    border-color: var(--accent-color);
+}
+
+#leaderboard-container {
+    /* No fixed height - grows to fit content */
+    overflow: visible;
+}
+
+#leaderboard-loading,
+#leaderboard-error {
+    text-align: center;
+    padding: 20px;
+    color: var(--muted-text-color);
+    font-size: 14px;
+}
+
+#leaderboard-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px; /* Tighter spacing between rows */
+}
+
+.leaderboard-entry {
+    display: grid;
+    grid-template-columns: 45px 50px 1fr 90px;
+    gap: 8px; /* Reduced gap between columns */
+    padding: 6px 10px; /* Reduced vertical padding for tighter rows */
+    background: rgba(var(--accent-color), 0.05);
+    border-radius: 6px;
+    font-size: 14px;
+    align-items: center;
+}
+
+.leaderboard-rank {
+    font-weight: bold;
+    color: var(--accent-color);
+    text-align: left;
+}
+
+.leaderboard-name {
+    color: var(--panel-text-color);
+    font-family: 'Courier New', monospace;
+    font-weight: bold;
+    letter-spacing: 0.1em;
+    text-align: center;
+    overflow: visible;
+    white-space: nowrap;
+}
+
+.leaderboard-score {
+    font-weight: bold;
+    color: var(--panel-text-color);
+    text-align: right;
+    padding-right: 8px;
+}
+
+.leaderboard-date {
+    color: var(--muted-text-color);
+    font-size: 12px;
+    text-align: right;
+    white-space: nowrap;
+}
+
+.leaderboard-empty {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--muted-text-color);
+    font-size: 14px;
 }
 
 /* Prevent landscape orientation on mobile */
@@ -564,15 +753,19 @@ body[data-theme="midnight"] #auto-place-button {
     }
     
     #restart-button,
-    #settings-button {
+    #settings-button,
+    #leaderboard-button {
         padding: 10px 16px;
         font-size: 14px;
     }
     
-    #restart-button .restart-icon,
-    #settings-button svg {
+    .button-icon-row svg {
         width: 16px;
         height: 16px;
+    }
+    
+    .button-icon-row span {
+        font-size: 16px;
     }
     
     /* Canvas size is controlled by JavaScript to maintain square board */

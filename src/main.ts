@@ -3,8 +3,9 @@
  */
 
 import { Game } from './game';
-import { GameSettings, ThemeName, GameMode } from './types';
-import { getHighScores, recordScore } from './highScores';
+import { GameSettings, ThemeName, GameMode, LeaderboardEntry } from './types';
+import { getHighScores, recordScore, getLeaderboard } from './highScores';
+import { LeaderboardPeriod } from './api';
 import {
     DEFAULT_SETTINGS,
     STORAGE_KEYS,
@@ -98,6 +99,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const updateHighScoreMode = setupHighScores(game, settingsState);
     const { updateModeSelectState } = setupSettingsControls(game, settingsState, updateHighScoreMode);
+    setupLeaderboardPopup(settingsState);
 
     // Restart button provides explicit control over resetting the board
     const restartButton = document.getElementById('restart-button');
@@ -110,15 +112,51 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Auto-place button automatically places all three pieces
-    const autoPlaceButton = document.getElementById('auto-place-button');
+    const autoPlaceButton = document.getElementById('auto-place-button') as HTMLButtonElement | null;
     if (autoPlaceButton) {
+        // Set up callback to enable/disable button based on autoplace state
+        game.setAutoPlaceStateChangeCallback((isPlacing: boolean) => {
+            if (autoPlaceButton) {
+                autoPlaceButton.disabled = isPlacing;
+                autoPlaceButton.style.opacity = isPlacing ? '0.5' : '1';
+                autoPlaceButton.style.cursor = isPlacing ? 'not-allowed' : 'pointer';
+            }
+        });
+
         autoPlaceButton.addEventListener('click', () => {
+            // Prevent double-clicking - check if already placing
+            if (autoPlaceButton.disabled) {
+                return;
+            }
+            
             // Double-check setting before executing (in case setting changed mid-game)
             const currentSettings = loadSettings();
             if (currentSettings.autoplaceEnabled) {
                 game.autoPlacePieces();
             }
         });
+    }
+
+    // Debug button to reset input handler state (only visible in dev mode)
+    const debugButton = document.getElementById('debug-reset-button');
+    if (debugButton) {
+        debugButton.addEventListener('click', () => {
+            game.debugResetInputHandler();
+            console.log('[DEBUG] Input handler reset via debug button');
+        });
+        
+        // Show/hide debug button based on dev mode setting
+        const updateDebugButtonVisibility = () => {
+            const currentSettings = loadSettings();
+            debugButton.style.display = currentSettings.devMode ? '' : 'none';
+        };
+        
+        // Initial visibility
+        updateDebugButtonVisibility();
+        
+        // Update visibility when dev mode setting changes
+        const devModeInput = document.getElementById('setting-dev-mode') as HTMLInputElement | null;
+        devModeInput?.addEventListener('change', updateDebugButtonVisibility);
     }
 });
 
@@ -136,6 +174,8 @@ function setupSettingsControls(game: Game, initialSettings: GameSettings, update
     const modeSelect = document.getElementById('setting-mode') as HTMLSelectElement | null;
     const pointValuesInput = document.getElementById('setting-show-point-values') as HTMLInputElement | null;
     const autoplaceInput = document.getElementById('setting-autoplace-enabled') as HTMLInputElement | null;
+    const playerNameInput = document.getElementById('setting-player-name') as HTMLInputElement | null;
+    const devModeInput = document.getElementById('setting-dev-mode') as HTMLInputElement | null;
 
     // Sync inputs with initial settings so toggles reflect any future default changes
     if (gridInput) gridInput.checked = initialSettings.showGrid;
@@ -146,6 +186,13 @@ function setupSettingsControls(game: Game, initialSettings: GameSettings, update
     if (modeSelect) modeSelect.value = initialSettings.mode;
     if (pointValuesInput) pointValuesInput.checked = initialSettings.showPointValues;
     if (autoplaceInput) autoplaceInput.checked = initialSettings.autoplaceEnabled;
+    if (devModeInput) devModeInput.checked = initialSettings.devMode ?? false;
+    if (playerNameInput) {
+        const playerName = initialSettings.playerName || '   ';
+        // Display only first 3 characters, uppercase
+        playerNameInput.value = playerName.substring(0, 3).toUpperCase();
+    }
+
 
     const pushToGame = () => {
         const themeValue = (themeSelect?.value as ThemeName) ?? initialSettings.theme;
@@ -167,10 +214,13 @@ function setupSettingsControls(game: Game, initialSettings: GameSettings, update
             mode: modeValue,
             showPointValues: pointValuesInput?.checked ?? false,
             autoplaceEnabled: autoplaceInput?.checked ?? true,
+            playerName: (playerNameInput?.value.trim().substring(0, 3).toUpperCase() || '').padEnd(3, ' '),
+            devMode: devModeInput?.checked ?? true, // Default to true
         };
         game.updateSettings(updatedSettings);
         saveSettings(updatedSettings); // Save to localStorage
         updateAutoplaceButtonVisibility(updatedSettings.autoplaceEnabled);
+        
     };
     
     /**
@@ -210,8 +260,32 @@ function setupSettingsControls(game: Game, initialSettings: GameSettings, update
     setInterval(updateModeSelectState, 500);
     updateModeSelectState(); // Initial check
 
-    [gridInput, ghostInput, animationInput, soundInput, pointValuesInput, autoplaceInput].forEach(input => {
-        input?.addEventListener('change', pushToGame);
+    [gridInput, ghostInput, animationInput, soundInput, pointValuesInput, autoplaceInput, devModeInput].forEach(input => {
+        input?.addEventListener('change', () => {
+            pushToGame();
+            // Update debug button visibility when dev mode changes
+            if (input === devModeInput) {
+                const debugButton = document.getElementById('debug-reset-button');
+                if (debugButton) {
+                    debugButton.style.display = devModeInput?.checked ? '' : 'none';
+                }
+            }
+        });
+    });
+    
+    // Player name input - update on blur (when user finishes typing)
+    // Limit to 3 characters and convert to uppercase
+    playerNameInput?.addEventListener('input', (e) => {
+        const input = e.target as HTMLInputElement;
+        // Convert to uppercase and limit to 3 characters
+        input.value = input.value.toUpperCase().substring(0, 3);
+    });
+    playerNameInput?.addEventListener('blur', pushToGame);
+    playerNameInput?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            playerNameInput.blur();
+        }
     });
 
     themeSelect?.addEventListener('change', pushToGame);
@@ -261,6 +335,188 @@ function setupSettingsControls(game: Game, initialSettings: GameSettings, update
     return { updateModeSelectState, updateAutoplaceButtonVisibility };
 }
 
+function setupLeaderboardPopup(initialSettings: GameSettings): void {
+    const panel = document.getElementById('leaderboard-panel');
+    const backdrop = document.getElementById('leaderboard-backdrop');
+    const openButton = document.getElementById('leaderboard-button');
+    const closeButton = document.getElementById('close-leaderboard-button');
+
+    const leaderboardContainer = document.getElementById('leaderboard-list');
+    const leaderboardLoading = document.getElementById('leaderboard-loading');
+    const leaderboardError = document.getElementById('leaderboard-error');
+    const leaderboardEasyBtn = document.getElementById('leaderboard-mode-easy');
+    const leaderboardHardBtn = document.getElementById('leaderboard-mode-hard');
+    const leaderboardTodayBtn = document.getElementById('leaderboard-period-today');
+    const leaderboardWeekBtn = document.getElementById('leaderboard-period-week');
+    const leaderboardEverBtn = document.getElementById('leaderboard-period-ever');
+    
+    let currentLeaderboardMode: GameMode = initialSettings.mode;
+    let currentLeaderboardPeriod: LeaderboardPeriod = 'ever';
+    
+    /**
+     * Formats a timestamp to a readable date string
+     */
+    function formatDate(timestamp: number): string {
+        const date = new Date(timestamp);
+        const now = new Date();
+        const diffMs = now.getTime() - date.getTime();
+        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+        
+        if (diffDays === 0) {
+            return 'Today';
+        } else if (diffDays === 1) {
+            return 'Yesterday';
+        } else if (diffDays < 7) {
+            return `${diffDays} days ago`;
+        } else {
+            return date.toLocaleDateString();
+        }
+    }
+    
+    /**
+     * Formats a number with commas
+     */
+    function formatNumber(num: number): string {
+        return num.toLocaleString('en-US');
+    }
+    
+    /**
+     * Escapes HTML to prevent XSS
+     */
+    function escapeHtml(text: string): string {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    /**
+     * Renders the leaderboard entries
+     */
+    function renderLeaderboard(entries: LeaderboardEntry[]): void {
+        if (!leaderboardContainer) return;
+        
+        if (entries.length === 0) {
+            leaderboardContainer.innerHTML = '<div class="leaderboard-empty">No scores yet. Be the first!</div>';
+            return;
+        }
+        
+        const html = entries.map(entry => {
+            return `
+                <div class="leaderboard-entry">
+                    <span class="leaderboard-rank">#${entry.rank}</span>
+                    <span class="leaderboard-name">${escapeHtml((entry.playerName || '   ').substring(0, 3).toUpperCase().padEnd(3, ' '))}</span>
+                    <span class="leaderboard-score">${formatNumber(entry.score)}</span>
+                    <span class="leaderboard-date">${formatDate(entry.timestamp)}</span>
+                </div>
+            `;
+        }).join('');
+        
+        leaderboardContainer.innerHTML = html;
+    }
+    
+    /**
+     * Loads and displays the leaderboard for the current mode and period
+     */
+    async function loadLeaderboard(mode: GameMode, period: LeaderboardPeriod = currentLeaderboardPeriod): Promise<void> {
+        if (!leaderboardContainer || !leaderboardLoading || !leaderboardError) return;
+        
+        currentLeaderboardMode = mode;
+        currentLeaderboardPeriod = period;
+        
+        // Show loading state
+        leaderboardLoading.style.display = 'block';
+        leaderboardError.style.display = 'none';
+        leaderboardContainer.innerHTML = '';
+        
+        // Update mode button states
+        if (leaderboardEasyBtn && leaderboardHardBtn) {
+            leaderboardEasyBtn.classList.toggle('active', mode === 'easy');
+            leaderboardHardBtn.classList.toggle('active', mode === 'hard');
+        }
+        
+        // Update period button states
+        if (leaderboardTodayBtn && leaderboardWeekBtn && leaderboardEverBtn) {
+            leaderboardTodayBtn.classList.toggle('active', period === 'today');
+            leaderboardWeekBtn.classList.toggle('active', period === 'week');
+            leaderboardEverBtn.classList.toggle('active', period === 'ever');
+        }
+        
+        try {
+            console.log(`[LEADERBOARD] Loading leaderboard for mode: ${mode}, period: ${period}`);
+            const entries = await getLeaderboard(mode, period);
+            console.log(`[LEADERBOARD] Received ${entries.length} entries`);
+            leaderboardLoading.style.display = 'none';
+            renderLeaderboard(entries);
+        } catch (error) {
+            console.error('Failed to load leaderboard:', error);
+            leaderboardLoading.style.display = 'none';
+            if (leaderboardError) {
+                leaderboardError.style.display = 'block';
+                leaderboardError.textContent = `Failed to load leaderboard: ${error instanceof Error ? error.message : 'Unknown error'}`;
+            }
+        }
+    }
+    
+    // Set up leaderboard mode selector buttons
+    leaderboardEasyBtn?.addEventListener('click', () => {
+        loadLeaderboard('easy', currentLeaderboardPeriod);
+    });
+    
+    leaderboardHardBtn?.addEventListener('click', () => {
+        loadLeaderboard('hard', currentLeaderboardPeriod);
+    });
+    
+    // Set up leaderboard period selector buttons
+    leaderboardTodayBtn?.addEventListener('click', () => {
+        loadLeaderboard(currentLeaderboardMode, 'today');
+    });
+    
+    leaderboardWeekBtn?.addEventListener('click', () => {
+        loadLeaderboard(currentLeaderboardMode, 'week');
+    });
+    
+    leaderboardEverBtn?.addEventListener('click', () => {
+        loadLeaderboard(currentLeaderboardMode, 'ever');
+    });
+
+    const togglePanel = (open: boolean) => {
+        panel?.classList.toggle('is-visible', open);
+        backdrop?.classList.toggle('is-visible', open);
+        panel?.setAttribute('aria-hidden', open ? 'false' : 'true');
+        backdrop?.setAttribute('aria-hidden', open ? 'false' : 'true');
+        // Prevent body scroll when panel is open on mobile
+        if (open) {
+            document.body.style.overflow = 'hidden';
+            // Load leaderboard when panel opens
+            loadLeaderboard(currentLeaderboardMode, currentLeaderboardPeriod);
+        } else {
+            document.body.style.overflow = '';
+        }
+    };
+
+    openButton?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        togglePanel(true);
+    });
+    closeButton?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        togglePanel(false);
+    });
+    backdrop?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        togglePanel(false);
+    });
+    // Prevent panel clicks from closing the panel
+    panel?.addEventListener('click', (e) => {
+        e.stopPropagation();
+    });
+    document.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && panel?.classList.contains('is-visible')) {
+            togglePanel(false);
+        }
+    });
+}
+
 function applyTheme(theme: ThemeName): void {
     document.body?.setAttribute('data-theme', theme);
 }
@@ -302,10 +558,6 @@ function setupResponsiveCanvas(canvas: HTMLCanvasElement): void {
         
         canvas.style.width = `${scaledWidth}px`;
         canvas.style.height = `${scaledHeight}px`;
-        
-        // Ensure the canvas element itself maintains square aspect ratio for the board portion
-        // The canvas internal size is fixed (600x820), but we need to ensure CSS doesn't distort it
-        // By setting both width and height with the same scale factor, the board stays square
     };
     
     updateCanvasSize();

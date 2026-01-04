@@ -228,3 +228,4 @@ function loadSettings(): GameSettings {
 - Build artifacts go to `dist/` directory
 - Test build before committing: `npm run build`
 
+

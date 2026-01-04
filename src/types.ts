@@ -95,5 +95,18 @@ export interface GameSettings {
     mode: GameMode;
     showPointValues: boolean; // Dev setting: show point values on blocks and in queue
     autoplaceEnabled: boolean; // Enable/disable autoplace button functionality
+    playerName: string; // Player name for high scores
+    devMode: boolean; // Dev setting: enable debug logging and dev features
+}
+
+/**
+ * Represents a leaderboard entry from the backend
+ */
+export interface LeaderboardEntry {
+    rank: number;
+    playerName: string;
+    score: number;
+    timestamp: number;
+    deviceId: string;
 }
 

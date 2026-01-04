@@ -4,7 +4,9 @@
   "description": "Block placement puzzle game",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "concurrently -n \"frontend,backend\" -c \"cyan,magenta\" \"npm run dev:frontend\" \"npm run dev:backend\"",
+    "dev:frontend": "vite",
+    "dev:backend": "cd backend && npm start",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test": "vitest",
@@ -12,12 +14,12 @@
     "test:coverage": "vitest --coverage"
   },
   "devDependencies": {
+    "@vitest/coverage-v8": "^1.0.0",
+    "@vitest/ui": "^1.0.0",
+    "concurrently": "^9.2.1",
+    "jsdom": "^23.0.0",
     "typescript": "^5.2.2",
     "vite": "^5.0.0",
-    "vitest": "^1.0.0",
-    "@vitest/ui": "^1.0.0",
-    "@vitest/coverage-v8": "^1.0.0",
-    "jsdom": "^23.0.0"
+    "vitest": "^1.0.0"
   }
 }
-

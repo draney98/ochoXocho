@@ -17,7 +17,8 @@ const BOARD_SIZE = BOARD_CELL_COUNT;
  * @returns True if the shape can be placed at this position
  */
 export function canPlaceShape(board: Board, shape: Shape, position: Position): boolean {
-    // Check each block in the shape
+    // SIMPLIFIED: Check each block in the shape
+    // This is the single source of truth for validation - no caching, no offsets
     for (const block of shape) {
         const x = position.x + block.x;
         const y = position.y + block.y;
@@ -27,7 +28,7 @@ export function canPlaceShape(board: Board, shape: Shape, position: Position): b
             return false;
         }
 
-        // Check if the cell is empty
+        // Check if the cell is empty - this directly queries the board's current state
         if (!board.isCellEmpty({ x, y })) {
             return false;
         }

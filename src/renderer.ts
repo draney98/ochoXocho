@@ -15,8 +15,9 @@ import {
     QUEUE_AREA_HEIGHT,
     QUEUE_AREA_PADDING,
     QUEUE_ITEM_HEIGHT,
+    BOARD_OFFSET_X,
+    BOARD_OFFSET_Y,
     getQueueItemRect,
-    LIFT_OFFSET_PIXELS,
 } from './constants';
 import { GAMEPLAY_CONFIG, ANIMATION_CONFIG } from './config';
 
@@ -210,7 +211,7 @@ export class Renderer {
     }
 
     /**
-     * Clears the entire canvas
+     * Clears the entire canvas and fills with background color
      */
     clear(): void {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
@@ -396,19 +397,19 @@ export class Renderer {
         this.ctx.strokeStyle = gridColor;
         this.ctx.lineWidth = 1;
 
-        // Draw vertical lines
+        // Draw vertical lines (offset by BOARD_OFFSET_X to center the board)
         for (let x = 0; x <= 8; x++) {
             this.ctx.beginPath();
-            this.ctx.moveTo(x * CELL_SIZE, 0);
-            this.ctx.lineTo(x * CELL_SIZE, BOARD_PIXEL_SIZE);
+            this.ctx.moveTo(BOARD_OFFSET_X + x * CELL_SIZE, BOARD_OFFSET_Y);
+            this.ctx.lineTo(BOARD_OFFSET_X + x * CELL_SIZE, BOARD_OFFSET_Y + BOARD_PIXEL_SIZE);
             this.ctx.stroke();
         }
 
-        // Draw horizontal lines
+        // Draw horizontal lines (offset by BOARD_OFFSET_X to center the board)
         for (let y = 0; y <= 8; y++) {
             this.ctx.beginPath();
-            this.ctx.moveTo(0, y * CELL_SIZE);
-            this.ctx.lineTo(BOARD_PIXEL_SIZE, y * CELL_SIZE);
+            this.ctx.moveTo(BOARD_OFFSET_X, BOARD_OFFSET_Y + y * CELL_SIZE);
+            this.ctx.lineTo(BOARD_OFFSET_X + BOARD_PIXEL_SIZE, BOARD_OFFSET_Y + y * CELL_SIZE);
             this.ctx.stroke();
         }
     }
@@ -540,8 +541,8 @@ export class Renderer {
             this.ctx.setLineDash([4, 4]); // Dashed outline pattern
             
             for (const block of shape) {
-                const x = (position.x + block.x) * CELL_SIZE;
-                const y = (position.y + block.y) * CELL_SIZE;
+                const x = BOARD_OFFSET_X + (position.x + block.x) * CELL_SIZE;
+                const y = BOARD_OFFSET_Y + (position.y + block.y) * CELL_SIZE;
                 const blockX = x + 2;
                 const blockY = y + 2;
                 const blockSize = CELL_SIZE - 4;
@@ -561,8 +562,8 @@ export class Renderer {
             this.ctx.globalAlpha = 1.0;
 
             for (const block of shape) {
-                const x = (position.x + block.x) * CELL_SIZE;
-                const y = (position.y + block.y) * CELL_SIZE;
+                const x = BOARD_OFFSET_X + (position.x + block.x) * CELL_SIZE;
+                const y = BOARD_OFFSET_Y + (position.y + block.y) * CELL_SIZE;
                 const blockX = x + 2;
                 const blockY = y + 2;
                 const blockSize = CELL_SIZE - 4;
@@ -747,8 +748,8 @@ export class Renderer {
                     const highlightColor = colors.highlight;
                     const borderColor = colors.border;
                     
-                    const cellX = x * CELL_SIZE;
-                    const cellY = row * CELL_SIZE;
+                    const cellX = BOARD_OFFSET_X + x * CELL_SIZE;
+                    const cellY = BOARD_OFFSET_Y + row * CELL_SIZE;
                     const blockX = cellX + 2;
                     const blockY = cellY + 2;
                     const blockSize = CELL_SIZE - 4;
@@ -862,7 +863,7 @@ export class Renderer {
      * @param queue - Array of shapes in the queue
      */
     drawQueue(queue: (Shape | null)[]): void {
-        const queueAreaTop = BOARD_PIXEL_SIZE;
+        const queueAreaTop = BOARD_OFFSET_Y + BOARD_PIXEL_SIZE;
 
         // Get theme colors for queue area (re-read on each render to catch theme changes)
         const queueStripBg = this.getCSSVariable('--queue-strip-bg') || '#f5f5f5';
@@ -954,11 +955,10 @@ export class Renderer {
         const shapeIndex = getShapeIndex(dragState.shape);
         const color = getShapeColor(shapeIndex);
 
-        // Calculate effectivePosition: anchor + lift offset
-        // This is the hotspot - the actual position of the lifted piece
+        // effectivePosition is simply the anchor point (no offset)
         const effectivePosition = {
             x: dragState.anchorPoint.x,
-            y: dragState.anchorPoint.y - LIFT_OFFSET_PIXELS
+            y: dragState.anchorPoint.y
         };
 
         // Draw the visual copy at effectivePosition
@@ -999,8 +999,8 @@ export class Renderer {
      * @param cell - The animating cell to draw
      */
     drawAnimatingCell(cell: AnimatingCell): void {
-        const x = cell.x * CELL_SIZE;
-        const y = cell.y * CELL_SIZE;
+        const x = BOARD_OFFSET_X + cell.x * CELL_SIZE;
+        const y = BOARD_OFFSET_Y + cell.y * CELL_SIZE;
         const isExplosion = cell.type === 'explosion';
         
         if (isExplosion) {
@@ -1496,61 +1496,11 @@ export class Renderer {
      * @param progress - Animation progress from 0 to 1
      * @param placedBlocks - Final board state to render as 4x4 grid
      */
-    drawGameOver(progress: number = 1, placedBlocks: PlacedBlock[] = []): void {
+    drawGameOver(progress: number = 1, placedBlocks: PlacedBlock[] = [], leaderboardRank: number | null = null): void {
         // Animated overlay - fade in from 0 to 0.8 opacity
         const overlayAlpha = 0.8 * progress;
         this.ctx.fillStyle = `rgba(0, 0, 0, ${overlayAlpha})`;
         this.ctx.fillRect(0, 0, BOARD_PIXEL_SIZE, BOARD_PIXEL_SIZE);
-
-        // Draw the emoji board representation if we have final board state
-        if (progress > 0 && this.finalBoardState && this.finalBoardState.length > 0) {
-            this.ctx.save();
-            this.ctx.globalAlpha = progress; // Fade in with overlay
-            
-            // Generate emoji board text
-            const emojiText = this.generateEmojiBoard();
-            
-            // Draw emoji text centered
-            this.ctx.font = 'bold 32px monospace';
-            this.ctx.fillStyle = '#fff';
-            this.ctx.textAlign = 'center';
-            this.ctx.textBaseline = 'top';
-            
-            // Split emoji text into lines and draw each line
-            const lines = emojiText.split('\n');
-            const lineHeight = 40;
-            const startY = BOARD_PIXEL_SIZE / 2 - (lines.length * lineHeight) / 2;
-            
-            lines.forEach((line, index) => {
-                const y = startY + index * lineHeight;
-                this.ctx.fillText(line, BOARD_PIXEL_SIZE / 2, y);
-            });
-            
-            this.ctx.restore();
-            
-            // Draw copy button below the emoji board
-            this.ctx.save();
-            this.ctx.globalAlpha = progress;
-            this.ctx.font = '18px sans-serif';
-            this.ctx.fillStyle = '#4ECDC4';
-            this.ctx.textAlign = 'center';
-            this.ctx.textBaseline = 'middle';
-            const copyLinkY = startY + lines.length * lineHeight + 20;
-            this.ctx.fillText(this.copyLinkText, BOARD_PIXEL_SIZE / 2, copyLinkY);
-            
-            // Store bounds for click detection
-            const textMetrics = this.ctx.measureText(this.copyLinkText);
-            this.copyLinkBounds = {
-                x: BOARD_PIXEL_SIZE / 2 - textMetrics.width / 2,
-                y: copyLinkY - 10,
-                width: textMetrics.width,
-                height: 20
-            };
-            
-            this.ctx.restore();
-        } else {
-            this.copyLinkBounds = null;
-        }
 
         // Animated text - fade in and scale up
         const textAlpha = progress;
@@ -1562,34 +1512,120 @@ export class Renderer {
         this.ctx.scale(textScale, textScale);
         this.ctx.translate(-BOARD_PIXEL_SIZE / 2, -BOARD_PIXEL_SIZE / 2);
 
-        // Game over text with glow effect - positioned at top
+        // Game over text with glow effect - positioned at top (larger font for title, increased by 20%)
         this.ctx.fillStyle = '#fff';
-        this.ctx.font = 'bold 48px sans-serif';
+        this.ctx.font = 'bold 48px sans-serif'; // 40px * 1.2 = 48px
         this.ctx.textAlign = 'center';
         this.ctx.textBaseline = 'middle';
         
         // Add text shadow for glow
         this.ctx.shadowColor = '#ff6b6b';
         this.ctx.shadowBlur = 20;
-        this.ctx.fillText('GAME OVER', BOARD_PIXEL_SIZE / 2, 80);
+        this.ctx.fillText('GAME OVER', BOARD_OFFSET_X + BOARD_PIXEL_SIZE / 2, BOARD_OFFSET_Y + 40);
         
         // Reset shadow
         this.ctx.shadowBlur = 0;
         
         this.ctx.restore();
+
+        // Draw the emoji board representation if we have final board state
+        if (progress > 0 && this.finalBoardState && this.finalBoardState.length > 0) {
+            this.ctx.save();
+            this.ctx.globalAlpha = progress;
+            
+            // Generate emoji board text
+            const emojiText = this.generateEmojiBoard();
+            
+            // Draw emoji text centered - increased by 20% (14px * 1.2 = 16.8px, rounded to 17px)
+            this.ctx.font = '17px sans-serif';
+            this.ctx.fillStyle = '#fff';
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'top';
+            
+            // Split emoji text into lines and draw each line
+            const lines = emojiText.split('\n');
+            const lineHeight = 24; // Increased line height for better spacing
+            // Position emoji board to fill more of the center area
+            const emojiStartY = 100; // Start below "GAME OVER" text
+            const totalEmojiHeight = lines.length * lineHeight;
+            const availableHeight = BOARD_PIXEL_SIZE - emojiStartY - 120; // Leave room for bottom text
+            const scale = Math.min(1.5, availableHeight / totalEmojiHeight); // Scale up to fill space
+            
+            this.ctx.save();
+            this.ctx.translate(BOARD_PIXEL_SIZE / 2, emojiStartY);
+            this.ctx.scale(scale, scale);
+            this.ctx.translate(-BOARD_PIXEL_SIZE / 2, -emojiStartY);
+            
+            lines.forEach((line, index) => {
+                const y = emojiStartY + index * lineHeight;
+                this.ctx.fillText(line, BOARD_PIXEL_SIZE / 2, y);
+            });
+            
+            this.ctx.restore();
+            this.ctx.restore();
+            
+            // Draw copy button below the emoji board (increased by 20%)
+            this.ctx.save();
+            this.ctx.globalAlpha = progress;
+            this.ctx.font = '17px sans-serif'; // 14px * 1.2 = 16.8px, rounded to 17px
+            this.ctx.fillStyle = '#4ECDC4';
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'middle';
+            const copyLinkY = emojiStartY + totalEmojiHeight * scale + 15;
+            this.ctx.fillText(this.copyLinkText, BOARD_OFFSET_X + BOARD_PIXEL_SIZE / 2, copyLinkY);
+            
+            // Store bounds for click detection
+            const textMetrics = this.ctx.measureText(this.copyLinkText);
+            this.copyLinkBounds = {
+                x: BOARD_OFFSET_X + BOARD_PIXEL_SIZE / 2 - textMetrics.width / 2,
+                y: copyLinkY - 10,
+                width: textMetrics.width,
+                height: 20
+            };
+            
+            this.ctx.restore();
+        } else {
+            this.copyLinkBounds = null;
+        }
         
-        // Restart prompt static text for clarity - positioned at bottom
+        // Leaderboard rank message (if in top 10) - positioned above restart prompt
+        const hasLeaderboardRank = leaderboardRank !== null && leaderboardRank <= 10;
+        if (hasLeaderboardRank) {
+            this.ctx.save();
+            this.ctx.globalAlpha = textAlpha;
+            this.ctx.font = 'bold 17px sans-serif'; // 14px * 1.2 = 16.8px, rounded to 17px
+            this.ctx.fillStyle = '#FFD700';
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'middle';
+            
+            // Add text shadow for glow
+            this.ctx.shadowColor = '#FFD700';
+            this.ctx.shadowBlur = 12;
+            
+            const rankText = `🏆 Rank #${leaderboardRank} on Leaderboard! 🏆`;
+            this.ctx.fillText(
+                rankText,
+                BOARD_OFFSET_X + BOARD_PIXEL_SIZE / 2,
+                BOARD_OFFSET_Y + BOARD_PIXEL_SIZE - 60
+            );
+            
+            // Reset shadow
+            this.ctx.shadowBlur = 0;
+            this.ctx.restore();
+        }
+        
+        // Restart prompt - positioned at bottom (increased by 20%)
         this.ctx.save();
         this.ctx.globalAlpha = textAlpha;
-        this.ctx.font = '24px sans-serif';
+        this.ctx.font = '17px sans-serif'; // 14px * 1.2 = 16.8px, rounded to 17px
         this.ctx.fillStyle = '#4ECDC4';
         this.ctx.textAlign = 'center';
         this.ctx.textBaseline = 'middle';
-        this.ctx.fillText(
-            'Use the Restart button to play again',
-            BOARD_PIXEL_SIZE / 2,
-            BOARD_PIXEL_SIZE - 50
-        );
+            this.ctx.fillText(
+                'Use the Restart button to play again',
+                BOARD_OFFSET_X + BOARD_PIXEL_SIZE / 2,
+                BOARD_OFFSET_Y + BOARD_PIXEL_SIZE - 30
+            );
         this.ctx.restore();
     }
 
@@ -1792,7 +1828,8 @@ export class Renderer {
         levelUpProgress: number = 0,
         level: number = 1,
         score: number = 0,
-        linesCleared: number = 0
+        linesCleared: number = 0,
+        leaderboardRank: number | null = null
     ): void {
         // Update current level for highlight color calculation
         this.currentLevel = level;
@@ -1839,7 +1876,7 @@ export class Renderer {
         }
 
         if (gameOver) {
-            this.drawGameOver(gameOverProgress, placedBlocks);
+            this.drawGameOver(gameOverProgress, placedBlocks, leaderboardRank ?? null);
         }
         
         if (levelUpProgress > 0 && levelUpProgress < 1) {

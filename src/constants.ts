@@ -5,12 +5,15 @@
 import { BOARD_CONFIG } from './config';
 
 export const BOARD_CELL_COUNT = BOARD_CONFIG.cellCount;
-export const BOARD_PIXEL_SIZE = 600;
+export const BOARD_PIXEL_SIZE = 540; // Reduced by 10% (was 600)
 export const CELL_SIZE = BOARD_PIXEL_SIZE / BOARD_CELL_COUNT;
+// Canvas width stays at 600 to allow centering the smaller board
+export const CANVAS_WIDTH = 600;
+export const BOARD_OFFSET_X = (CANVAS_WIDTH - BOARD_PIXEL_SIZE) / 2; // Center the board horizontally (30px)
+export const BOARD_OFFSET_Y = 20; // Vertical offset to add space below progress bar
 
 export const QUEUE_AREA_HEIGHT = 220;
-export const CANVAS_WIDTH = BOARD_PIXEL_SIZE;
-export const CANVAS_HEIGHT = BOARD_PIXEL_SIZE + QUEUE_AREA_HEIGHT;
+export const CANVAS_HEIGHT = BOARD_OFFSET_Y + BOARD_PIXEL_SIZE + QUEUE_AREA_HEIGHT;
 
 export const QUEUE_AREA_PADDING = 10; // Reduced buffer
 export const QUEUE_LABEL_HEIGHT = 20; // Reduced
@@ -34,7 +37,7 @@ export function getQueueItemRect(index: number, totalItems: number = 3) {
     const totalWidth = slotWidth * totalItems + gap * (totalItems - 1);
     const startX = (CANVAS_WIDTH - totalWidth) / 2;
     const x = startX + index * (slotWidth + gap);
-    const y = BOARD_PIXEL_SIZE + QUEUE_AREA_PADDING + QUEUE_LABEL_HEIGHT;
+    const y = BOARD_OFFSET_Y + BOARD_PIXEL_SIZE + QUEUE_AREA_PADDING + QUEUE_LABEL_HEIGHT;
 
     return {
         x,

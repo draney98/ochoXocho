@@ -1,8 +1,12 @@
 /**
- * High score tracking system with daily, weekly, and yearly records
+ * High score tracking system with backend integration
+ * Submits scores to backend API and maintains local fallback
  */
 
 import { STORAGE_KEYS, HIGH_SCORE_CONFIG } from './config';
+import { GameMode } from './types';
+import { submitScore, getLeaderboard as fetchLeaderboard, LeaderboardPeriod } from './api';
+import { getDeviceId } from './deviceId';
 
 interface HighScoreEntry {
     score: number;
@@ -67,13 +71,33 @@ function getYearStart(): number {
 }
 
 /**
- * Records a new score if it's a high score
+ * Records a new score by submitting it to the backend API
+ * Also maintains local fallback for offline scenarios
  * @param score - The score to record
  * @param mode - The game mode ('easy' or 'hard')
+ * @param playerName - The player's name (from settings)
+ * @param deviceId - The device ID
+ * @returns Promise resolving to the rank (1-based, or null if not in top 10 or error)
  */
-export function recordScore(score: number, mode: string = 'easy'): void {
-    if (score <= 0) return;
+export async function recordScore(
+    score: number,
+    mode: GameMode,
+    playerName: string,
+    deviceId: string
+): Promise<number | null> {
+    if (score <= 0) return null;
 
+    // Submit to backend API and get rank
+    try {
+        const result = await submitScore(score, mode, playerName, deviceId);
+        if (result.success && result.rank !== undefined && result.rank <= 10) {
+            return result.rank;
+        }
+    } catch (error) {
+        console.warn('Failed to submit score to backend:', error);
+    }
+
+    // Also maintain local fallback for offline scenarios
     const scores = getStoredScores(mode);
     scores.push({
         score,
@@ -84,6 +108,20 @@ export function recordScore(score: number, mode: string = 'easy'): void {
     scores.sort((a, b) => b.score - a.score);
     const topScores = scores.slice(0, HIGH_SCORE_CONFIG.maxEntries);
     saveScores(topScores, mode);
+    
+    // Check local rank (only if in top 10)
+    const localRank = topScores.findIndex(s => s.score === score && s.timestamp === scores[scores.length - 1].timestamp) + 1;
+    return (localRank > 0 && localRank <= 10) ? localRank : null;
+}
+
+/**
+ * Gets the leaderboard from the backend API
+ * @param mode - The game mode ('easy' or 'hard')
+ * @param period - Time period filter ('today', 'week', or 'ever')
+ * @returns Promise resolving to an array of leaderboard entries
+ */
+export async function getLeaderboard(mode: GameMode, period: LeaderboardPeriod = 'ever'): Promise<import('./types').LeaderboardEntry[]> {
+    return fetchLeaderboard(mode, period, 50);
 }
 
 /**

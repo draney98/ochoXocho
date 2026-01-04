@@ -2,15 +2,16 @@
  * Mouse input handling for drag-and-drop operations
  */
 
-import { Position, DragState, Shape } from './types';
+import { Position, DragState, Shape, GameSettings } from './types';
 import { snapToGrid, canPlaceShape } from './validator';
 import { Board } from './board';
 import {
     BOARD_PIXEL_SIZE,
     CELL_SIZE,
     CANVAS_HEIGHT,
+    BOARD_OFFSET_X,
+    BOARD_OFFSET_Y,
     getQueueItemRect,
-    LIFT_OFFSET_PIXELS,
 } from './constants';
 
 /**
@@ -25,6 +26,7 @@ export class InputHandler {
     private board: Board;
     private queue: (Shape | null)[];
     private originalQueueIndex: number = -1; // Track where the shape was originally in the queue
+    private settings: GameSettings;
 
     constructor(
         canvas: HTMLCanvasElement,
@@ -32,7 +34,8 @@ export class InputHandler {
         queue: (Shape | null)[],
         onPlaceShape: (shapeIndex: number, position: Position) => void,
         onRemoveFromQueue: (shapeIndex: number) => void,
-        onRestoreToQueue: (shapeIndex: number, shape: Shape) => void
+        onRestoreToQueue: (shapeIndex: number, shape: Shape) => void,
+        settings: GameSettings
     ) {
         this.canvas = canvas;
         this.board = board;
@@ -40,6 +43,7 @@ export class InputHandler {
         this.onPlaceShape = onPlaceShape;
         this.onRemoveFromQueue = onRemoveFromQueue;
         this.onRestoreToQueue = onRestoreToQueue;
+        this.settings = settings;
         this.dragState = {
             isDragging: false,
             shapeIndex: -1,
@@ -84,7 +88,69 @@ export class InputHandler {
      * @param newBoard - The current board state
      */
     updateBoard(newBoard: Board): void {
+        // CRITICAL: Always use the latest board reference
+        // The board instance is shared, so we need to ensure we're using the same instance
+        // that the Game class is modifying
         this.board = newBoard;
+        
+        // Force validation to re-check if currently dragging
+        // This ensures validation state matches the latest board state
+        if (this.dragState.isDragging && this.dragState.shape && this.dragState.hasBoardPosition) {
+            // Re-validate the current position with the fresh board state
+            // Always re-validate - don't trust cached state
+            // Get a fresh grid copy to ensure we're reading the absolute latest state
+            const grid = this.board.getGrid();
+            const isValid = canPlaceShape(this.board, this.dragState.shape, this.dragState.mousePosition);
+            
+            // In dev mode, log detailed state for debugging
+            if (this.settings.devMode) {
+                console.log(`[BOARD UPDATE] Re-validated position (${this.dragState.mousePosition.x}, ${this.dragState.mousePosition.y}): ${isValid}`);
+                // Log the actual grid state for the shape's blocks
+                for (const block of this.dragState.shape) {
+                    const absX = this.dragState.mousePosition.x + block.x;
+                    const absY = this.dragState.mousePosition.y + block.y;
+                    if (absX >= 0 && absX < 8 && absY >= 0 && absY < 8) {
+                        const gridValue = grid[absY][absX];
+                        const isEmpty = this.board.isCellEmpty({ x: absX, y: absY });
+                        if (gridValue || !isEmpty) {
+                            console.log(`  [BOARD UPDATE] Block (${block.x},${block.y}) -> grid(${absX},${absY}): grid[${absY}][${absX}]=${gridValue}, isCellEmpty=${isEmpty}`);
+                        }
+                    }
+                }
+            }
+            
+            this.dragState.isValidPosition = isValid;
+        }
+    }
+
+    /**
+     * Debug method: Resets drag state and forces board synchronization
+     * This can help fix validation issues after autoplace operations
+     */
+    debugReset(): void {
+        // Reset drag state completely
+        this.dragState = {
+            isDragging: false,
+            shapeIndex: -1,
+            shape: null,
+            mousePosition: { x: 0, y: 0 },
+            isValidPosition: false,
+            hasBoardPosition: false,
+            anchorPoint: undefined,
+            previewLinesCleared: undefined,
+        };
+        this.originalQueueIndex = -1;
+        // Clear any cached validation state
+        (this as any).lastInvalidLog = null;
+        console.log('[DEBUG] Input handler state reset');
+    }
+
+    /**
+     * Updates the settings reference
+     * @param newSettings - The updated settings
+     */
+    updateSettings(newSettings: GameSettings): void {
+        this.settings = newSettings;
     }
 
     /**
@@ -161,38 +227,41 @@ export class InputHandler {
     }
 
     /**
-     * Calculates the grid position for a shape based on its effective position (lifted piece position)
-     * @param effectivePosition - The on-screen position of the lifted piece (anchor + offset)
+     * Calculates the grid position for a shape based on cursor position
+     * SIMPLIFIED: The cursor position directly maps to a grid cell
+     * The shape's top-left block (minX, minY) will align with the grid cell under the cursor
+     * @param cursorPosition - The cursor position in canvas coordinates
      * @param shape - The shape being dragged
      * @returns The grid position where the shape would be placed, or null if outside board
      */
-    private calculateGridPositionFromEffectivePosition(effectivePosition: { x: number; y: number }, shape: Shape): Position | null {
-        // Check if effectivePosition (lifted piece) is over the board
-        if (effectivePosition.x < 0 || effectivePosition.x >= BOARD_PIXEL_SIZE || 
-            effectivePosition.y < 0 || effectivePosition.y >= BOARD_PIXEL_SIZE) {
+    private calculateGridPosition(cursorPosition: { x: number; y: number }, shape: Shape): Position | null {
+        // Adjust cursor position to account for board offset
+        const adjustedX = cursorPosition.x - BOARD_OFFSET_X;
+        const adjustedY = cursorPosition.y - BOARD_OFFSET_Y;
+        
+        // Check if cursor is over the board
+        if (adjustedX < 0 || adjustedX >= BOARD_PIXEL_SIZE || 
+            adjustedY < 0 || adjustedY >= BOARD_PIXEL_SIZE) {
             return null;
         }
 
-        // Find the top-left block of the shape
+        // Find the top-left block of the shape (minimum x and y coordinates)
         const minX = Math.min(...shape.map(b => b.x));
         const minY = Math.min(...shape.map(b => b.y));
-        const maxX = Math.max(...shape.map(b => b.x));
-        const maxY = Math.max(...shape.map(b => b.y));
-        const shapeWidth = (maxX - minX + 1) * CELL_SIZE;
-        const shapeHeight = (maxY - minY + 1) * CELL_SIZE;
 
-        // Calculate where the top-left block is in pixel space
-        // Shape is centered on effectivePosition
-        const topLeftBlockPixelX = effectivePosition.x - shapeWidth / 2 + minX * CELL_SIZE;
-        const topLeftBlockPixelY = effectivePosition.y - shapeHeight / 2 + minY * CELL_SIZE;
+        // Convert adjusted cursor position to grid coordinates
+        const cursorGridX = Math.floor(adjustedX / CELL_SIZE);
+        const cursorGridY = Math.floor(adjustedY / CELL_SIZE);
 
-        // Convert the top-left block position to grid coordinates
-        const gridPos = snapToGrid(topLeftBlockPixelX, topLeftBlockPixelY, CELL_SIZE);
-
-        // Adjust grid position to account for the shape's internal offset
+        // The shape's grid position: align the shape's top-left block with the cursor's grid cell
+        // If cursor is at grid (cx, cy) and shape's top-left is at (minX, minY),
+        // then shape's grid position is (cx - minX, cy - minY)
+        const shapeGridX = cursorGridX - minX;
+        const shapeGridY = cursorGridY - minY;
+        
         return {
-            x: gridPos.x - minX,
-            y: gridPos.y - minY
+            x: shapeGridX,
+            y: shapeGridY
         };
     }
 
@@ -208,22 +277,75 @@ export class InputHandler {
         // Update anchor point to follow the finger/cursor exactly (normalized canvas coordinates)
         this.dragState.anchorPoint = { x: canvasX, y: canvasY };
         
-        // Calculate effectivePosition: normalized canvas position + lift offset (in canvas pixels)
-        // This is the hotspot - the actual position of the lifted piece
-        // Both coordinates are in normalized canvas space, ensuring consistent mapping
-        const effectivePosition = {
-            x: canvasX,
-            y: canvasY - LIFT_OFFSET_PIXELS
-        };
-
-        const gridPos = this.calculateGridPositionFromEffectivePosition(effectivePosition, this.dragState.shape);
+        // Calculate grid position directly from cursor position (no offsets)
+        const gridPos = this.calculateGridPosition({ x: canvasX, y: canvasY }, this.dragState.shape);
         
         if (gridPos) {
             this.dragState.mousePosition = gridPos;
             this.dragState.hasBoardPosition = true;
-            this.dragState.isValidPosition = canPlaceShape(this.board, this.dragState.shape, gridPos);
+            
+            // CRITICAL: Always validate with the absolute latest board state
+            // Get a fresh grid copy to ensure we're not reading stale data
+            // The board reference is shared, but we need to ensure we read the current grid
+            const isValid = canPlaceShape(this.board, this.dragState.shape, gridPos);
+            
+            // In dev mode, always log validation details to diagnose issues
+            if (this.settings.devMode) {
+                const grid = this.board.getGrid(); // Get fresh grid copy
+                let manualCheck = true;
+                const invalidBlocks: Array<{block: {x: number, y: number}, abs: {x: number, y: number}, reason: string}> = [];
+                
+                for (const block of this.dragState.shape) {
+                    const absX = gridPos.x + block.x;
+                    const absY = gridPos.y + block.y;
+                    if (absX < 0 || absX >= 8 || absY < 0 || absY >= 8) {
+                        manualCheck = false;
+                        invalidBlocks.push({block, abs: {x: absX, y: absY}, reason: 'out of bounds'});
+                        break;
+                    }
+                    const gridValue = grid[absY][absX];
+                    const isEmptyMethod = this.board.isCellEmpty({ x: absX, y: absY });
+                    if (gridValue || !isEmptyMethod) {
+                        manualCheck = false;
+                        invalidBlocks.push({
+                            block, 
+                            abs: {x: absX, y: absY}, 
+                            reason: `grid[${absY}][${absX}]=${gridValue}, isCellEmpty=${isEmptyMethod}`
+                        });
+                        break;
+                    }
+                }
+                
+                if (!isValid || !manualCheck) {
+                    const lastLog = (this as any).lastInvalidLog;
+                    const logKey = `${gridPos.x},${gridPos.y}`;
+                    if (!lastLog || lastLog !== logKey) {
+                        console.log(`[VALIDATION] Position (${gridPos.x}, ${gridPos.y}) invalid.`);
+                        console.log(`  Cursor: (${canvasX.toFixed(1)}, ${canvasY.toFixed(1)})`);
+                        console.log(`  Grid cell under cursor: (${Math.floor(canvasX / CELL_SIZE)}, ${Math.floor(canvasY / CELL_SIZE)})`);
+                        const minX = Math.min(...this.dragState.shape.map(b => b.x));
+                        const minY = Math.min(...this.dragState.shape.map(b => b.y));
+                        console.log(`  Shape top-left offset: (${minX}, ${minY})`);
+                        console.log(`  canPlaceShape=${isValid}, manualCheck=${manualCheck}`);
+                        if (invalidBlocks.length > 0) {
+                            invalidBlocks.forEach(({block, abs, reason}) => {
+                                console.log(`  Block (${block.x},${block.y}) -> grid(${abs.x},${abs.y}): ${reason}`);
+                            });
+                        }
+                        (this as any).lastInvalidLog = logKey;
+                    }
+                } else {
+                    (this as any).lastInvalidLog = null;
+                }
+                
+                if (manualCheck !== isValid) {
+                    console.error(`[VALIDATION BUG] Position (${gridPos.x}, ${gridPos.y}): manual=${manualCheck}, canPlaceShape=${isValid}`);
+                }
+            }
+            
+            this.dragState.isValidPosition = isValid;
         } else {
-            // Effective position (lifted piece) is outside the board
+            // Cursor is outside the board
             this.dragState.hasBoardPosition = false;
             this.dragState.isValidPosition = false;
             this.dragState.mousePosition = { x: 0, y: 0 };
@@ -242,19 +364,13 @@ export class InputHandler {
         const { x: canvasX, y: canvasY } = this.getCanvasCoordinates(event);
         this.dragState.anchorPoint = { x: canvasX, y: canvasY };
 
-        // Calculate effectivePosition: normalized canvas position + lift offset (in canvas pixels)
-        // Both coordinates are in normalized canvas space, ensuring consistent mapping
-        const effectivePosition = {
-            x: canvasX,
-            y: canvasY - LIFT_OFFSET_PIXELS
-        };
+        // Calculate grid position directly from cursor (no offsets)
+        const gridPos = this.calculateGridPosition({ x: canvasX, y: canvasY }, this.dragState.shape);
 
-        const gridPos = this.calculateGridPositionFromEffectivePosition(effectivePosition, this.dragState.shape);
-
-        // Check if the effectivePosition (lifted piece) is over the board and placement is valid
+        // Check if cursor is over the board and placement is valid
         let shapePlaced = false;
-        if (gridPos && effectivePosition.x >= 0 && effectivePosition.x < BOARD_PIXEL_SIZE && 
-            effectivePosition.y >= 0 && effectivePosition.y < BOARD_PIXEL_SIZE) {
+        if (gridPos && canvasX >= 0 && canvasX < BOARD_PIXEL_SIZE && 
+            canvasY >= 0 && canvasY < BOARD_PIXEL_SIZE) {
             
             if (canPlaceShape(this.board, this.dragState.shape, gridPos)) {
                 // Pass -1 as shapeIndex since shape was already removed from queue
@@ -357,21 +473,75 @@ export class InputHandler {
         // Update anchor point to follow the finger exactly (normalized canvas coordinates)
         this.dragState.anchorPoint = { x: canvasX, y: canvasY };
         
-        // Calculate effectivePosition: normalized canvas position + lift offset (in canvas pixels)
-        // Both coordinates are in normalized canvas space, ensuring consistent mapping
-        const effectivePosition = {
-            x: canvasX,
-            y: canvasY - LIFT_OFFSET_PIXELS
-        };
-
-        const gridPos = this.calculateGridPositionFromEffectivePosition(effectivePosition, this.dragState.shape);
+        // Calculate grid position directly from cursor position (no offsets)
+        const gridPos = this.calculateGridPosition({ x: canvasX, y: canvasY }, this.dragState.shape);
         
         if (gridPos) {
             this.dragState.mousePosition = gridPos;
             this.dragState.hasBoardPosition = true;
-            this.dragState.isValidPosition = canPlaceShape(this.board, this.dragState.shape, gridPos);
+            
+            // CRITICAL: Always validate with the absolute latest board state
+            // Get a fresh grid copy to ensure we're not reading stale data
+            // The board reference is shared, but we need to ensure we read the current grid
+            const isValid = canPlaceShape(this.board, this.dragState.shape, gridPos);
+            
+            // In dev mode, always log validation details to diagnose issues
+            if (this.settings.devMode) {
+                const grid = this.board.getGrid(); // Get fresh grid copy
+                let manualCheck = true;
+                const invalidBlocks: Array<{block: {x: number, y: number}, abs: {x: number, y: number}, reason: string}> = [];
+                
+                for (const block of this.dragState.shape) {
+                    const absX = gridPos.x + block.x;
+                    const absY = gridPos.y + block.y;
+                    if (absX < 0 || absX >= 8 || absY < 0 || absY >= 8) {
+                        manualCheck = false;
+                        invalidBlocks.push({block, abs: {x: absX, y: absY}, reason: 'out of bounds'});
+                        break;
+                    }
+                    const gridValue = grid[absY][absX];
+                    const isEmptyMethod = this.board.isCellEmpty({ x: absX, y: absY });
+                    if (gridValue || !isEmptyMethod) {
+                        manualCheck = false;
+                        invalidBlocks.push({
+                            block, 
+                            abs: {x: absX, y: absY}, 
+                            reason: `grid[${absY}][${absX}]=${gridValue}, isCellEmpty=${isEmptyMethod}`
+                        });
+                        break;
+                    }
+                }
+                
+                if (!isValid || !manualCheck) {
+                    const lastLog = (this as any).lastInvalidLog;
+                    const logKey = `${gridPos.x},${gridPos.y}`;
+                    if (!lastLog || lastLog !== logKey) {
+                        console.log(`[VALIDATION] Position (${gridPos.x}, ${gridPos.y}) invalid.`);
+                        console.log(`  Cursor: (${canvasX.toFixed(1)}, ${canvasY.toFixed(1)})`);
+                        console.log(`  Grid cell under cursor: (${Math.floor(canvasX / CELL_SIZE)}, ${Math.floor(canvasY / CELL_SIZE)})`);
+                        const minX = Math.min(...this.dragState.shape.map(b => b.x));
+                        const minY = Math.min(...this.dragState.shape.map(b => b.y));
+                        console.log(`  Shape top-left offset: (${minX}, ${minY})`);
+                        console.log(`  canPlaceShape=${isValid}, manualCheck=${manualCheck}`);
+                        if (invalidBlocks.length > 0) {
+                            invalidBlocks.forEach(({block, abs, reason}) => {
+                                console.log(`  Block (${block.x},${block.y}) -> grid(${abs.x},${abs.y}): ${reason}`);
+                            });
+                        }
+                        (this as any).lastInvalidLog = logKey;
+                    }
+                } else {
+                    (this as any).lastInvalidLog = null;
+                }
+                
+                if (manualCheck !== isValid) {
+                    console.error(`[VALIDATION BUG] Position (${gridPos.x}, ${gridPos.y}): manual=${manualCheck}, canPlaceShape=${isValid}`);
+                }
+            }
+            
+            this.dragState.isValidPosition = isValid;
         } else {
-            // Effective position (lifted piece) is outside the board
+            // Cursor is outside the board
             this.dragState.hasBoardPosition = false;
             this.dragState.isValidPosition = false;
             this.dragState.mousePosition = { x: 0, y: 0 };
@@ -395,19 +565,13 @@ export class InputHandler {
             return;
         }
 
-        // Calculate effectivePosition: normalized canvas position + lift offset (in canvas pixels)
-        // Both coordinates are in normalized canvas space, ensuring consistent mapping
-        const effectivePosition = {
-            x: canvasX,
-            y: canvasY - LIFT_OFFSET_PIXELS
-        };
+        // Calculate grid position directly from cursor (no offsets)
+        const gridPos = this.calculateGridPosition({ x: canvasX, y: canvasY }, this.dragState.shape);
 
-        const gridPos = this.calculateGridPositionFromEffectivePosition(effectivePosition, this.dragState.shape);
-
-        // Check if the effectivePosition (lifted piece) is over the board and placement is valid
+        // Check if cursor is over the board and placement is valid
         let shapePlaced = false;
-        if (gridPos && effectivePosition.x >= 0 && effectivePosition.x < BOARD_PIXEL_SIZE && 
-            effectivePosition.y >= 0 && effectivePosition.y < BOARD_PIXEL_SIZE) {
+        if (gridPos && canvasX >= 0 && canvasX < BOARD_PIXEL_SIZE && 
+            canvasY >= 0 && canvasY < BOARD_PIXEL_SIZE) {
             
             if (canPlaceShape(this.board, this.dragState.shape, gridPos)) {
                 // Pass -1 as shapeIndex since shape was already removed from queue

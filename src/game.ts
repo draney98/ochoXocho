@@ -11,6 +11,7 @@ import { calculateScore } from './scoring';
 import { checkGameOver } from './gameOver';
 import { SoundManager } from './sound';
 import { recordScore } from './highScores';
+import { getDeviceId } from './deviceId';
 import { GAMEPLAY_CONFIG, ANIMATION_CONFIG, GAME_OVER_CONFIG } from './config';
 import { getUIColorForLevel, getButtonColors } from './colorConfig';
 import { findOptimalPlacementOrder } from './boardUtils';
@@ -38,7 +39,10 @@ export class Game {
     private readonly GAME_OVER_ANIMATION_DURATION = ANIMATION_CONFIG.gameOverFadeMs;
     private gameOverPopComplete: boolean = false;
     private levelUpStartTime: number | null = null;
+    private leaderboardRank: number | null = null; // Rank on leaderboard (if top 10)
     private readonly LEVEL_UP_ANIMATION_DURATION = ANIMATION_CONFIG.levelUpMs;
+    private isAutoPlacing: boolean = false; // Track if autoplace is in progress
+    private onAutoPlaceStateChange?: (isPlacing: boolean) => void; // Callback for autoplace state changes
     private settings: GameSettings;
     private soundManager: SoundManager;
     // Animation index is based on level, not cycling
@@ -72,7 +76,8 @@ export class Game {
             this.state.queue,
             this.handlePlaceShape.bind(this),
             this.removeShapeFromQueue.bind(this),
-            this.restoreShapeToQueue.bind(this)
+            this.restoreShapeToQueue.bind(this),
+            this.settings
         );
 
         this.scoreElement = document.getElementById('score-value');
@@ -91,6 +96,24 @@ export class Game {
     }
 
     /**
+     * Sets the callback for autoplace state changes
+     * @param callback - Function to call when autoplace state changes
+     */
+    setAutoPlaceStateChangeCallback(callback: (isPlacing: boolean) => void): void {
+        this.onAutoPlaceStateChange = callback;
+    }
+
+    /**
+     * Notifies listeners about autoplace state changes
+     * @param isPlacing - Whether autoplace is currently in progress
+     */
+    private notifyAutoPlaceStateChanged(isPlacing: boolean): void {
+        if (this.onAutoPlaceStateChange) {
+            this.onAutoPlaceStateChange(isPlacing);
+        }
+    }
+
+    /**
      * Updates runtime settings originating from the UI panel
      * @param updatedSettings - latest settings selected by the player
      */
@@ -99,6 +122,7 @@ export class Game {
         const themeChanged = this.settings.theme !== updatedSettings.theme;
         this.settings = { ...updatedSettings };
         this.renderer.updateSettings(this.settings);
+        this.inputHandler.updateSettings(this.settings);
         this.soundManager.setEnabled(this.settings.soundEnabled);
 
         // Update UI colors if theme changed
@@ -210,7 +234,8 @@ export class Game {
             levelUpProgress,
             this.state.level,
             this.state.score,
-            this.state.linesCleared
+            this.state.linesCleared,
+            this.leaderboardRank
         );
     }
 
@@ -314,24 +339,31 @@ export class Game {
                 ? generateEasyShapes(this.board)
                 : generateShapes();
             
+            // Validate that queue has 3 valid shapes (should never fail, but safety check)
+            const activeQueue = this.state.queue.filter((q): q is Shape => !!q && Array.isArray(q) && q.length > 0);
+            if (activeQueue.length !== 3) {
+                console.error(`[GAME] Queue generation failed! Expected 3 shapes, got ${activeQueue.length}. Queue:`, this.state.queue);
+                // This should never happen, but if it does, trigger game over
+                this.triggerGameOver();
+                return;
+            }
+            
             // Check for game over at the beginning of each new round (after queue regeneration)
-            const activeQueue = this.state.queue.filter((q): q is Shape => !!q);
-            if (activeQueue.length > 0) {
-                const isGameOver = checkGameOver(this.board, activeQueue);
-                if (isGameOver) {
-                    this.triggerGameOver();
-                }
+            const isGameOver = checkGameOver(this.board, activeQueue);
+            if (isGameOver) {
+                this.triggerGameOver();
             }
         } else {
             // Check for game over after placing a shape (in case lines cleared made room)
-            const activeQueue = this.state.queue.filter((q): q is Shape => !!q);
+            const activeQueue = this.state.queue.filter((q): q is Shape => !!q && Array.isArray(q) && q.length > 0);
             if (activeQueue.length > 0) {
                 const isGameOver = checkGameOver(this.board, activeQueue);
                 if (isGameOver) {
                     this.triggerGameOver();
                 }
             } else {
-                // If queue is empty, game is not over yet (waiting for new shapes)
+                // If queue is empty mid-turn, this shouldn't happen but handle gracefully
+                // Wait for next turn when new shapes will be generated
                 this.state.gameOver = false;
                 this.gameOverStartTime = null;
             }
@@ -394,6 +426,25 @@ export class Game {
      */
     private cleanupAfterAnimation(fullRows: number[], fullColumns: number[]): void {
         this.removeCellsFromShapes(fullRows, fullColumns);
+    }
+
+    /**
+     * Rebuilds the board grid from placedBlocks to ensure synchronization
+     * This ensures the board grid matches what's actually rendered
+     */
+    private rebuildBoardFromPlacedBlocks(): void {
+        // Clear the entire board first
+        for (let y = 0; y < 8; y++) {
+            this.board.clearRow(y);
+        }
+        
+        // Re-place all remaining blocks from placedBlocks
+        for (const block of this.state.placedBlocks) {
+            if (block.shape.length > 0) {
+                // Place the shape (which will mark all its cells as filled)
+                this.board.placeShape(block.shape, block.position);
+            }
+        }
     }
 
     /**
@@ -546,10 +597,18 @@ export class Game {
             const maxAnimationDuration = Math.max(this.ANIMATION_DURATION, ANIMATION_CONFIG.explosionMs);
             setTimeout(() => {
                 this.removeCellsFromShapes(fullRows, fullColumns);
+                // CRITICAL: Rebuild board grid from placedBlocks to ensure synchronization
+                this.rebuildBoardFromPlacedBlocks();
+                // Ensure board state is synchronized after cleanup
+                this.inputHandler.updateBoard(this.board);
             }, maxAnimationDuration);
         } else {
             // No animations, clean up immediately
             this.removeCellsFromShapes(fullRows, fullColumns);
+            // CRITICAL: Rebuild board grid from placedBlocks to ensure synchronization
+            this.rebuildBoardFromPlacedBlocks();
+            // Ensure board state is synchronized after cleanup
+            this.inputHandler.updateBoard(this.board);
         }
     }
 
@@ -626,42 +685,154 @@ export class Game {
 
 
     /**
+     * Debug method: Resets input handler state to fix validation issues
+     * Called via debug button or after autoplace operations
+     */
+    debugResetInputHandler(): void {
+        // Reconstruct board state from placedBlocks to match what's actually rendered
+        // This ensures the debug output matches the visual state
+        const visualGrid: boolean[][] = Array(8).fill(null).map(() => Array(8).fill(false));
+        const boardGrid = this.board.getGrid();
+        
+        for (const block of this.state.placedBlocks) {
+            for (const cell of block.shape) {
+                const x = block.position.x + cell.x;
+                const y = block.position.y + cell.y;
+                if (x >= 0 && x < 8 && y >= 0 && y < 8) {
+                    // Only mark as filled if the board also says it's filled (handles cleared cells)
+                    if (!this.board.isCellEmpty({ x, y })) {
+                        visualGrid[y][x] = true;
+                    }
+                }
+            }
+        }
+        
+        console.log('[DEBUG] Current board state (reconstructed from placedBlocks):');
+        console.log('  O = empty, X = filled');
+        console.log('  ' + '-'.repeat(8));
+        for (let y = 0; y < 8; y++) {
+            let row = '  ';
+            for (let x = 0; x < 8; x++) {
+                row += visualGrid[y][x] ? 'X' : 'O';
+            }
+            console.log(row);
+        }
+        console.log('  ' + '-'.repeat(8));
+        
+        // Also show the actual board grid state for comparison
+        console.log('[DEBUG] Board grid state (from board.getGrid()):');
+        console.log('  O = empty, X = filled');
+        console.log('  ' + '-'.repeat(8));
+        for (let y = 0; y < 8; y++) {
+            let row = '  ';
+            for (let x = 0; x < 8; x++) {
+                row += boardGrid[y][x] ? 'X' : 'O';
+            }
+            console.log(row);
+        }
+        console.log('  ' + '-'.repeat(8));
+        
+        // Check for discrepancies
+        let hasDiscrepancy = false;
+        for (let y = 0; y < 8; y++) {
+            for (let x = 0; x < 8; x++) {
+                if (visualGrid[y][x] !== boardGrid[y][x]) {
+                    if (!hasDiscrepancy) {
+                        console.log('[DEBUG] DISCREPANCY DETECTED between visual and board grid:');
+                        hasDiscrepancy = true;
+                    }
+                    console.log(`  Cell (${x}, ${y}): visual=${visualGrid[y][x] ? 'X' : 'O'}, board=${boardGrid[y][x] ? 'X' : 'O'}`);
+                }
+            }
+        }
+        if (!hasDiscrepancy) {
+            console.log('[DEBUG] Visual grid and board grid match.');
+        }
+        
+        // Also reset input handler state
+        this.inputHandler.debugReset();
+        // Force board synchronization
+        this.inputHandler.updateBoard(this.board);
+        this.inputHandler.updateQueue(this.state.queue);
+    }
+
+    /**
      * Automatically places all three pieces in the queue using optimal placement order
      */
     autoPlacePieces(): void {
-        if (this.state.gameOver) {
-            return;
+        if (this.state.gameOver || this.isAutoPlacing) {
+            return; // Don't allow autoplace if already in progress or game is over
         }
+
+        // Set flag to prevent double-clicking
+        this.isAutoPlacing = true;
+        this.notifyAutoPlaceStateChanged(true);
 
         // Find optimal placement order
         const placementOrder = findOptimalPlacementOrder(this.board, this.state.queue);
         
         if (!placementOrder || placementOrder.length === 0) {
             console.warn('[AUTO-PLACE] No valid placement order found');
+            
+            // Check if there are still pieces left in the queue
+            const activeQueue = this.state.queue.filter((q): q is Shape => !!q && Array.isArray(q) && q.length > 0);
+            if (activeQueue.length > 0) {
+                // Force a render to ensure the queue area is redrawn at least once
+                // This ensures the visual state matches the actual queue state
+                this.render();
+            }
+            
+            // Re-enable button
+            this.isAutoPlacing = false;
+            this.notifyAutoPlaceStateChanged(false);
             return;
         }
 
-        // Place each shape in the optimal order
-        // We need to place them one at a time, waiting for line clears between each
-        // For now, we'll place them sequentially with a small delay
-        placementOrder.forEach(({ shapeIndex, position }, index) => {
+        // Place each shape sequentially, ensuring board state is synchronized after each placement
+        // Use a recursive function to ensure each placement completes before starting the next
+        const placeNext = (index: number): void => {
+            if (index >= placementOrder.length || this.state.gameOver) {
+                // All placements complete - re-enable button
+                this.isAutoPlacing = false;
+                this.notifyAutoPlaceStateChanged(false);
+                return;
+            }
+
+            const { shapeIndex, position } = placementOrder[index];
+            const shape = this.state.queue[shapeIndex];
+            
+            if (!shape) {
+                // Skip to next if shape is missing
+                placeNext(index + 1);
+                return;
+            }
+
+            // Temporarily restore the shape to queue if it was removed
+            this.state.queue[shapeIndex] = shape;
+            this.inputHandler.updateQueue(this.state.queue);
+
+            // Place the shape directly
+            this.placeShapeDirectly(shape, position, shapeIndex);
+
+            // Wait for line clearing animations to complete before placing next shape
+            // This ensures board state is fully synchronized
+            const delay = this.settings.enableAnimations ? 800 : 200; // Longer delay to ensure cleanup completes
             setTimeout(() => {
-                const shape = this.state.queue[shapeIndex];
-                if (!shape) {
-                    return;
-                }
+                // CRITICAL: Force board synchronization after each autoplace operation
+                // The board instance is the same, but we need to ensure the input handler
+                // has the latest state. Call updateBoard to trigger re-validation.
+                this.inputHandler.updateBoard(this.board);
+                this.inputHandler.debugReset(); // Reset any cached validation state
+                
+                // Force a render to ensure visual state matches board state
+                this.render();
+                
+                placeNext(index + 1);
+            }, delay);
+        };
 
-                // Temporarily restore the shape to queue if it was removed
-                this.state.queue[shapeIndex] = shape;
-                this.inputHandler.updateQueue(this.state.queue);
-
-                // Create a temporary drag state to simulate placement
-                const dragState = this.inputHandler.getDragState();
-                // We need to manually trigger placement since we're bypassing drag
-                // For now, we'll directly call handlePlaceShape logic
-                this.placeShapeDirectly(shape, position, shapeIndex);
-            }, index * 100); // Small delay between placements
-        });
+        // Start placing shapes
+        placeNext(0);
     }
 
     /**
@@ -715,28 +886,37 @@ export class Game {
             this.state.queue = this.settings.mode === 'easy'
                 ? generateEasyShapes(this.board)
                 : generateShapes();
+            
+            // Validate that queue has 3 valid shapes (should never fail, but safety check)
+            const activeQueue = this.state.queue.filter((q): q is Shape => !!q && Array.isArray(q) && q.length > 0);
+            if (activeQueue.length !== 3) {
+                console.error(`[GAME] Queue generation failed! Expected 3 shapes, got ${activeQueue.length}. Queue:`, this.state.queue);
+                // This should never happen, but if it does, trigger game over
+                this.triggerGameOver();
+                return;
+            }
+            
             // Update input handler with new queue
             this.inputHandler.updateQueue(this.state.queue);
             
-            const activeQueue = this.state.queue.filter((q): q is Shape => !!q);
-            if (activeQueue.length > 0) {
-                const isGameOver = checkGameOver(this.board, activeQueue);
-                if (isGameOver) {
-                    this.triggerGameOver();
-                }
+            // Check for game over with the new queue
+            const isGameOver = checkGameOver(this.board, activeQueue);
+            if (isGameOver) {
+                this.triggerGameOver();
             }
         } else {
             // Update input handler with current queue state
             this.inputHandler.updateQueue(this.state.queue);
             
-            const activeQueue = this.state.queue.filter((q): q is Shape => !!q);
+            const activeQueue = this.state.queue.filter((q): q is Shape => !!q && Array.isArray(q) && q.length > 0);
             if (activeQueue.length > 0) {
                 const isGameOver = checkGameOver(this.board, activeQueue);
                 if (isGameOver) {
                     this.triggerGameOver();
                 }
             } else {
-                // If queue is empty, game is not over yet (waiting for new shapes)
+                // If queue is empty mid-turn, this shouldn't happen but handle gracefully
+                // Wait for next turn when new shapes will be generated
                 this.state.gameOver = false;
                 this.gameOverStartTime = null;
             }
@@ -842,7 +1022,19 @@ export class Game {
         // Final cleanup after all animations
         setTimeout(() => {
             // Record the final score for the current mode
-            recordScore(this.state.score, this.settings.mode);
+            const deviceId = getDeviceId();
+            const playerName = (this.settings.playerName || '   ').substring(0, 3).toUpperCase().padEnd(3, ' ');
+            recordScore(this.state.score, this.settings.mode, playerName, deviceId).then((rank) => {
+                // Store rank if in top 10
+                if (rank !== null && rank <= 10) {
+                    this.leaderboardRank = rank;
+                } else {
+                    this.leaderboardRank = null;
+                }
+            }).catch((error) => {
+                console.warn('Failed to record score:', error);
+                this.leaderboardRank = null;
+            });
             this.board.reset();
             this.state.placedBlocks = [];
             this.animatingCells = [];

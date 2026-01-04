@@ -114,7 +114,18 @@ export const DEFAULT_SETTINGS: GameSettings = {
     mode: 'easy',
     showPointValues: true, // Dev setting: off by default
     autoplaceEnabled: true, // Autoplace button enabled by default
+    playerName: '   ', // Default 3 spaces (old school arcade style)
+    devMode: true, // Dev mode: on by default, enables debug logging
 };
+
+/**
+ * API configuration
+ */
+export const API_CONFIG = {
+    // Use environment variable if available, otherwise default to relative path
+    // In production, set VITE_API_BASE_URL to the backend URL (e.g., https://ocho-xocho-api.onrender.com)
+    baseUrl: import.meta.env.VITE_API_BASE_URL || '/api',
+} as const;
 
 /**
  * LocalStorage keys
