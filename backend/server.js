@@ -7,20 +7,65 @@
 const express = require('express');
 const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Data file path for persistent storage
+const DATA_FILE = path.join(__dirname, 'scores.json');
 
 // Enable CORS for all origins (adjust in production if needed)
 app.use(cors());
 app.use(express.json());
 
-// In-memory storage (for MVP - can upgrade to PostgreSQL later)
+/**
+ * Loads scores from persistent storage file
+ * @returns {Object} Scores object with easy and hard arrays
+ */
+function loadScores() {
+    try {
+        if (fs.existsSync(DATA_FILE)) {
+            const data = fs.readFileSync(DATA_FILE, 'utf8');
+            const loaded = JSON.parse(data);
+            // Ensure structure matches expected format
+            if (loaded && typeof loaded === 'object' && Array.isArray(loaded.easy) && Array.isArray(loaded.hard)) {
+                console.log(`Loaded ${loaded.easy.length} easy scores and ${loaded.hard.length} hard scores from ${DATA_FILE}`);
+                return loaded;
+            } else {
+                console.warn('Invalid scores file structure, using defaults');
+                return { easy: [], hard: [] };
+            }
+        } else {
+            console.log('No scores file found, starting with empty leaderboard');
+            return { easy: [], hard: [] };
+        }
+    } catch (error) {
+        console.error('Error loading scores from file:', error.message);
+        console.log('Using default empty leaderboard');
+        return { easy: [], hard: [] };
+    }
+}
+
+/**
+ * Saves scores to persistent storage file
+ * @param {Object} scoresToSave - Scores object to save
+ */
+function saveScores(scoresToSave) {
+    try {
+        const data = JSON.stringify(scoresToSave, null, 2);
+        fs.writeFileSync(DATA_FILE, data, 'utf8');
+        console.log(`Saved scores to ${DATA_FILE}`);
+    } catch (error) {
+        console.error('Error saving scores to file:', error.message);
+        // Don't throw - allow server to continue even if save fails
+    }
+}
+
+// Load scores from persistent storage on startup
 // Structure: { easy: [...], hard: [...] }
-const scores = {
-    easy: [],
-    hard: []
-};
+let scores = loadScores();
 
 /**
  * POST /api/scores
@@ -62,6 +107,9 @@ app.post('/api/scores', (req, res) => {
 
         // Calculate rank (1-indexed)
         const rank = scores[mode].findIndex(s => s.id === entry.id) + 1;
+
+        // Save to persistent storage
+        saveScores(scores);
 
         res.json({
             success: true,
