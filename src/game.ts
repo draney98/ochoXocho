@@ -12,6 +12,7 @@ import { checkGameOver } from './gameOver';
 import { SoundManager } from './sound';
 import { recordScore } from './highScores';
 import { getDeviceId } from './deviceId';
+import { getLeaderboard } from './api';
 import { GAMEPLAY_CONFIG, ANIMATION_CONFIG, GAME_OVER_CONFIG } from './config';
 import { getUIColorForLevel, getButtonColors } from './colorConfig';
 import { findOptimalPlacementOrder } from './boardUtils';
@@ -45,6 +46,7 @@ export class Game {
     private onAutoPlaceStateChange?: (isPlacing: boolean) => void; // Callback for autoplace state changes
     private settings: GameSettings;
     private soundManager: SoundManager;
+    private isNewHighScore: boolean = false; // Track if current score is a new high score
     // Animation index is based on level, not cycling
 
     constructor(canvas: HTMLCanvasElement, initialSettings: GameSettings) {
@@ -319,7 +321,9 @@ export class Game {
         // Resume AudioContext on first user interaction (fixes autoplay policy)
         this.soundManager.resumeContext();
         this.soundManager.playPlace();
-        console.log(`[PLACE] Placed shape at (${position.x}, ${position.y}), total blocks: ${this.state.placedBlocks.length}`);
+        if (this.settings.devMode) {
+            console.log(`[PLACE] Placed shape at (${position.x}, ${position.y}), total blocks: ${this.state.placedBlocks.length}`);
+        }
 
         // Shape was already removed from queue when dragging started
         this.shapesPlacedThisTurn++;
@@ -396,12 +400,16 @@ export class Game {
             
             // Return updated block with remaining cells, or null if all cells were removed
             if (remainingCells.length === 0) {
-                console.log(`[CLEAR] Removed entire block at (${block.position.x}, ${block.position.y})`);
+                if (this.settings.devMode) {
+                    console.log(`[CLEAR] Removed entire block at (${block.position.x}, ${block.position.y})`);
+                }
                 return null;
             }
             
             if (remainingCells.length < block.shape.length) {
-                console.log(`[CLEAR] Partially removed block: ${block.shape.length} -> ${remainingCells.length} cells`);
+                if (this.settings.devMode) {
+                    console.log(`[CLEAR] Partially removed block: ${block.shape.length} -> ${remainingCells.length} cells`);
+                }
             }
             
             return {
@@ -414,8 +422,10 @@ export class Game {
         const afterTotalCells = this.state.placedBlocks.reduce((sum, b) => sum + b.shape.length, 0);
         
         if (beforeCount !== afterCount || beforeTotalCells !== afterTotalCells) {
-            console.log(`[CLEAR] Shape count: ${beforeCount} -> ${afterCount}, Total cells: ${beforeTotalCells} -> ${afterTotalCells}`);
-            console.log(`[CLEAR] Cleared rows: [${fullRows.join(', ')}], columns: [${fullColumns.join(', ')}]`);
+            if (this.settings.devMode) {
+                console.log(`[CLEAR] Shape count: ${beforeCount} -> ${afterCount}, Total cells: ${beforeTotalCells} -> ${afterTotalCells}`);
+                console.log(`[CLEAR] Cleared rows: [${fullRows.join(', ')}], columns: [${fullColumns.join(', ')}]`);
+            }
         }
     }
 
@@ -545,6 +555,10 @@ export class Game {
         );
         this.state.score += points;
         this.updateScoreDisplay();
+        
+        // Check leaderboard after score update to see if this is a new high score
+        this.checkHighScore();
+        
         this.soundManager.playClear(linesCleared, boardCleared);
 
         // Vibrate on mobile when line/column is completed
@@ -575,7 +589,9 @@ export class Game {
         
         // Update color scheme if level changed (colors change every level up to level 10)
         if (this.state.level !== previousLevel) {
-            console.log(`[COLOR] Level changed from ${previousLevel} to ${this.state.level}`);
+            if (this.settings.devMode) {
+                console.log(`[COLOR] Level changed from ${previousLevel} to ${this.state.level}`);
+            }
             updateColorScheme(this.state.level);
             // Update colors for all placed blocks
             this.state.placedBlocks.forEach(block => {
@@ -625,6 +641,37 @@ export class Game {
     private updateScoreDisplay(): void {
         if (this.scoreElement) {
             this.scoreElement.textContent = this.formatNumber(this.state.score);
+            // Change color if this is a new high score
+            if (this.isNewHighScore) {
+                this.scoreElement.style.color = '#FFD700'; // Gold color for new high score
+            } else {
+                this.scoreElement.style.color = ''; // Reset to default
+            }
+        }
+    }
+    
+    /**
+     * Checks if the current score is a new high score by fetching fresh leaderboard data
+     */
+    private async checkHighScore(): Promise<void> {
+        try {
+            // Fetch fresh leaderboard data (no caching)
+            const leaderboard = await getLeaderboard(this.settings.mode, 'ever', 1);
+            const currentHighScore = leaderboard.length > 0 ? leaderboard[0].score : 0;
+            
+            // Check if current score beats the high score
+            if (this.state.score > currentHighScore) {
+                this.isNewHighScore = true;
+                this.updateScoreDisplay(); // Update display to show gold color
+            } else {
+                this.isNewHighScore = false;
+                this.updateScoreDisplay(); // Reset color if not a high score
+            }
+        } catch (error) {
+            // Silently fail - don't block gameplay if leaderboard check fails
+            if (this.settings.devMode) {
+                console.warn('[GAME] Failed to check high score:', error);
+            }
         }
     }
 
@@ -686,7 +733,7 @@ export class Game {
 
     /**
      * Debug method: Resets input handler state to fix validation issues
-     * Called via debug button or after autoplace operations
+     * Called after autoplace operations
      */
     debugResetInputHandler(): void {
         // Reconstruct board state from placedBlocks to match what's actually rendered
@@ -707,46 +754,48 @@ export class Game {
             }
         }
         
-        console.log('[DEBUG] Current board state (reconstructed from placedBlocks):');
-        console.log('  O = empty, X = filled');
-        console.log('  ' + '-'.repeat(8));
-        for (let y = 0; y < 8; y++) {
-            let row = '  ';
-            for (let x = 0; x < 8; x++) {
-                row += visualGrid[y][x] ? 'X' : 'O';
+        if (this.settings.devMode) {
+            console.log('[DEBUG] Current board state (reconstructed from placedBlocks):');
+            console.log('  O = empty, X = filled');
+            console.log('  ' + '-'.repeat(8));
+            for (let y = 0; y < 8; y++) {
+                let row = '  ';
+                for (let x = 0; x < 8; x++) {
+                    row += visualGrid[y][x] ? 'X' : 'O';
+                }
+                console.log(row);
             }
-            console.log(row);
-        }
-        console.log('  ' + '-'.repeat(8));
-        
-        // Also show the actual board grid state for comparison
-        console.log('[DEBUG] Board grid state (from board.getGrid()):');
-        console.log('  O = empty, X = filled');
-        console.log('  ' + '-'.repeat(8));
-        for (let y = 0; y < 8; y++) {
-            let row = '  ';
-            for (let x = 0; x < 8; x++) {
-                row += boardGrid[y][x] ? 'X' : 'O';
+            console.log('  ' + '-'.repeat(8));
+            
+            // Also show the actual board grid state for comparison
+            console.log('[DEBUG] Board grid state (from board.getGrid()):');
+            console.log('  O = empty, X = filled');
+            console.log('  ' + '-'.repeat(8));
+            for (let y = 0; y < 8; y++) {
+                let row = '  ';
+                for (let x = 0; x < 8; x++) {
+                    row += boardGrid[y][x] ? 'X' : 'O';
+                }
+                console.log(row);
             }
-            console.log(row);
-        }
-        console.log('  ' + '-'.repeat(8));
-        
-        // Check for discrepancies
-        let hasDiscrepancy = false;
-        for (let y = 0; y < 8; y++) {
-            for (let x = 0; x < 8; x++) {
-                if (visualGrid[y][x] !== boardGrid[y][x]) {
-                    if (!hasDiscrepancy) {
-                        console.log('[DEBUG] DISCREPANCY DETECTED between visual and board grid:');
-                        hasDiscrepancy = true;
+            console.log('  ' + '-'.repeat(8));
+            
+            // Check for discrepancies
+            let hasDiscrepancy = false;
+            for (let y = 0; y < 8; y++) {
+                for (let x = 0; x < 8; x++) {
+                    if (visualGrid[y][x] !== boardGrid[y][x]) {
+                        if (!hasDiscrepancy) {
+                            console.log('[DEBUG] DISCREPANCY DETECTED between visual and board grid:');
+                            hasDiscrepancy = true;
+                        }
+                        console.log(`  Cell (${x}, ${y}): visual=${visualGrid[y][x] ? 'X' : 'O'}, board=${boardGrid[y][x] ? 'X' : 'O'}`);
                     }
-                    console.log(`  Cell (${x}, ${y}): visual=${visualGrid[y][x] ? 'X' : 'O'}, board=${boardGrid[y][x] ? 'X' : 'O'}`);
                 }
             }
-        }
-        if (!hasDiscrepancy) {
-            console.log('[DEBUG] Visual grid and board grid match.');
+            if (!hasDiscrepancy) {
+                console.log('[DEBUG] Visual grid and board grid match.');
+            }
         }
         
         // Also reset input handler state
@@ -772,7 +821,9 @@ export class Game {
         const placementOrder = findOptimalPlacementOrder(this.board, this.state.queue);
         
         if (!placementOrder || placementOrder.length === 0) {
-            console.warn('[AUTO-PLACE] No valid placement order found');
+            if (this.settings.devMode) {
+                console.warn('[AUTO-PLACE] No valid placement order found');
+            }
             
             // Check if there are still pieces left in the queue
             const activeQueue = this.state.queue.filter((q): q is Shape => !!q && Array.isArray(q) && q.length > 0);
@@ -1114,12 +1165,16 @@ export class Game {
      */
     reset(force: boolean = false): void {
         if (!force && !this.state.gameOver) {
-            console.warn('[RESET] Reset called but game is not over - ignoring');
+            if (this.settings.devMode) {
+                console.warn('[RESET] Reset called but game is not over - ignoring');
+            }
             return;
         }
         
         const context = this.state.gameOver ? 'game over' : 'manual restart';
-        console.log(`[RESET] Resetting game (${context}). Previous blocks: ${this.state.placedBlocks.length}`);
+        if (this.settings.devMode) {
+            console.log(`[RESET] Resetting game (${context}). Previous blocks: ${this.state.placedBlocks.length}`);
+        }
         this.stop();
         
         // This is the ONLY place where board.reset() should be called
@@ -1140,6 +1195,7 @@ export class Game {
         this.shapesPlacedThisTurn = 0;
         this.animatingCells = [];
         this.gameOverStartTime = null;
+        this.isNewHighScore = false;
         this.inputHandler.updateBoard(this.board);
         this.inputHandler.updateQueue(this.state.queue);
         this.renderer.updateSettings(this.settings);
@@ -1154,7 +1210,9 @@ export class Game {
         this.updateLinesDisplay();
         this.updateLevelDisplay();
         this.start();
-        console.log('[RESET] Game reset complete');
+        if (this.settings.devMode) {
+            console.log('[RESET] Game reset complete');
+        }
     }
 
     /**

@@ -65,6 +65,8 @@ export interface DragState {
         rows: number[];
         columns: number[];
     };
+    mobileOffsetY?: number;        // Dynamic Y offset for mobile thumb reach optimization
+    isTouchEvent?: boolean;         // Track if this is a touch event (mobile)
 }
 
 /**

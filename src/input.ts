@@ -53,6 +53,8 @@ export class InputHandler {
             hasBoardPosition: false,
             anchorPoint: undefined,
             previewLinesCleared: undefined,
+            mobileOffsetY: undefined,
+            isTouchEvent: undefined,
         };
 
         this.setupEventListeners();
@@ -138,11 +140,15 @@ export class InputHandler {
             hasBoardPosition: false,
             anchorPoint: undefined,
             previewLinesCleared: undefined,
+            mobileOffsetY: undefined,
+            isTouchEvent: undefined,
         };
         this.originalQueueIndex = -1;
         // Clear any cached validation state
         (this as any).lastInvalidLog = null;
-        console.log('[DEBUG] Input handler state reset');
+        if (this.settings.devMode) {
+            console.log('[DEBUG] Input handler state reset');
+        }
     }
 
     /**
@@ -276,6 +282,8 @@ export class InputHandler {
 
         // Update anchor point to follow the finger/cursor exactly (normalized canvas coordinates)
         this.dragState.anchorPoint = { x: canvasX, y: canvasY };
+        this.dragState.isTouchEvent = false; // Not a touch event
+        this.dragState.mobileOffsetY = 0; // No offset for mouse
         
         // Calculate grid position directly from cursor position (no offsets)
         const gridPos = this.calculateGridPosition({ x: canvasX, y: canvasY }, this.dragState.shape);
@@ -404,6 +412,8 @@ export class InputHandler {
             hasBoardPosition: false,
             anchorPoint: undefined,
             previewLinesCleared: undefined,
+            mobileOffsetY: undefined,
+            isTouchEvent: undefined,
         };
     }
 
@@ -427,6 +437,8 @@ export class InputHandler {
             hasBoardPosition: false,
             anchorPoint: undefined,
             previewLinesCleared: undefined,
+            mobileOffsetY: undefined,
+            isTouchEvent: undefined,
         };
     }
 
@@ -481,8 +493,32 @@ export class InputHandler {
 
         // Update anchor point to follow the finger exactly (normalized canvas coordinates)
         this.dragState.anchorPoint = { x: canvasX, y: canvasY };
+        this.dragState.isTouchEvent = true; // Mark as touch event
         
-        // Calculate grid position directly from cursor position (no offsets)
+        // Calculate dynamic offset for mobile thumb reach optimization
+        // Offset increases towards the top of the screen (where thumb can't reach easily)
+        // Bottom half (y > CANVAS_HEIGHT/2): minimal offset (0-50px)
+        // Top half (y < CANVAS_HEIGHT/2): increasing offset (50-150px)
+        const midPoint = CANVAS_HEIGHT / 2;
+        let offsetY = 0;
+        
+        if (canvasY < midPoint) {
+            // Top half: offset increases as we go up
+            // At top (y=0): max offset of 150px
+            // At middle (y=midPoint): offset of 50px
+            const progress = 1 - (canvasY / midPoint); // 1 at top, 0 at middle
+            offsetY = 50 + (progress * 100); // Range: 50px to 150px
+        } else {
+            // Bottom half: minimal offset that increases slightly as we go up
+            // At middle (y=midPoint): offset of 50px
+            // At bottom (y=CANVAS_HEIGHT): offset of 0px
+            const progress = (canvasY - midPoint) / midPoint; // 0 at middle, 1 at bottom
+            offsetY = 50 * (1 - progress); // Range: 50px to 0px
+        }
+        
+        this.dragState.mobileOffsetY = offsetY;
+        
+        // Calculate grid position directly from cursor position (no offsets for grid calculations)
         const gridPos = this.calculateGridPosition({ x: canvasX, y: canvasY }, this.dragState.shape);
         
         if (gridPos) {
@@ -614,6 +650,8 @@ export class InputHandler {
             hasBoardPosition: false,
             anchorPoint: undefined,
             previewLinesCleared: undefined,
+            mobileOffsetY: undefined,
+            isTouchEvent: undefined,
         };
     }
 
@@ -639,6 +677,8 @@ export class InputHandler {
             hasBoardPosition: false,
             anchorPoint: undefined,
             previewLinesCleared: undefined,
+            mobileOffsetY: undefined,
+            isTouchEvent: undefined,
         };
     }
 

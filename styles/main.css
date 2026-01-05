@@ -292,8 +292,7 @@ body {
 #restart-button,
 #auto-place-button,
 #settings-button,
-#leaderboard-button,
-#debug-reset-button {
+#leaderboard-button {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -337,11 +336,6 @@ body {
     line-height: 1;
 }
 
-#debug-reset-button {
-    background: #ff6b6b; /* Red color to indicate debug button */
-    flex: 0 0 auto; /* Don't flex, fixed size */
-    min-width: 100px;
-}
 
 body[data-theme="midnight"] #restart-button {
     color: var(--restart-button-text, #0f2027);

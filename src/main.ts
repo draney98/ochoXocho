@@ -137,27 +137,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Debug button to reset input handler state (only visible in dev mode)
-    const debugButton = document.getElementById('debug-reset-button');
-    if (debugButton) {
-        debugButton.addEventListener('click', () => {
-            game.debugResetInputHandler();
-            console.log('[DEBUG] Input handler reset via debug button');
-        });
-        
-        // Show/hide debug button based on dev mode setting
-        const updateDebugButtonVisibility = () => {
-            const currentSettings = loadSettings();
-            debugButton.style.display = currentSettings.devMode ? '' : 'none';
-        };
-        
-        // Initial visibility
-        updateDebugButtonVisibility();
-        
-        // Update visibility when dev mode setting changes
-        const devModeInput = document.getElementById('setting-dev-mode') as HTMLInputElement | null;
-        devModeInput?.addEventListener('change', updateDebugButtonVisibility);
-    }
 });
 
 function setupSettingsControls(game: Game, initialSettings: GameSettings, updateHighScoreMode?: (mode: GameMode) => void): { updateModeSelectState: () => void; updateAutoplaceButtonVisibility: (enabled: boolean) => void } {
@@ -263,13 +242,6 @@ function setupSettingsControls(game: Game, initialSettings: GameSettings, update
     [gridInput, ghostInput, animationInput, soundInput, pointValuesInput, autoplaceInput, devModeInput].forEach(input => {
         input?.addEventListener('change', () => {
             pushToGame();
-            // Update debug button visibility when dev mode changes
-            if (input === devModeInput) {
-                const debugButton = document.getElementById('debug-reset-button');
-                if (debugButton) {
-                    debugButton.style.display = devModeInput?.checked ? '' : 'none';
-                }
-            }
         });
     });
     
@@ -442,13 +414,21 @@ function setupLeaderboardPopup(initialSettings: GameSettings): void {
         }
         
         try {
-            console.log(`[LEADERBOARD] Loading leaderboard for mode: ${mode}, period: ${period}`);
+            const currentSettings = loadSettings();
+            if (currentSettings.devMode) {
+                console.log(`[LEADERBOARD] Loading leaderboard for mode: ${mode}, period: ${period}`);
+            }
             const entries = await getLeaderboard(mode, period);
-            console.log(`[LEADERBOARD] Received ${entries.length} entries`);
+            if (currentSettings.devMode) {
+                console.log(`[LEADERBOARD] Received ${entries.length} entries`);
+            }
             leaderboardLoading.style.display = 'none';
             renderLeaderboard(entries);
         } catch (error) {
-            console.error('Failed to load leaderboard:', error);
+            const currentSettings = loadSettings();
+            if (currentSettings.devMode) {
+                console.error('Failed to load leaderboard:', error);
+            }
             leaderboardLoading.style.display = 'none';
             if (leaderboardError) {
                 leaderboardError.style.display = 'block';

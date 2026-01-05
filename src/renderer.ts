@@ -114,7 +114,9 @@ export class Renderer {
         img.onload = () => {
             this.blockIconImage = img;
             this.blockIconLoaded = true;
-            console.log('[RENDERER] Block icon loaded successfully');
+            if (this.settings.devMode) {
+                console.log('[RENDERER] Block icon loaded successfully');
+            }
             URL.revokeObjectURL(url);
         };
         
@@ -955,10 +957,11 @@ export class Renderer {
         const shapeIndex = getShapeIndex(dragState.shape);
         const color = getShapeColor(shapeIndex);
 
-        // effectivePosition is simply the anchor point (no offset)
+        // Apply mobile offset for thumb reach optimization (only for visual positioning)
+        const offsetY = dragState.isTouchEvent ? (dragState.mobileOffsetY || 0) : 0;
         const effectivePosition = {
             x: dragState.anchorPoint.x,
-            y: dragState.anchorPoint.y
+            y: dragState.anchorPoint.y - offsetY // Offset upward for mobile
         };
 
         // Draw the visual copy at effectivePosition

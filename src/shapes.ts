@@ -6,7 +6,7 @@ import { Shape, Position } from './types';
 import { Board } from './board';
 import { getValidPositions } from './validator';
 import { getColorSet, getColorSetIndex } from './colorConfig';
-import { EASY_MODE_CONFIG, GAMEPLAY_CONFIG } from './config';
+import { EASY_MODE_CONFIG, GAMEPLAY_CONFIG, STORAGE_KEYS, DEFAULT_SETTINGS } from './config';
 import { BOARD_CELL_COUNT } from './constants';
 
 /**
@@ -191,7 +191,22 @@ let SHAPE_COLORS: string[] = [];
 export function updateColorScheme(level: number): void {
     const colorSet = getColorSet(level);
     const setIndex = getColorSetIndex(level);
-    console.log(`[COLOR] Updating color scheme for level ${level}, using set ${setIndex}, colors:`, colorSet.colors.slice(0, 3));
+    
+    // Check devMode setting
+    let devMode = DEFAULT_SETTINGS.devMode;
+    try {
+        const stored = localStorage.getItem(STORAGE_KEYS.settings);
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            devMode = parsed.devMode ?? DEFAULT_SETTINGS.devMode;
+        }
+    } catch (e) {
+        // Ignore localStorage errors
+    }
+    
+    if (devMode) {
+        console.log(`[COLOR] Updating color scheme for level ${level}, using set ${setIndex}, colors:`, colorSet.colors.slice(0, 3));
+    }
     SHAPE_COLORS = colorSet.colors;
 }
 

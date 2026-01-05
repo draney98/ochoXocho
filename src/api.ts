@@ -4,7 +4,7 @@
  */
 
 import { GameMode, LeaderboardEntry } from './types';
-import { API_CONFIG } from './config';
+import { API_CONFIG, STORAGE_KEYS, DEFAULT_SETTINGS } from './config';
 
 /**
  * Response from submitting a score
@@ -68,7 +68,20 @@ export async function submitScore(
         const data: SubmitScoreResponse = await response.json();
         return data;
     } catch (error) {
-        console.warn('Failed to submit score to backend:', error);
+        // Check devMode setting
+        let devMode = DEFAULT_SETTINGS.devMode;
+        try {
+            const stored = localStorage.getItem(STORAGE_KEYS.settings);
+            if (stored) {
+                const parsed = JSON.parse(stored);
+                devMode = parsed.devMode ?? DEFAULT_SETTINGS.devMode;
+            }
+        } catch (e) {
+            // Ignore localStorage errors
+        }
+        if (devMode) {
+            console.warn('Failed to submit score to backend:', error);
+        }
         // Return failure but don't throw - allow game to continue
         return { success: false };
     }
@@ -92,26 +105,47 @@ export async function getLeaderboard(
     limit: number = 10
 ): Promise<LeaderboardEntry[]> {
     const url = `${API_CONFIG.baseUrl}/api/leaderboard?mode=${mode}&period=${period}&limit=${limit}`;
-    console.log(`[API] Fetching leaderboard from: ${url}`);
-    console.log(`[API] API_CONFIG.baseUrl: ${API_CONFIG.baseUrl}`);
+    
+    // Check devMode setting
+    let devMode = DEFAULT_SETTINGS.devMode;
+    try {
+        const stored = localStorage.getItem(STORAGE_KEYS.settings);
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            devMode = parsed.devMode ?? DEFAULT_SETTINGS.devMode;
+        }
+    } catch (e) {
+        // Ignore localStorage errors
+    }
+    
+    if (devMode) {
+        console.log(`[API] Fetching leaderboard from: ${url}`);
+        console.log(`[API] API_CONFIG.baseUrl: ${API_CONFIG.baseUrl}`);
+    }
     
     try {
         const response = await fetch(url);
 
         if (!response.ok) {
             const errorText = await response.text();
-            console.error(`[API] HTTP error! status: ${response.status}, body: ${errorText}`);
+            if (devMode) {
+                console.error(`[API] HTTP error! status: ${response.status}, body: ${errorText}`);
+            }
             throw new Error(`HTTP error! status: ${response.status}`);
         }
 
         const data: LeaderboardResponse = await response.json();
-        console.log(`[API] Leaderboard response:`, data);
+        if (devMode) {
+            console.log(`[API] Leaderboard response:`, data);
+        }
         return data.scores || [];
     } catch (error) {
-        console.error('[API] Failed to fetch leaderboard from backend:', error);
-        if (error instanceof TypeError && error.message.includes('fetch')) {
-            console.error('[API] Network error - is the backend server running?');
-            console.error('[API] Backend should be at:', API_CONFIG.baseUrl);
+        if (devMode) {
+            console.error('[API] Failed to fetch leaderboard from backend:', error);
+            if (error instanceof TypeError && error.message.includes('fetch')) {
+                console.error('[API] Network error - is the backend server running?');
+                console.error('[API] Backend should be at:', API_CONFIG.baseUrl);
+            }
         }
         // Return empty array on error - allow UI to show empty state
         return [];
