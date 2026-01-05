@@ -17,6 +17,7 @@ import {
     QUEUE_ITEM_HEIGHT,
     BOARD_OFFSET_X,
     BOARD_OFFSET_Y,
+    DRAG_VISUAL_OFFSET_Y,
     getQueueItemRect,
 } from './constants';
 import { GAMEPLAY_CONFIG, ANIMATION_CONFIG } from './config';
@@ -1045,6 +1046,7 @@ export class Renderer {
     /**
      * Draws the currently dragged shape with ghost placement preview
      * The shape is visually offset upward so it appears above the cursor/finger
+     * to prevent occlusion on mobile devices. Placement logic remains unchanged.
      * @param dragState - Current drag state
      */
     drawDragPreview(dragState: DragState): void {
@@ -1053,11 +1055,11 @@ export class Renderer {
         const shapeIndex = getShapeIndex(dragState.shape);
         const color = getShapeColor(shapeIndex);
 
-        // Draw piece at anchor point (finger/cursor position) exactly - no offset
-        // The piece visually stays under the finger
+        // Apply visual offset to lift piece above finger/cursor (prevents occlusion on mobile)
+        // Placement logic uses anchorPoint/projectedBoardPosition, so control feels direct
         const effectivePosition = {
             x: dragState.anchorPoint.x,
-            y: dragState.anchorPoint.y
+            y: dragState.anchorPoint.y + DRAG_VISUAL_OFFSET_Y
         };
 
         // Draw the visual copy at effectivePosition
