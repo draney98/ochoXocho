@@ -53,8 +53,9 @@ export class InputHandler {
             hasBoardPosition: false,
             anchorPoint: undefined,
             previewLinesCleared: undefined,
-            mobileOffsetY: undefined,
-            isTouchEvent: undefined,
+            controlOrigin: undefined,
+            projectedBoardPosition: undefined,
+            lastProjectedGridCell: undefined,
         };
 
         this.setupEventListeners();
@@ -140,8 +141,9 @@ export class InputHandler {
             hasBoardPosition: false,
             anchorPoint: undefined,
             previewLinesCleared: undefined,
-            mobileOffsetY: undefined,
-            isTouchEvent: undefined,
+            controlOrigin: undefined,
+            projectedBoardPosition: undefined,
+            lastProjectedGridCell: undefined,
         };
         this.originalQueueIndex = -1;
         // Clear any cached validation state
@@ -272,6 +274,78 @@ export class InputHandler {
     }
 
     /**
+     * Maps finger position to projected board position using reach scaling
+     * The control zone at the bottom of the screen uses variable scaling to allow
+     * small thumb movements to control large board movements.
+     * @param fingerPosition - Current finger position in canvas coordinates
+     * @param controlOrigin - Initial touch position (control zone origin)
+     * @returns Projected board position in canvas coordinates
+     */
+    private projectBoardPosition(
+        fingerPosition: { x: number; y: number },
+        controlOrigin: { x: number; y: number }
+    ): { x: number; y: number } {
+        const controlZoneTop = CANVAS_HEIGHT * (1 - this.settings.controlZoneHeight);
+        const controlZoneHeight = CANVAS_HEIGHT - controlZoneTop;
+        
+        // If finger is in control zone (bottom of screen)
+        if (fingerPosition.y > controlZoneTop) {
+            // Calculate progress through control zone (0 at top of zone, 1 at bottom)
+            const progress = (fingerPosition.y - controlZoneTop) / controlZoneHeight;
+            
+            // Variable scaling: stronger at bottom, weaker at top of control zone
+            // Use smooth easing for natural feel
+            const easedProgress = progress * progress; // Ease-in curve
+            const scale = this.settings.controlZoneMinScale + 
+                         (this.settings.controlZoneMaxScale - this.settings.controlZoneMinScale) * easedProgress;
+            
+            // Calculate delta from control origin
+            const deltaX = fingerPosition.x - controlOrigin.x;
+            const deltaY = fingerPosition.y - controlOrigin.y;
+            
+            // Project using scaled delta
+            return {
+                x: controlOrigin.x + deltaX * scale,
+                y: controlOrigin.y + deltaY * scale
+            };
+        } else {
+            // Outside control zone: use 1:1 mapping with smooth transition
+            // Smooth transition at boundary to prevent jarring change
+            const distanceFromBoundary = controlZoneTop - fingerPosition.y;
+            const transitionZone = 50; // Pixels of smooth transition
+            
+            if (distanceFromBoundary < transitionZone) {
+                // In transition zone: blend between scaled and 1:1
+                const blendFactor = distanceFromBoundary / transitionZone;
+                const minScale = this.settings.controlZoneMinScale;
+                
+                // Calculate what the projected position would be at boundary
+                const boundaryY = controlZoneTop;
+                const boundaryDeltaX = fingerPosition.x - controlOrigin.x;
+                const boundaryDeltaY = boundaryY - controlOrigin.y;
+                const boundaryScale = minScale;
+                const boundaryProjectedX = controlOrigin.x + boundaryDeltaX * boundaryScale;
+                const boundaryProjectedY = controlOrigin.y + boundaryDeltaY * boundaryScale;
+                
+                // Blend between boundary projection and 1:1
+                const oneToOneX = fingerPosition.x;
+                const oneToOneY = fingerPosition.y;
+                
+                return {
+                    x: boundaryProjectedX * blendFactor + oneToOneX * (1 - blendFactor),
+                    y: boundaryProjectedY * blendFactor + oneToOneY * (1 - blendFactor)
+                };
+            } else {
+                // Fully outside: pure 1:1 mapping
+                return {
+                    x: fingerPosition.x,
+                    y: fingerPosition.y
+                };
+            }
+        }
+    }
+
+    /**
      * Handles mouse move event - updates drag position and validates placement
      * @param event - Mouse event
      */
@@ -280,12 +354,11 @@ export class InputHandler {
 
         const { x: canvasX, y: canvasY } = this.getCanvasCoordinates(event);
 
-        // Update anchor point to follow the finger/cursor exactly (normalized canvas coordinates)
+        // Update anchor point to follow the cursor exactly (normalized canvas coordinates)
         this.dragState.anchorPoint = { x: canvasX, y: canvasY };
-        this.dragState.isTouchEvent = false; // Not a touch event
-        this.dragState.mobileOffsetY = 0; // No offset for mouse
         
-        // Calculate grid position directly from cursor position (no offsets)
+        // For mouse, use 1:1 mapping (no projection needed)
+        // Mouse has full precision, so no need for reach mapping
         const gridPos = this.calculateGridPosition({ x: canvasX, y: canvasY }, this.dragState.shape);
         
         if (gridPos) {
@@ -412,8 +485,9 @@ export class InputHandler {
             hasBoardPosition: false,
             anchorPoint: undefined,
             previewLinesCleared: undefined,
-            mobileOffsetY: undefined,
-            isTouchEvent: undefined,
+            controlOrigin: undefined,
+            projectedBoardPosition: undefined,
+            lastProjectedGridCell: undefined,
         };
     }
 
@@ -437,8 +511,9 @@ export class InputHandler {
             hasBoardPosition: false,
             anchorPoint: undefined,
             previewLinesCleared: undefined,
-            mobileOffsetY: undefined,
-            isTouchEvent: undefined,
+            controlOrigin: undefined,
+            projectedBoardPosition: undefined,
+            lastProjectedGridCell: undefined,
         };
     }
 
@@ -455,7 +530,7 @@ export class InputHandler {
         // Check if touch is within any queue card under the board
         // Use fixed queue size (3) for hit detection so areas don't move
         const QUEUE_SIZE = 3;
-        if (canvasY >= BOARD_PIXEL_SIZE && canvasY <= CANVAS_HEIGHT) {
+        if (canvasY >= BOARD_OFFSET_Y + BOARD_PIXEL_SIZE && canvasY <= CANVAS_HEIGHT) {
             for (let i = 0; i < QUEUE_SIZE; i++) {
                 const rect = getQueueItemRect(i, QUEUE_SIZE);
                 if (
@@ -470,10 +545,15 @@ export class InputHandler {
                         this.dragState.shapeIndex = i;
                         this.dragState.shape = this.queue[i];
                         this.originalQueueIndex = i; // Store original position
-                        // Set anchor point to exact touch location (don't move it to board)
+                        
+                        // Record control origin for reach mapping (initial touch position)
+                        this.dragState.controlOrigin = { x: canvasX, y: canvasY };
+                        
+                        // Set anchor point to exact touch location (piece follows finger)
                         this.dragState.anchorPoint = { x: canvasX, y: canvasY };
-                        // Remove shape from queue immediately when selected
-                        this.onRemoveFromQueue(i);
+                        
+                        // Do NOT remove shape from queue yet - keep it visible
+                        // It will be removed when dropped on valid position
                         break;
                     }
                 }
@@ -487,39 +567,22 @@ export class InputHandler {
      */
     private handleTouchMove(event: TouchEvent): void {
         event.preventDefault(); // Prevent scrolling
-        if (!this.dragState.isDragging || event.touches.length === 0 || !this.dragState.shape) return;
+        if (!this.dragState.isDragging || event.touches.length === 0 || !this.dragState.shape || !this.dragState.controlOrigin) return;
 
         const { x: canvasX, y: canvasY } = this.getCanvasCoordinates(event);
 
-        // Update anchor point to follow the finger exactly (normalized canvas coordinates)
+        // Update anchor point to follow the finger exactly (no offset)
         this.dragState.anchorPoint = { x: canvasX, y: canvasY };
-        this.dragState.isTouchEvent = true; // Mark as touch event
         
-        // Calculate dynamic offset for mobile thumb reach optimization
-        // Offset increases towards the top of the screen (where thumb can't reach easily)
-        // Bottom half (y > CANVAS_HEIGHT/2): minimal offset (0-50px)
-        // Top half (y < CANVAS_HEIGHT/2): increasing offset (50-150px)
-        const midPoint = CANVAS_HEIGHT / 2;
-        let offsetY = 0;
+        // Calculate projected board position using reach mapping
+        const projectedPos = this.projectBoardPosition(
+            { x: canvasX, y: canvasY },
+            this.dragState.controlOrigin
+        );
+        this.dragState.projectedBoardPosition = projectedPos;
         
-        if (canvasY < midPoint) {
-            // Top half: offset increases as we go up
-            // At top (y=0): max offset of 150px
-            // At middle (y=midPoint): offset of 50px
-            const progress = 1 - (canvasY / midPoint); // 1 at top, 0 at middle
-            offsetY = 50 + (progress * 100); // Range: 50px to 150px
-        } else {
-            // Bottom half: minimal offset that increases slightly as we go up
-            // At middle (y=midPoint): offset of 50px
-            // At bottom (y=CANVAS_HEIGHT): offset of 0px
-            const progress = (canvasY - midPoint) / midPoint; // 0 at middle, 1 at bottom
-            offsetY = 50 * (1 - progress); // Range: 50px to 0px
-        }
-        
-        this.dragState.mobileOffsetY = offsetY;
-        
-        // Calculate grid position directly from cursor position (no offsets for grid calculations)
-        const gridPos = this.calculateGridPosition({ x: canvasX, y: canvasY }, this.dragState.shape);
+        // Convert projected position to grid coordinates
+        const gridPos = this.calculateGridPosition(projectedPos, this.dragState.shape);
         
         if (gridPos) {
             this.dragState.mousePosition = gridPos;
@@ -600,15 +663,18 @@ export class InputHandler {
      */
     private handleTouchEnd(event: TouchEvent): void {
         event.preventDefault();
-        if (!this.dragState.isDragging) return;
+        if (!this.dragState.isDragging || !this.dragState.shape || !this.dragState.controlOrigin) return;
 
         // Update anchor to final position (normalized canvas coordinates)
         const { x: canvasX, y: canvasY } = this.getCanvasCoordinates(event);
         this.dragState.anchorPoint = { x: canvasX, y: canvasY };
 
-        if (!this.dragState.shape) {
-            return;
-        }
+        // Calculate final projected position using reach mapping
+        const projectedPos = this.projectBoardPosition(
+            { x: canvasX, y: canvasY },
+            this.dragState.controlOrigin
+        );
+        this.dragState.projectedBoardPosition = projectedPos;
 
         // Check if cursor is over the queue area - if so, always restore to queue
         const isOverQueueArea = canvasY >= BOARD_OFFSET_Y + BOARD_PIXEL_SIZE && canvasY <= CANVAS_HEIGHT;
@@ -616,26 +682,36 @@ export class InputHandler {
         // Only allow placement on the playing surface (board area with valid empty cells)
         let shapePlaced = false;
         if (!isOverQueueArea) {
-            // Calculate grid position directly from cursor (accounting for board offset)
-            const gridPos = this.calculateGridPosition({ x: canvasX, y: canvasY }, this.dragState.shape);
+            // Calculate grid position from projected position (not finger position)
+            const gridPos = this.calculateGridPosition(projectedPos, this.dragState.shape);
 
-            // Check if cursor is over the board area and placement is valid
-            const adjustedX = canvasX - BOARD_OFFSET_X;
-            const adjustedY = canvasY - BOARD_OFFSET_Y;
+            // Check if projected position is over the board area and placement is valid
+            const adjustedX = projectedPos.x - BOARD_OFFSET_X;
+            const adjustedY = projectedPos.y - BOARD_OFFSET_Y;
             if (gridPos && adjustedX >= 0 && adjustedX < BOARD_PIXEL_SIZE && 
                 adjustedY >= 0 && adjustedY < BOARD_PIXEL_SIZE) {
                 
                 // Only place if the position is valid (empty cells only - canPlaceShape checks this)
                 if (canPlaceShape(this.board, this.dragState.shape, gridPos)) {
-                    // Pass -1 as shapeIndex since shape was already removed from queue
+                    // Remove shape from queue now (was kept visible during drag)
+                    if (this.originalQueueIndex >= 0) {
+                        this.onRemoveFromQueue(this.originalQueueIndex);
+                    }
+                    
+                    // Place the shape
                     this.onPlaceShape(-1, gridPos);
                     shapePlaced = true;
+                    
+                    // Haptic feedback on valid placement
+                    if ('vibrate' in navigator) {
+                        navigator.vibrate(20); // Slightly longer vibration for placement
+                    }
                 }
             }
         }
 
         // If shape wasn't placed (invalid position, over queue area, or outside board), restore it to queue
-        if (!shapePlaced && this.dragState.shape && this.originalQueueIndex >= 0) {
+        if (!shapePlaced && this.originalQueueIndex >= 0) {
             this.onRestoreToQueue(this.originalQueueIndex, this.dragState.shape);
         }
 
@@ -650,8 +726,9 @@ export class InputHandler {
             hasBoardPosition: false,
             anchorPoint: undefined,
             previewLinesCleared: undefined,
-            mobileOffsetY: undefined,
-            isTouchEvent: undefined,
+            controlOrigin: undefined,
+            projectedBoardPosition: undefined,
+            lastProjectedGridCell: undefined,
         };
     }
 
@@ -677,8 +754,9 @@ export class InputHandler {
             hasBoardPosition: false,
             anchorPoint: undefined,
             previewLinesCleared: undefined,
-            mobileOffsetY: undefined,
-            isTouchEvent: undefined,
+            controlOrigin: undefined,
+            projectedBoardPosition: undefined,
+            lastProjectedGridCell: undefined,
         };
     }
 

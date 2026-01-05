@@ -22,8 +22,7 @@ export const QUEUE_ITEM_HEIGHT = 150;
 export const QUEUE_ITEM_GAP = 10; // (unused now, kept for compatibility)
 export const QUEUE_CELL_SIZE = 42; // (unused for sizing, kept for compatibility)
 
-// Drag and drop constants
-export const LIFT_OFFSET_PIXELS = 100; // Vertical offset for lifted piece during drag
+// Drag and drop constants - removed LIFT_OFFSET_PIXELS (replaced with virtual cursor model)
 
 /**
  * Calculates the rectangle for a queue item positioned horizontally under the board.

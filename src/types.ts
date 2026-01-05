@@ -54,10 +54,10 @@ export interface DragState {
     isDragging: boolean;
     shapeIndex: number;            // Index in the queue of the shape being dragged
     shape: Shape | null;           // The shape being dragged
-    mousePosition: Position;       // Current mouse position in grid coordinates
+    mousePosition: Position;       // Current mouse position in grid coordinates (projected for touch)
     isValidPosition: boolean;      // Whether current position is valid for placement
     hasBoardPosition: boolean;     // Whether the cursor has entered the board area
-    anchorPoint?: {                // Canvas coordinates of the drag anchor (exact touch point)
+    anchorPoint?: {                // Canvas coordinates of the drag anchor (exact touch/finger point)
         x: number;
         y: number;
     };
@@ -65,8 +65,18 @@ export interface DragState {
         rows: number[];
         columns: number[];
     };
-    mobileOffsetY?: number;        // Dynamic Y offset for mobile thumb reach optimization
-    isTouchEvent?: boolean;         // Track if this is a touch event (mobile)
+    controlOrigin?: {              // Initial touch position when drag started (for reach mapping)
+        x: number;
+        y: number;
+    };
+    projectedBoardPosition?: {    // Calculated board position using reach mapping (canvas coordinates)
+        x: number;
+        y: number;
+    };
+    lastProjectedGridCell?: {     // Last grid cell for haptic feedback on cell changes
+        x: number;
+        y: number;
+    };
 }
 
 /**
@@ -80,6 +90,20 @@ export interface AnimatingCell {
     progress: number;              // Animation progress (0 to 1)
     type?: 'clear' | 'explosion';  // Type of animation (defaults to 'clear')
     animationIndex?: number;       // Index (0-9) for which clear animation style to use
+}
+
+/**
+ * Represents a shape that is animating to its final position (snap animation)
+ */
+export interface AnimatingShape {
+    shape: Shape;                  // The shape being animated
+    startPosition: { x: number; y: number }; // Starting position in canvas coordinates
+    endPosition: Position;         // Ending position in grid coordinates
+    color: string;                 // Color of the shape
+    startTime: number;             // Timestamp when animation started
+    duration: number;              // Animation duration in milliseconds
+    type: 'place' | 'restore';     // Type of animation: place on board or restore to queue
+    queueIndex?: number;           // Queue index (for restore animations)
 }
 
 /**
@@ -99,6 +123,9 @@ export interface GameSettings {
     autoplaceEnabled: boolean; // Enable/disable autoplace button functionality
     playerName: string; // Player name for high scores
     devMode: boolean; // Dev setting: enable debug logging and dev features
+    controlZoneHeight: number; // Height of control zone as fraction of canvas (0.2-0.5, default 0.33)
+    controlZoneMaxScale: number; // Maximum scaling at bottom of control zone (2.0-4.0, default 3.0)
+    controlZoneMinScale: number; // Minimum scaling at top of control zone (1.0-2.0, default 1.5)
 }
 
 /**

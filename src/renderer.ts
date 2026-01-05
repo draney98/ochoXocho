@@ -2,7 +2,7 @@
  * Canvas rendering system for drawing the game board, shapes, queue, and score
  */
 
-import { Position, Shape, PlacedBlock, DragState, AnimatingCell, GameSettings } from './types';
+import { Position, Shape, PlacedBlock, DragState, AnimatingCell, AnimatingShape, GameSettings } from './types';
 import { Board } from './board';
 import { getShapeColor, getShapeIndex, getShapePointValue } from './shapes';
 import { getColorSet } from './colorConfig';
@@ -947,6 +947,102 @@ export class Renderer {
     }
 
     /**
+     * Draws an animating shape (snap animation from finger to final position)
+     * @param animShape - The animating shape data
+     */
+    drawAnimatingShape(animShape: AnimatingShape): void {
+        const currentTime = Date.now();
+        const elapsed = currentTime - animShape.startTime;
+        const progress = Math.min(elapsed / animShape.duration, 1);
+        
+        // Ease-out function for smooth animation
+        const easeOut = (t: number): number => {
+            return 1 - Math.pow(1 - t, 3); // Cubic ease-out
+        };
+        const easedProgress = easeOut(progress);
+        
+        if (animShape.type === 'place') {
+            // Animate from start position to grid position
+            const startX = animShape.startPosition.x;
+            const startY = animShape.startPosition.y;
+            
+            // Calculate end position in canvas coordinates
+            const minX = Math.min(...animShape.shape.map(b => b.x));
+            const minY = Math.min(...animShape.shape.map(b => b.y));
+            const endX = BOARD_OFFSET_X + (animShape.endPosition.x + minX) * CELL_SIZE + CELL_SIZE / 2;
+            const endY = BOARD_OFFSET_Y + (animShape.endPosition.y + minY) * CELL_SIZE + CELL_SIZE / 2;
+            
+            // Interpolate position
+            const currentX = startX + (endX - startX) * easedProgress;
+            const currentY = startY + (endY - startY) * easedProgress;
+            
+            // Draw shape at interpolated position
+            this.ctx.save();
+            this.ctx.translate(currentX, currentY);
+            
+            // Center the shape
+            const maxX = Math.max(...animShape.shape.map(b => b.x));
+            const maxY = Math.max(...animShape.shape.map(b => b.y));
+            const shapeWidth = (maxX - minX + 1) * CELL_SIZE;
+            const shapeHeight = (maxY - minY + 1) * CELL_SIZE;
+            this.ctx.translate(-shapeWidth / 2, -shapeHeight / 2);
+            
+            // Draw with slight fade as it approaches final position
+            this.ctx.globalAlpha = 0.7 + (0.3 * (1 - easedProgress));
+            for (const block of animShape.shape) {
+                const x = block.x * CELL_SIZE;
+                const y = block.y * CELL_SIZE;
+                const blockX = x + 2;
+                const blockY = y + 2;
+                const blockSize = CELL_SIZE - 4;
+                this.drawBlock(blockX, blockY, blockSize, animShape.color);
+            }
+            
+            this.ctx.globalAlpha = 1.0;
+            this.ctx.restore();
+        } else if (animShape.type === 'restore') {
+            // Animate from start position back to queue
+            const startX = animShape.startPosition.x;
+            const startY = animShape.startPosition.y;
+            
+            // End position is already in canvas coordinates (from queue rect)
+            const endX = animShape.endPosition.x;
+            const endY = animShape.endPosition.y;
+            
+            // Interpolate position
+            const currentX = startX + (endX - startX) * easedProgress;
+            const currentY = startY + (endY - startY) * easedProgress;
+            
+            // Draw shape at interpolated position
+            this.ctx.save();
+            this.ctx.translate(currentX, currentY);
+            
+            // Center the shape
+            const minX = Math.min(...animShape.shape.map(b => b.x));
+            const minY = Math.min(...animShape.shape.map(b => b.y));
+            const maxX = Math.max(...animShape.shape.map(b => b.x));
+            const maxY = Math.max(...animShape.shape.map(b => b.y));
+            const shapeWidth = (maxX - minX + 1) * CELL_SIZE;
+            const shapeHeight = (maxY - minY + 1) * CELL_SIZE;
+            this.ctx.translate(-shapeWidth / 2, -shapeHeight / 2);
+            
+            // Draw with fade as it approaches queue
+            this.ctx.globalAlpha = 0.7 + (0.3 * (1 - easedProgress));
+            for (const block of animShape.shape) {
+                const x = block.x * CELL_SIZE;
+                const y = block.y * CELL_SIZE;
+                const blockX = x + 2;
+                const blockY = y + 2;
+                const blockSize = CELL_SIZE - 4;
+                this.drawBlock(blockX, blockY, blockSize, animShape.color);
+            }
+            
+            this.ctx.globalAlpha = 1.0;
+            this.ctx.restore();
+        }
+    }
+
+    /**
      * Draws the currently dragged shape with ghost placement preview
      * The shape is visually offset upward so it appears above the cursor/finger
      * @param dragState - Current drag state
@@ -957,11 +1053,11 @@ export class Renderer {
         const shapeIndex = getShapeIndex(dragState.shape);
         const color = getShapeColor(shapeIndex);
 
-        // Apply mobile offset for thumb reach optimization (only for visual positioning)
-        const offsetY = dragState.isTouchEvent ? (dragState.mobileOffsetY || 0) : 0;
+        // Draw piece at anchor point (finger/cursor position) exactly - no offset
+        // The piece visually stays under the finger
         const effectivePosition = {
             x: dragState.anchorPoint.x,
-            y: dragState.anchorPoint.y - offsetY // Offset upward for mobile
+            y: dragState.anchorPoint.y
         };
 
         // Draw the visual copy at effectivePosition
@@ -1801,7 +1897,8 @@ export class Renderer {
         level: number = 1,
         score: number = 0,
         linesCleared: number = 0,
-        leaderboardRank: number | null = null
+        leaderboardRank: number | null = null,
+        animatingShapes: AnimatingShape[] = []
     ): void {
         // Update current level for highlight color calculation
         this.currentLevel = level;
@@ -1823,6 +1920,11 @@ export class Renderer {
         // Draw preview line highlights if dragging and position would clear lines
         if (dragState.isDragging && dragState.isValidPosition && dragState.previewLinesCleared) {
             this.drawPreviewLineHighlights(dragState.previewLinesCleared, placedBlocks);
+        }
+        
+        // Draw animating shapes (snap animations)
+        for (const animShape of animatingShapes) {
+            this.drawAnimatingShape(animShape);
         }
         
         this.drawQueue(queue);

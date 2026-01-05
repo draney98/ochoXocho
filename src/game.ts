@@ -2,7 +2,7 @@
  * Main game orchestrator - manages game loop, state, and all game systems
  */
 
-import { Position, Shape, PlacedBlock, DragState, GameState, AnimatingCell, GameSettings } from './types';
+import { Position, Shape, PlacedBlock, DragState, GameState, AnimatingCell, AnimatingShape, GameSettings } from './types';
 import { Board } from './board';
 import { generateShapes, generateEasyShapes, getShapeColor, getShapeIndex, getShapePointValue, updateColorScheme } from './shapes';
 import { Renderer } from './renderer';
@@ -16,6 +16,7 @@ import { getLeaderboard } from './api';
 import { GAMEPLAY_CONFIG, ANIMATION_CONFIG, GAME_OVER_CONFIG } from './config';
 import { getUIColorForLevel, getButtonColors } from './colorConfig';
 import { findOptimalPlacementOrder } from './boardUtils';
+import { getQueueItemRect } from './constants';
 
 /**
  * Game class orchestrates all game systems and manages the game loop
@@ -35,7 +36,9 @@ export class Game {
     private animationFrameId: number | null = null;
     private shapesPlacedThisTurn: number = 0;
     private animatingCells: AnimatingCell[] = [];
+    private animatingShapes: AnimatingShape[] = [];
     private readonly ANIMATION_DURATION = ANIMATION_CONFIG.lineClearMs;
+    private readonly SNAP_ANIMATION_DURATION = 200; // 200ms for snap animation
     private gameOverStartTime: number | null = null;
     private readonly GAME_OVER_ANIMATION_DURATION = ANIMATION_CONFIG.gameOverFadeMs;
     private gameOverPopComplete: boolean = false;
@@ -188,6 +191,20 @@ export class Game {
             return cell.progress < 1; // Remove completed animations
         });
         
+        // Update shape snap animations
+        this.animatingShapes = this.animatingShapes.filter(animShape => {
+            const elapsed = currentTime - animShape.startTime;
+            const progress = Math.min(elapsed / animShape.duration, 1);
+            
+            // When animation completes, actually place the shape (for place animations)
+            if (progress >= 1 && animShape.type === 'place') {
+                // Animation complete - shape is already placed on board, just remove from animation
+                return false;
+            }
+            
+            return progress < 1; // Keep animating shapes
+        });
+        
         // Don't update game logic if game is over (freeze the board)
         if (this.state.gameOver) {
             // Still update game over animation
@@ -237,7 +254,8 @@ export class Game {
             this.state.level,
             this.state.score,
             this.state.linesCleared,
-            this.leaderboardRank
+            this.leaderboardRank,
+            this.animatingShapes
         );
     }
 
@@ -271,6 +289,36 @@ export class Game {
         if (shapeIndex < 0) {
             return;
         }
+        
+        const dragState = this.inputHandler.getDragState();
+        const startPosition = dragState.anchorPoint || { x: 0, y: 0 };
+        const shapeIndexInPool = getShapeIndex(shape);
+        const shapeColor = getShapeColor(shapeIndexInPool);
+        
+        // If animations are enabled, create restore animation
+        if (this.settings.enableAnimations) {
+            // Get queue item position for end position
+            const queueRect = getQueueItemRect(shapeIndex, 3);
+            const endPosition = {
+                x: queueRect.x + queueRect.width / 2,
+                y: queueRect.y + queueRect.height / 2
+            };
+            
+            // Create restore animation
+            // Store canvas coordinates in endPosition (will be handled specially in renderer)
+            const animatingShape: AnimatingShape = {
+                shape,
+                startPosition,
+                endPosition: { x: Math.floor(endPosition.x), y: Math.floor(endPosition.y) } as Position,
+                color: shapeColor,
+                startTime: Date.now(),
+                duration: this.SNAP_ANIMATION_DURATION,
+                type: 'restore',
+                queueIndex: shapeIndex
+            };
+            this.animatingShapes.push(animatingShape);
+        }
+        
         // Ensure the queue has a slot at this index
         while (this.state.queue.length < 3) {
             this.state.queue.push(null);
@@ -303,21 +351,55 @@ export class Game {
         // Newly placed blocks start with base value (1-8) - store this value
         const basePointValue = getShapePointValue(shapeIndexInPool, 0);
 
-        // Place the shape on the board
-        this.board.placeShape(shape, position);
-
-        // Add to placed blocks - store the base point value
-        const placedBlock: PlacedBlock = {
-            shape,
-            position,
-            color: shapeColor,
-            pointValue: basePointValue,  // Store base value (original, never modified)
-            lineClearBonuses: 0,  // Track line clear bonuses separately
-            totalShapesPlacedAtPlacement: this.state.totalShapesPlaced,
-            shapeIndex: shapeIndexInPool,  // Store the original shape index
-            darkness: 1.0,  // Start at full brightness
-        };
-        this.state.placedBlocks.push(placedBlock);
+        // Get starting position from drag state (finger position)
+        const startPosition = dragState.anchorPoint || { x: 0, y: 0 };
+        
+        // If animations are enabled, create snap animation
+        if (this.settings.enableAnimations) {
+            // Create snap animation
+            const animatingShape: AnimatingShape = {
+                shape,
+                startPosition,
+                endPosition: position,
+                color: shapeColor,
+                startTime: Date.now(),
+                duration: this.SNAP_ANIMATION_DURATION,
+                type: 'place'
+            };
+            this.animatingShapes.push(animatingShape);
+            
+            // Place shape on board immediately (will be drawn via animation)
+            this.board.placeShape(shape, position);
+            
+            // Add to placed blocks - store the base value
+            const placedBlock: PlacedBlock = {
+                shape,
+                position,
+                color: shapeColor,
+                pointValue: basePointValue,  // Store base value (original, never modified)
+                lineClearBonuses: 0,  // Track line clear bonuses separately
+                totalShapesPlacedAtPlacement: this.state.totalShapesPlaced,
+                shapeIndex: shapeIndexInPool,  // Store the original shape index
+                darkness: 1.0,  // Start at full brightness
+            };
+            this.state.placedBlocks.push(placedBlock);
+        } else {
+            // No animation - place immediately
+            this.board.placeShape(shape, position);
+            
+            // Add to placed blocks - store the base value
+            const placedBlock: PlacedBlock = {
+                shape,
+                position,
+                color: shapeColor,
+                pointValue: basePointValue,  // Store base value (original, never modified)
+                lineClearBonuses: 0,  // Track line clear bonuses separately
+                totalShapesPlacedAtPlacement: this.state.totalShapesPlaced,
+                shapeIndex: shapeIndexInPool,  // Store the original shape index
+                darkness: 1.0,  // Start at full brightness
+            };
+            this.state.placedBlocks.push(placedBlock);
+        }
         // Resume AudioContext on first user interaction (fixes autoplay policy)
         this.soundManager.resumeContext();
         this.soundManager.playPlace();
@@ -325,7 +407,7 @@ export class Game {
             console.log(`[PLACE] Placed shape at (${position.x}, ${position.y}), total blocks: ${this.state.placedBlocks.length}`);
         }
 
-        // Shape was already removed from queue when dragging started
+        // Shape is removed from queue when dropped (for touch) or when drag started (for mouse)
         this.shapesPlacedThisTurn++;
         this.state.totalShapesPlaced++;
         this.state.turn++;
@@ -1194,6 +1276,7 @@ export class Game {
         };
         this.shapesPlacedThisTurn = 0;
         this.animatingCells = [];
+        this.animatingShapes = [];
         this.gameOverStartTime = null;
         this.isNewHighScore = false;
         this.inputHandler.updateBoard(this.board);

@@ -116,6 +116,9 @@ export const DEFAULT_SETTINGS: GameSettings = {
     autoplaceEnabled: true, // Autoplace button enabled by default
     playerName: '   ', // Default 3 spaces (old school arcade style)
     devMode: true, // Dev mode: on by default, enables debug logging
+    controlZoneHeight: 0.33, // Bottom third of screen (33%)
+    controlZoneMaxScale: 3.0, // Maximum scaling at bottom of control zone
+    controlZoneMinScale: 1.5, // Minimum scaling at top of control zone
 };
 
 /**
