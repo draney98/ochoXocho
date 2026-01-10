@@ -1,9 +1,6 @@
 # Dependencies
 node_modules/
 
-# Score data (persistent storage)
-scores.json
-
 # Logs
 *.log
 npm-debug.log*

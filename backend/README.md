@@ -59,6 +59,19 @@ VITE_API_BASE_URL=http://localhost:3000
 
 ## Notes
 
-- Currently uses in-memory storage (scores reset on server restart)
-- For production, consider upgrading to PostgreSQL for persistent storage
+- Uses PostgreSQL for persistent storage (scores survive service restarts)
+- Database table is created automatically on first run
+- Set `DATABASE_URL` environment variable to connect to PostgreSQL
+
+## Local Development with PostgreSQL
+
+For local development with a database:
+
+1. Install PostgreSQL locally or use a cloud instance
+2. Create a `.env` file in the `backend/` directory:
+```
+DATABASE_URL=postgresql://user:password@localhost:5432/ochoxocho
+```
+
+3. Start the server - it will create the `scores` table automatically
 

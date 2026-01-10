@@ -1,3 +1,8 @@
+databases:
+  - name: ocho-xocho-db
+    databaseName: ochoxocho
+    user: ochoxocho
+
 services:
   - type: web
     name: ocho-xocho-api
@@ -9,4 +14,8 @@ services:
         value: production
       - key: PORT
         value: 3000
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ocho-xocho-db
+          property: connectionString
 
