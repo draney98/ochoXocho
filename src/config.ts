@@ -119,6 +119,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
     controlZoneHeight: 0.33, // Bottom third of screen (33%)
     controlZoneMaxScale: 3.0, // Maximum scaling at bottom of control zone
     controlZoneMinScale: 1.5, // Minimum scaling at top of control zone
+    dragSnapSmoothing: 0.5, // Smoothing factor for drag snapping (0.1=smooth, 1.0=instant)
 };
 
 /**

@@ -39,6 +39,7 @@ export class Renderer {
     private blockIconLoaded: boolean = false;
     private copyLinkBounds: { x: number; y: number; width: number; height: number } | null = null; // Bounds for copy link click detection
     private copyLinkText: string = 'Copy'; // Current text for copy link (emoji removed)
+    private smoothedDragPosition: { x: number; y: number } | null = null; // Smoothed position for interpolated snapping
 
     constructor(canvas: HTMLCanvasElement, settings: GameSettings) {
         this.canvas = canvas;
@@ -1050,7 +1051,11 @@ export class Renderer {
      * @param dragState - Current drag state
      */
     drawDragPreview(dragState: DragState): void {
-        if (!dragState.isDragging || !dragState.shape || !dragState.anchorPoint) return;
+        if (!dragState.isDragging || !dragState.shape || !dragState.anchorPoint) {
+            // Reset smoothed position when not dragging
+            this.smoothedDragPosition = null;
+            return;
+        }
 
         const shapeIndex = getShapeIndex(dragState.shape);
         const color = getShapeColor(shapeIndex);
@@ -1073,19 +1078,33 @@ export class Renderer {
         const shapeWidth = (maxX - minX + 1) * CELL_SIZE;
         const shapeHeight = (maxY - minY + 1) * CELL_SIZE;
         
-        // When over the board with a valid position, snap to grid for precise placement visualization
-        // This ensures the visual piece shows EXACTLY where it will land
-        let effectivePosition: { x: number; y: number };
+        // Determine target position based on whether we're over the board
+        let targetPosition: { x: number; y: number };
         if (dragState.hasBoardPosition) {
             // Calculate grid-snapped position from mousePosition (grid coordinates)
-            // This matches where the piece will actually be placed
             const gridPixelX = BOARD_OFFSET_X + dragState.mousePosition.x * CELL_SIZE + shapeWidth / 2;
             const gridPixelY = BOARD_OFFSET_Y + dragState.mousePosition.y * CELL_SIZE + shapeHeight / 2;
-            effectivePosition = { x: gridPixelX, y: gridPixelY };
+            targetPosition = { x: gridPixelX, y: gridPixelY };
         } else {
-            // Not over board - use floating position
-            effectivePosition = floatingPosition;
+            // Not over board - target is floating position
+            targetPosition = floatingPosition;
         }
+        
+        // Interpolated snapping: smoothly lerp toward target position
+        // This creates a "magnetic" feel when approaching grid cells
+        // Use dragSnapSmoothing from settings (0.1=smooth, 1.0=instant)
+        const lerpFactor = this.settings.dragSnapSmoothing ?? 0.5;
+        
+        if (this.smoothedDragPosition === null) {
+            // First frame of drag - initialize to current position
+            this.smoothedDragPosition = { x: targetPosition.x, y: targetPosition.y };
+        } else {
+            // Lerp toward target
+            this.smoothedDragPosition.x += (targetPosition.x - this.smoothedDragPosition.x) * lerpFactor;
+            this.smoothedDragPosition.y += (targetPosition.y - this.smoothedDragPosition.y) * lerpFactor;
+        }
+        
+        const effectivePosition = this.smoothedDragPosition;
 
         // Draw the visual copy at effectivePosition
         // The shape is drawn in pixel space, centered on the effectivePosition

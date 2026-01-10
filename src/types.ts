@@ -126,6 +126,7 @@ export interface GameSettings {
     controlZoneHeight: number; // Height of control zone as fraction of canvas (0.2-0.5, default 0.33)
     controlZoneMaxScale: number; // Maximum scaling at bottom of control zone (2.0-4.0, default 3.0)
     controlZoneMinScale: number; // Minimum scaling at top of control zone (1.0-2.0, default 1.5)
+    dragSnapSmoothing: number; // Smoothing factor for drag snapping (0.1=smooth, 1.0=instant, default 0.5)
 }
 
 /**
