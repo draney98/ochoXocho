@@ -74,7 +74,7 @@
     <div id="settings-backdrop" aria-hidden="true"></div>
     <section id="settings-panel" role="dialog" aria-labelledby="settings-title" aria-modal="true" aria-hidden="true">
         <header class="settings-header">
-            <h2 id="settings-title">Settings</h2>
+            <h2 id="settings-title">Settings <button id="settings-help-button" aria-label="Help" title="What do these settings do?">❓</button></h2>
             <button id="close-settings-button" aria-label="Close settings">&times;</button>
         </header>
         <form id="settings-form">
@@ -146,6 +146,68 @@
                 <span id="drag-snap-smoothing-value">0.5</span>
             </div>
         </form>
+    </section>
+    <div id="settings-help-backdrop" aria-hidden="true"></div>
+    <section id="settings-help-panel" role="dialog" aria-labelledby="settings-help-title" aria-modal="true" aria-hidden="true">
+        <header class="settings-header">
+            <h2 id="settings-help-title">Settings Help</h2>
+            <button id="close-settings-help-button" aria-label="Close help">&times;</button>
+        </header>
+        <div class="settings-help-content">
+            <h3>Display Settings</h3>
+            <dl>
+                <dt>Design</dt>
+                <dd>Choose a color theme for the game board and pieces.</dd>
+                
+                <dt>Show grid lines</dt>
+                <dd>Display grid lines on the board to help with piece alignment.</dd>
+                
+                <dt>Show ghost preview</dt>
+                <dd>Show a semi-transparent preview of where the piece will land.</dd>
+                
+                <dt>Enable clear animations</dt>
+                <dd>Play animations when rows/columns are cleared.</dd>
+                
+                <dt>Sound effects</dt>
+                <dd>Enable or disable game sounds.</dd>
+            </dl>
+            
+            <h3>Gameplay Settings</h3>
+            <dl>
+                <dt>Difficulty</dt>
+                <dd><strong>Easy:</strong> Game tries to give you shapes that fit. <strong>Hard:</strong> Completely random shapes.</dd>
+                
+                <dt>Enable autoplace</dt>
+                <dd>Show a button that automatically places the current piece in a valid position.</dd>
+                
+                <dt>Player Name</dt>
+                <dd>Your 3-letter name for the leaderboard (arcade style!).</dd>
+            </dl>
+            
+            <h3>Touch/Drag Settings</h3>
+            <dl>
+                <dt>Control zone height</dt>
+                <dd>How much of the screen (from the bottom) uses reach amplification. Larger = more area with amplified movement.</dd>
+                
+                <dt>Control zone max scale</dt>
+                <dd>Movement multiplier at the bottom of the screen. Higher = small finger movements make big piece movements.</dd>
+                
+                <dt>Control zone min scale</dt>
+                <dd>Movement multiplier at the top of the control zone. Controls the transition smoothness.</dd>
+                
+                <dt>Drag snap smoothing</dt>
+                <dd>How smoothly pieces snap to grid cells. Lower = floaty/magnetic, Higher = instant snap.</dd>
+            </dl>
+            
+            <h3>Developer Settings</h3>
+            <dl>
+                <dt>Show point values (dev)</dt>
+                <dd>Display point values on each block and in the queue.</dd>
+                
+                <dt>Debug logging (dev)</dt>
+                <dd>Enable console logging for debugging.</dd>
+            </dl>
+        </div>
     </section>
     <div id="leaderboard-backdrop" aria-hidden="true"></div>
     <section id="leaderboard-panel" role="dialog" aria-labelledby="leaderboard-title" aria-modal="true" aria-hidden="true">

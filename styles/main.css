@@ -500,8 +500,106 @@ body[data-theme="midnight"] #auto-place-button {
 }
 
 #close-settings-button:hover,
-#close-leaderboard-button:hover {
+#close-leaderboard-button:hover,
+#close-settings-help-button:hover {
     color: var(--panel-text-color);
+}
+
+/* Settings help button */
+#settings-help-button {
+    background: transparent;
+    border: none;
+    font-size: 16px;
+    cursor: pointer;
+    padding: 2px 6px;
+    margin-left: 8px;
+    vertical-align: middle;
+    opacity: 0.7;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+#settings-help-button:hover {
+    opacity: 1;
+    transform: scale(1.1);
+}
+
+/* Settings help panel */
+#settings-help-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 1100;
+}
+
+#settings-help-backdrop.visible {
+    display: block;
+}
+
+#settings-help-panel {
+    display: none;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: var(--panel-bg-color);
+    border-radius: 12px;
+    padding: 20px;
+    z-index: 1101;
+    max-width: 90vw;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+#settings-help-panel.visible {
+    display: block;
+}
+
+#close-settings-help-button {
+    border: none;
+    background: transparent;
+    color: var(--muted-text-color);
+    font-size: 28px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+    transition: color 0.2s ease;
+}
+
+.settings-help-content {
+    color: var(--panel-text-color);
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.settings-help-content h3 {
+    font-size: 16px;
+    margin: 16px 0 8px 0;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--muted-text-color);
+    opacity: 0.8;
+}
+
+.settings-help-content h3:first-child {
+    margin-top: 0;
+}
+
+.settings-help-content dl {
+    margin: 0;
+    padding: 0;
+}
+
+.settings-help-content dt {
+    font-weight: bold;
+    margin-top: 10px;
+    color: var(--panel-text-color);
+}
+
+.settings-help-content dd {
+    margin: 4px 0 0 0;
+    padding-left: 12px;
+    color: var(--muted-text-color);
 }
 
 #settings-form {

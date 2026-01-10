@@ -356,7 +356,46 @@ function setupSettingsControls(game: Game, initialSettings: GameSettings, update
     document.addEventListener('keydown', event => {
         if (event.key === 'Escape') {
             togglePanel(false);
+            toggleHelpPanel(false);
         }
+    });
+
+    // Settings help panel handlers
+    const helpButton = document.getElementById('settings-help-button');
+    const helpPanel = document.getElementById('settings-help-panel');
+    const helpBackdrop = document.getElementById('settings-help-backdrop');
+    const closeHelpButton = document.getElementById('close-settings-help-button');
+
+    function toggleHelpPanel(show: boolean): void {
+        if (helpPanel && helpBackdrop) {
+            if (show) {
+                helpPanel.classList.add('visible');
+                helpBackdrop.classList.add('visible');
+                helpPanel.setAttribute('aria-hidden', 'false');
+                helpBackdrop.setAttribute('aria-hidden', 'false');
+            } else {
+                helpPanel.classList.remove('visible');
+                helpBackdrop.classList.remove('visible');
+                helpPanel.setAttribute('aria-hidden', 'true');
+                helpBackdrop.setAttribute('aria-hidden', 'true');
+            }
+        }
+    }
+
+    helpButton?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleHelpPanel(true);
+    });
+    closeHelpButton?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleHelpPanel(false);
+    });
+    helpBackdrop?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleHelpPanel(false);
+    });
+    helpPanel?.addEventListener('click', (e) => {
+        e.stopPropagation();
     });
 
     // Return the update functions so they can be called from outside
