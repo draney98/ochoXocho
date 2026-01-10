@@ -1056,24 +1056,41 @@ export class Renderer {
         const color = getShapeColor(shapeIndex);
 
         // Apply visual offset to lift piece above finger/cursor (prevents occlusion on mobile)
-        // Placement logic uses anchorPoint/projectedBoardPosition, so control feels direct
-        const effectivePosition = {
-            x: dragState.anchorPoint.x,
-            y: dragState.anchorPoint.y + DRAG_VISUAL_OFFSET_Y
-        };
-
-        // Draw the visual copy at effectivePosition
-        // The shape is drawn in pixel space, centered on the effectivePosition
-        this.ctx.save();
-        this.ctx.translate(effectivePosition.x, effectivePosition.y);
+        // Use projectedBoardPosition if available (for touch with reach mapping), otherwise anchorPoint
+        const basePosition = dragState.projectedBoardPosition || dragState.anchorPoint;
         
-        // Center the shape on the effectivePosition
+        // Calculate floating position (follows cursor with offset)
+        const floatingPosition = {
+            x: basePosition.x,
+            y: basePosition.y + DRAG_VISUAL_OFFSET_Y
+        };
+        
+        // Calculate shape dimensions for centering
         const minX = Math.min(...dragState.shape.map(b => b.x));
         const minY = Math.min(...dragState.shape.map(b => b.y));
         const maxX = Math.max(...dragState.shape.map(b => b.x));
         const maxY = Math.max(...dragState.shape.map(b => b.y));
         const shapeWidth = (maxX - minX + 1) * CELL_SIZE;
         const shapeHeight = (maxY - minY + 1) * CELL_SIZE;
+        
+        // When over the board with a valid position, snap to grid for precise placement visualization
+        // This ensures the visual piece shows EXACTLY where it will land
+        let effectivePosition: { x: number; y: number };
+        if (dragState.hasBoardPosition) {
+            // Calculate grid-snapped position from mousePosition (grid coordinates)
+            // This matches where the piece will actually be placed
+            const gridPixelX = BOARD_OFFSET_X + dragState.mousePosition.x * CELL_SIZE + shapeWidth / 2;
+            const gridPixelY = BOARD_OFFSET_Y + dragState.mousePosition.y * CELL_SIZE + shapeHeight / 2;
+            effectivePosition = { x: gridPixelX, y: gridPixelY };
+        } else {
+            // Not over board - use floating position
+            effectivePosition = floatingPosition;
+        }
+
+        // Draw the visual copy at effectivePosition
+        // The shape is drawn in pixel space, centered on the effectivePosition
+        this.ctx.save();
+        this.ctx.translate(effectivePosition.x, effectivePosition.y);
         
         // Center the shape
         this.ctx.translate(-shapeWidth / 2, -shapeHeight / 2);
@@ -1909,15 +1926,6 @@ export class Renderer {
             this.drawGrid();
         }
         this.drawBoard(board, placedBlocks, animatingCells, totalShapesPlaced);
-        
-        // Draw grid ghost preview if dragging (shows where piece would land on grid)
-        // This must be based on effectivePosition (lifted piece), not raw mouse position
-        if (dragState.isDragging && dragState.shape && dragState.hasBoardPosition) {
-            const shapeIndex = getShapeIndex(dragState.shape);
-            const color = getShapeColor(shapeIndex);
-            const ghostColor = dragState.isValidPosition ? color : '#ff0000';
-            this.drawShape(dragState.shape, dragState.mousePosition, ghostColor, true);
-        }
         
         // Draw preview line highlights if dragging and position would clear lines
         if (dragState.isDragging && dragState.isValidPosition && dragState.previewLinesCleared) {
