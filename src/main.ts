@@ -14,6 +14,7 @@ import {
     GAMEPLAY_CONFIG,
 } from './config';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from './constants';
+import { waitForFonts } from './fontConfig';
 
 /**
  * Loads settings from localStorage, falling back to defaults
@@ -73,7 +74,7 @@ function setupProgressBoxes(): void {
 }
 
 // Wait for DOM to be ready
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
     
     if (!canvas) {
@@ -83,6 +84,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const settingsState: GameSettings = loadSettings();
     applyTheme(settingsState.theme);
+
+    // Wait for fonts to be ready before rendering any text
+    // This prevents FOIT (Flash of Invisible Text) and ensures consistent rendering
+    await waitForFonts(2000, settingsState.devMode);
 
     // Create progress boxes dynamically based on lines per level
     setupProgressBoxes();

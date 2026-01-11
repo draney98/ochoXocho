@@ -21,6 +21,7 @@ import {
     getQueueItemRect,
 } from './constants';
 import { GAMEPLAY_CONFIG, ANIMATION_CONFIG } from './config';
+import { SYSTEM_FONT_STACK } from './fontConfig';
 
 /**
  * Renderer class handles all canvas drawing operations
@@ -40,13 +41,24 @@ export class Renderer {
     private copyLinkBounds: { x: number; y: number; width: number; height: number } | null = null; // Bounds for copy link click detection
     private copyLinkText: string = 'Copy'; // Current text for copy link (emoji removed)
     private smoothedDragPosition: { x: number; y: number } | null = null; // Smoothed position for interpolated snapping
+    private devicePixelRatio: number = 1; // Device pixel ratio for high-DPI display support
 
     constructor(canvas: HTMLCanvasElement, settings: GameSettings) {
         this.canvas = canvas;
         this.settings = { ...settings };
-        // Set canvas size
-        this.canvas.width = CANVAS_WIDTH;
-        this.canvas.height = CANVAS_HEIGHT;
+        
+        // Handle high-DPI displays (Retina, high-DPI mobile)
+        // Scale canvas internal resolution while keeping CSS size at logical pixels
+        this.devicePixelRatio = window.devicePixelRatio || 1;
+        
+        // Set canvas internal resolution (physical pixels)
+        this.canvas.width = CANVAS_WIDTH * this.devicePixelRatio;
+        this.canvas.height = CANVAS_HEIGHT * this.devicePixelRatio;
+        
+        // Set CSS size to logical pixels (maintains consistent display size)
+        // Note: This may be overridden by responsive canvas sizing in main.ts
+        this.canvas.style.width = `${CANVAS_WIDTH}px`;
+        this.canvas.style.height = `${CANVAS_HEIGHT}px`;
         
         const context = this.canvas.getContext('2d');
         if (!context) {
@@ -54,14 +66,20 @@ export class Renderer {
         }
         this.ctx = context;
         
+        // Scale context to match devicePixelRatio
+        // This allows all drawing operations to use logical pixel coordinates
+        this.ctx.scale(this.devicePixelRatio, this.devicePixelRatio);
+        
         // Load block icon
         this.loadBlockIcon();
         
         // Set up copy link click handler
+        // Convert mouse position to logical coordinates (divide by devicePixelRatio since canvas.width is scaled)
         this.canvas.addEventListener('click', (e) => {
             const rect = this.canvas.getBoundingClientRect();
-            const x = (e.clientX - rect.left) * (this.canvas.width / rect.width);
-            const y = (e.clientY - rect.top) * (this.canvas.height / rect.height);
+            // Convert to logical coordinates (CSS pixel space, not physical pixels)
+            const x = (e.clientX - rect.left) * (CANVAS_WIDTH / rect.width);
+            const y = (e.clientY - rect.top) * (CANVAS_HEIGHT / rect.height);
             if (this.isPointInCopyLink(x, y)) {
                 this.copyEmojiBoard().then(success => {
                     if (success) {
@@ -80,8 +98,9 @@ export class Renderer {
         this.canvas.addEventListener('touchend', (e) => {
             const rect = this.canvas.getBoundingClientRect();
             const touch = e.changedTouches[0];
-            const x = (touch.clientX - rect.left) * (this.canvas.width / rect.width);
-            const y = (touch.clientY - rect.top) * (this.canvas.height / rect.height);
+            // Convert to logical coordinates (CSS pixel space, not physical pixels)
+            const x = (touch.clientX - rect.left) * (CANVAS_WIDTH / rect.width);
+            const y = (touch.clientY - rect.top) * (CANVAS_HEIGHT / rect.height);
             if (this.isPointInCopyLink(x, y)) {
                 e.preventDefault();
                 this.copyEmojiBoard().then(success => {
@@ -218,7 +237,8 @@ export class Renderer {
      * Clears the entire canvas and fills with background color
      */
     clear(): void {
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        // Use logical dimensions since context is scaled by devicePixelRatio
+        this.ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     }
 
     /**
@@ -580,20 +600,21 @@ export class Renderer {
                     const blockX = x + 2;
                     const blockY = y + 2;
                     const blockSize = CELL_SIZE - 4;
-                    const centerX = blockX + blockSize / 2;
-                    const centerY = blockY + blockSize / 2;
+                    // Snap text position to integer pixels to prevent subpixel blur
+                    const centerX = Math.round(blockX + blockSize / 2);
+                    const centerY = Math.round(blockY + blockSize / 2);
                     
                     // Use a semi-transparent white for less contrast
                     this.ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
                     // Font size should be slightly smaller (about 65% of cell size)
                     const fontSize = Math.floor(CELL_SIZE * 0.65);
-                    this.ctx.font = `bold ${fontSize}px sans-serif`;
+                    this.ctx.font = `bold ${fontSize}px ${SYSTEM_FONT_STACK}`;
                     
                     // Set text alignment for perfect centering
                     this.ctx.textAlign = 'center';
                     this.ctx.textBaseline = 'middle';
                     
-                    // Draw text at exact center
+                    // Draw text at integer pixel position
                     this.ctx.fillText(
                         pointValue.toString(),
                         centerX,
@@ -737,7 +758,8 @@ export class Renderer {
             }
         }
         
-        // Draw highlight with glow effect
+        // Draw highlight with glow effect for blocks only (no text affected)
+        // Shadow blur = 10 is acceptable here as it only affects block icons, not text
         this.ctx.shadowBlur = 10;
         
         // Highlight individual cells in full rows
@@ -934,13 +956,14 @@ export class Renderer {
                     // Note: Queue shows base point value, not level-adjusted
                     const pointValue = getShapePointValue(shapeIndex, 0);
                     this.ctx.fillStyle = queuePointText;
-                    this.ctx.font = '14px sans-serif';
+                    this.ctx.font = `bold 14px ${SYSTEM_FONT_STACK}`;
                     this.ctx.textAlign = 'right';
                     this.ctx.textBaseline = 'bottom';
+                    // Snap text position to integer pixels to prevent subpixel blur
                     this.ctx.fillText(
                         pointValue.toString(),
-                        rect.x + rect.width - 6,
-                        rect.y + QUEUE_ITEM_HEIGHT - 6
+                        Math.round(rect.x + rect.width - 6),
+                        Math.round(rect.y + QUEUE_ITEM_HEIGHT - 6)
                     );
                 }
             }
@@ -1640,9 +1663,11 @@ export class Renderer {
         this.ctx.fillRect(BOARD_OFFSET_X, BOARD_OFFSET_Y, BOARD_PIXEL_SIZE, BOARD_PIXEL_SIZE);
 
         const textAlpha = progress;
-        const centerX = BOARD_OFFSET_X + BOARD_PIXEL_SIZE / 2;
-        const baseFont = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
-        let currentY = BOARD_OFFSET_Y + 30; // Start position
+        // Snap centerX to integer pixel for crisp text rendering
+        const centerX = Math.round(BOARD_OFFSET_X + BOARD_PIXEL_SIZE / 2);
+        // Use unified system font stack from fontConfig
+        const baseFont = SYSTEM_FONT_STACK;
+        let currentY = Math.round(BOARD_OFFSET_Y + 30); // Start position (integer)
 
         // Draw "GAME OVER" text - 100% larger than 27px (27px * 2 = 54px) and bold
         this.ctx.save();
@@ -1666,15 +1691,17 @@ export class Renderer {
             this.ctx.save();
             this.ctx.globalAlpha = progress;
             // Emoji grid 30% larger (18px * 1.3 = 23.4px, round to 23px)
+            // Use normal weight for informational text at larger sizes (better readability)
             this.ctx.font = `23px ${baseFont}`;
             this.ctx.fillStyle = '#fff';
             this.ctx.textAlign = 'center';
             this.ctx.textBaseline = 'top';
             
             // Simple drawing - no scaling, no clipping, just draw the lines
+            // Snap each line position to integer pixels for crisp text
             const lineHeight = 28; // Increased for larger font
             lines.forEach((line, index) => {
-                this.ctx.fillText(line, centerX, currentY + index * lineHeight);
+                this.ctx.fillText(line, centerX, Math.round(currentY + index * lineHeight));
             });
             
             this.ctx.restore();
@@ -1682,6 +1709,9 @@ export class Renderer {
         }
 
         // Draw score, lines, and level - 30% larger (18px * 1.3 = 23.4px, round to 23px)
+        // Use normal weight for informational stats text (better readability at larger sizes)
+        // Snap currentY to integer for crisp text
+        currentY = Math.round(currentY);
         this.ctx.save();
         this.ctx.globalAlpha = textAlpha;
         this.ctx.font = `23px ${baseFont}`;
@@ -1697,6 +1727,8 @@ export class Renderer {
         // Draw leaderboard rank (if in top 10) - before copy button
         const hasLeaderboardRank = leaderboardRank !== null && leaderboardRank <= 10;
         if (hasLeaderboardRank) {
+            // Snap currentY to integer for crisp text
+            currentY = Math.round(currentY);
             this.ctx.save();
             this.ctx.globalAlpha = textAlpha;
             this.ctx.font = `23px ${baseFont}`; // Same size as stats
@@ -1717,7 +1749,8 @@ export class Renderer {
             this.ctx.fillStyle = '#4ECDC4';
             this.ctx.textAlign = 'center';
             this.ctx.textBaseline = 'bottom'; // Align to bottom
-            const copyY = BOARD_OFFSET_Y + BOARD_PIXEL_SIZE - 20; // 20px from bottom
+            // Snap copyY to integer for crisp text
+            const copyY = Math.round(BOARD_OFFSET_Y + BOARD_PIXEL_SIZE - 20); // 20px from bottom
             this.ctx.fillText(this.copyLinkText, centerX, copyY);
             
             // Store bounds for click detection
@@ -1888,20 +1921,26 @@ export class Renderer {
         
         this.ctx.save();
         this.ctx.globalAlpha = alpha;
-        this.ctx.translate(BOARD_PIXEL_SIZE / 2, BOARD_PIXEL_SIZE / 2);
-        this.ctx.scale(scale, scale);
-        this.ctx.translate(-BOARD_PIXEL_SIZE / 2, -BOARD_PIXEL_SIZE / 2);
         
-        // Level up text with glow effect
+        // Instead of using ctx.scale() which causes subpixel blur on text,
+        // compute the font size directly based on scale factor
+        const baseFontSize = 64;
+        const scaledFontSize = Math.round(baseFontSize * scale);
+        
+        // Level up text - use system font stack for consistency
         this.ctx.fillStyle = '#fff';
-        this.ctx.font = 'bold 64px sans-serif';
+        this.ctx.font = `bold ${scaledFontSize}px ${SYSTEM_FONT_STACK}`;
         this.ctx.textAlign = 'center';
         this.ctx.textBaseline = 'middle';
         
-        // Add text shadow for glow
+        // Snap position to integer pixels
+        const textX = Math.round(BOARD_PIXEL_SIZE / 2);
+        const textY = Math.round(BOARD_PIXEL_SIZE / 2);
+        
+        // Reduced shadow blur for sharper text (was 30, now 3 for subtle glow without blur)
         this.ctx.shadowColor = '#4ECDC4';
-        this.ctx.shadowBlur = 30;
-        this.ctx.fillText('Level up!', BOARD_PIXEL_SIZE / 2, BOARD_PIXEL_SIZE / 2);
+        this.ctx.shadowBlur = 3;
+        this.ctx.fillText('Level up!', textX, textY);
         
         // Reset shadow
         this.ctx.shadowBlur = 0;
