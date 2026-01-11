@@ -533,12 +533,28 @@ export class InputHandler {
                 }
             }
             
+            // Haptic feedback when piece snaps to a new valid position on the board
+            // Only trigger when: position is valid AND grid cell has changed
+            const lastCell = this.dragState.lastProjectedGridCell;
+            const cellChanged = !lastCell || lastCell.x !== gridPos.x || lastCell.y !== gridPos.y;
+            
+            if (isValid && cellChanged) {
+                // Trigger haptic feedback for successful snap to valid cell
+                if ('vibrate' in navigator) {
+                    navigator.vibrate(10); // Short subtle bump for valid placement preview
+                }
+            }
+            
+            // Update last projected grid cell for next comparison
+            this.dragState.lastProjectedGridCell = { x: gridPos.x, y: gridPos.y };
+            
             this.dragState.isValidPosition = isValid;
         } else {
-            // Cursor is outside the board
+            // Cursor is outside the board - clear last cell tracking
             this.dragState.hasBoardPosition = false;
             this.dragState.isValidPosition = false;
             this.dragState.mousePosition = { x: 0, y: 0 };
+            this.dragState.lastProjectedGridCell = undefined;
         }
         this.dragState.previewLinesCleared = undefined;
     }
@@ -872,12 +888,28 @@ export class InputHandler {
                 }
             }
             
+            // Haptic feedback when piece snaps to a new valid position on the board
+            // Only trigger when: position is valid AND grid cell has changed
+            const lastCell = this.dragState.lastProjectedGridCell;
+            const cellChanged = !lastCell || lastCell.x !== gridPos.x || lastCell.y !== gridPos.y;
+            
+            if (isValid && cellChanged) {
+                // Trigger haptic feedback for successful snap to valid cell
+                if ('vibrate' in navigator) {
+                    navigator.vibrate(10); // Short subtle bump for valid placement preview
+                }
+            }
+            
+            // Update last projected grid cell for next comparison
+            this.dragState.lastProjectedGridCell = { x: gridPos.x, y: gridPos.y };
+            
             this.dragState.isValidPosition = isValid;
         } else {
-            // Cursor is outside the board
+            // Cursor is outside the board - clear last cell tracking
             this.dragState.hasBoardPosition = false;
             this.dragState.isValidPosition = false;
             this.dragState.mousePosition = { x: 0, y: 0 };
+            this.dragState.lastProjectedGridCell = undefined;
         }
         this.dragState.previewLinesCleared = undefined;
     }
