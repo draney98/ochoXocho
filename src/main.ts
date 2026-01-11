@@ -312,25 +312,13 @@ function setupSettingsControls(game: Game, initialSettings: GameSettings, update
     // Initialize button visibility based on initial settings
     updateAutoplaceButtonVisibility(initialSettings.autoplaceEnabled);
 
-    // Update mode select disabled state based on game session
-    // Note: Only the difficulty (mode) select is disabled during play.
-    // The settings button and panel remain fully accessible.
+    // Mode select is always enabled but warns if changing during a session
+    // Store last confirmed mode to detect when user cancels the change
+    let lastConfirmedMode = initialSettings.mode;
+    
     const updateModeSelectState = () => {
-        const isInSession = game.isGameInSession();
-        if (modeSelect) {
-            modeSelect.disabled = isInSession;
-            if (isInSession) {
-                modeSelect.title = 'Cannot change difficulty while a game is in progress';
-            } else {
-                modeSelect.title = '';
-            }
-        }
-        // Settings button and panel are never disabled - only the mode select is restricted
+        // Mode select is always enabled - no longer disabled during play
     };
-
-    // Check game state periodically to update mode select
-    setInterval(updateModeSelectState, 500);
-    updateModeSelectState(); // Initial check
 
     // ghostInput removed - ghost preview is always on
     [gridInput, animationInput, soundInput, pointValuesInput, autoplaceInput, devModeInput].forEach(input => {
@@ -386,7 +374,32 @@ function setupSettingsControls(game: Game, initialSettings: GameSettings, update
     });
 
     themeSelect?.addEventListener('change', pushToGame);
-    modeSelect?.addEventListener('change', pushToGame);
+    
+    // Mode select with confirmation when changing during active game
+    modeSelect?.addEventListener('change', () => {
+        const newMode = modeSelect.value as GameMode;
+        
+        // Check if game is in session and mode is actually changing
+        if (game.isGameInSession() && newMode !== lastConfirmedMode) {
+            const confirmed = window.confirm(
+                'Changing difficulty will reset the current game. Do you want to continue?'
+            );
+            
+            if (confirmed) {
+                // User confirmed - reset game and apply new mode
+                lastConfirmedMode = newMode;
+                pushToGame();
+                game.reset(true); // Force reset to start fresh with new mode
+            } else {
+                // User cancelled - revert the select back to previous mode
+                modeSelect.value = lastConfirmedMode;
+            }
+        } else {
+            // Not in session or same mode - just apply
+            lastConfirmedMode = newMode;
+            pushToGame();
+        }
+    });
     
     // Initialize mode display
     updateModeDisplay(initialSettings.mode);

@@ -1759,25 +1759,54 @@ export class Renderer {
             currentY += 40; // Space after rank
         }
 
-        // Draw copy button at the bottom of the screen
+        // Draw copy button at the bottom of the screen (styled like other buttons)
         if (progress > 0 && this.finalBoardState && this.finalBoardState.length > 0) {
             this.ctx.save();
             this.ctx.globalAlpha = progress;
-            this.ctx.font = `23px ${baseFont}`; // Same size as stats
-            this.ctx.fillStyle = '#4ECDC4';
+            
+            // Button dimensions matching the style of other buttons
+            const buttonWidth = 140;
+            const buttonHeight = 44;
+            const buttonX = Math.round(centerX - buttonWidth / 2);
+            const buttonY = Math.round(BOARD_OFFSET_Y + BOARD_PIXEL_SIZE - buttonHeight - 15);
+            const borderRadius = 8;
+            
+            // Get theme colors
+            const accentColor = this.getCSSVariable('--accent-color') || '#4b5563';
+            const textColor = this.getCSSVariable('--accent-color-contrast') || '#ffffff';
+            
+            // Draw button background with rounded corners
+            this.ctx.beginPath();
+            this.ctx.moveTo(buttonX + borderRadius, buttonY);
+            this.ctx.lineTo(buttonX + buttonWidth - borderRadius, buttonY);
+            this.ctx.quadraticCurveTo(buttonX + buttonWidth, buttonY, buttonX + buttonWidth, buttonY + borderRadius);
+            this.ctx.lineTo(buttonX + buttonWidth, buttonY + buttonHeight - borderRadius);
+            this.ctx.quadraticCurveTo(buttonX + buttonWidth, buttonY + buttonHeight, buttonX + buttonWidth - borderRadius, buttonY + buttonHeight);
+            this.ctx.lineTo(buttonX + borderRadius, buttonY + buttonHeight);
+            this.ctx.quadraticCurveTo(buttonX, buttonY + buttonHeight, buttonX, buttonY + buttonHeight - borderRadius);
+            this.ctx.lineTo(buttonX, buttonY + borderRadius);
+            this.ctx.quadraticCurveTo(buttonX, buttonY, buttonX + borderRadius, buttonY);
+            this.ctx.closePath();
+            
+            this.ctx.fillStyle = accentColor;
+            this.ctx.fill();
+            
+            // Draw emoji and text
+            this.ctx.font = `bold 16px ${baseFont}`;
+            this.ctx.fillStyle = textColor;
             this.ctx.textAlign = 'center';
-            this.ctx.textBaseline = 'bottom'; // Align to bottom
-            // Snap copyY to integer for crisp text
-            const copyY = Math.round(BOARD_OFFSET_Y + BOARD_PIXEL_SIZE - 20); // 20px from bottom
-            this.ctx.fillText(this.copyLinkText, centerX, copyY);
+            this.ctx.textBaseline = 'middle';
+            const buttonCenterX = Math.round(buttonX + buttonWidth / 2);
+            const buttonCenterY = Math.round(buttonY + buttonHeight / 2);
+            const buttonText = this.copyLinkText === 'Copy' ? '📋 Copy' : this.copyLinkText;
+            this.ctx.fillText(buttonText, buttonCenterX, buttonCenterY);
             
             // Store bounds for click detection
-            const textMetrics = this.ctx.measureText(this.copyLinkText);
             this.copyLinkBounds = {
-                x: centerX - textMetrics.width / 2,
-                y: copyY - 20,
-                width: textMetrics.width,
-                height: 25
+                x: buttonX,
+                y: buttonY,
+                width: buttonWidth,
+                height: buttonHeight
             };
             
             this.ctx.restore();

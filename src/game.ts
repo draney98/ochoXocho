@@ -351,55 +351,21 @@ export class Game {
         // Newly placed blocks start with base value (1-8) - store this value
         const basePointValue = getShapePointValue(shapeIndexInPool, 0);
 
-        // Get starting position from drag state (finger position)
-        const startPosition = dragState.anchorPoint || { x: 0, y: 0 };
+        // Place shape on board immediately (snap animation removed per user request)
+        this.board.placeShape(shape, position);
         
-        // If animations are enabled, create snap animation
-        if (this.settings.enableAnimations) {
-            // Create snap animation
-            const animatingShape: AnimatingShape = {
-                shape,
-                startPosition,
-                endPosition: position,
-                color: shapeColor,
-                startTime: Date.now(),
-                duration: this.SNAP_ANIMATION_DURATION,
-                type: 'place'
-            };
-            this.animatingShapes.push(animatingShape);
-            
-            // Place shape on board immediately (will be drawn via animation)
-            this.board.placeShape(shape, position);
-            
-            // Add to placed blocks - store the base value
-            const placedBlock: PlacedBlock = {
-                shape,
-                position,
-                color: shapeColor,
-                pointValue: basePointValue,  // Store base value (original, never modified)
-                lineClearBonuses: 0,  // Track line clear bonuses separately
-                totalShapesPlacedAtPlacement: this.state.totalShapesPlaced,
-                shapeIndex: shapeIndexInPool,  // Store the original shape index
-                darkness: 1.0,  // Start at full brightness
-            };
-            this.state.placedBlocks.push(placedBlock);
-        } else {
-            // No animation - place immediately
-            this.board.placeShape(shape, position);
-            
-            // Add to placed blocks - store the base value
-            const placedBlock: PlacedBlock = {
-                shape,
-                position,
-                color: shapeColor,
-                pointValue: basePointValue,  // Store base value (original, never modified)
-                lineClearBonuses: 0,  // Track line clear bonuses separately
-                totalShapesPlacedAtPlacement: this.state.totalShapesPlaced,
-                shapeIndex: shapeIndexInPool,  // Store the original shape index
-                darkness: 1.0,  // Start at full brightness
-            };
-            this.state.placedBlocks.push(placedBlock);
-        }
+        // Add to placed blocks - store the base value
+        const placedBlock: PlacedBlock = {
+            shape,
+            position,
+            color: shapeColor,
+            pointValue: basePointValue,  // Store base value (original, never modified)
+            lineClearBonuses: 0,  // Track line clear bonuses separately
+            totalShapesPlacedAtPlacement: this.state.totalShapesPlaced,
+            shapeIndex: shapeIndexInPool,  // Store the original shape index
+            darkness: 1.0,  // Start at full brightness
+        };
+        this.state.placedBlocks.push(placedBlock);
         // Resume AudioContext on first user interaction (fixes autoplay policy)
         this.soundManager.resumeContext();
         this.soundManager.playPlace();
@@ -1209,6 +1175,11 @@ export class Game {
         this.state.gameOver = true;
         this.gameOverPopComplete = false;
         this.gameOverStartTime = null; // Will be set after popping completes
+        
+        // Clear the queue so player cannot drag pieces during game over
+        this.state.queue = [null, null, null];
+        this.inputHandler.updateQueue(this.state.queue);
+        
         this.soundManager.playGameOver();
         // Start the bonus animation after a brief delay
         setTimeout(() => {

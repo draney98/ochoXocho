@@ -328,24 +328,54 @@ function getRandomShape(weightedForEasy: boolean = false): Shape {
 /**
  * Generates three random shapes for the player's queue
  * Each shape is randomly rotated
+ * Limits to max 2 of the same shape type unless no other option
  * @returns An array of 3 shapes (guaranteed to have 3 valid shapes)
  */
 export function generateShapes(): Shape[] {
     const shapes: Shape[] = [];
+    const shapeIndexCounts: Map<number, number> = new Map(); // Track count of each shape type
+    const MAX_SAME_SHAPE = 2;
+    const MAX_RETRIES = 10; // Prevent infinite loops
+    
     for (let i = 0; i < 3; i++) {
-        const shape = getRandomShape();
-        // Validate shape is not empty
-        if (!shape || !Array.isArray(shape) || shape.length === 0) {
-            console.error(`[SHAPES] Generated invalid shape at index ${i}, retrying...`);
-            // Retry once
-            const retryShape = getRandomShape();
-            if (!retryShape || !Array.isArray(retryShape) || retryShape.length === 0) {
-                throw new Error(`[SHAPES] Failed to generate valid shape after retry. This should never happen.`);
+        let shape: Shape | null = null;
+        let retries = 0;
+        
+        // Try to get a shape that doesn't exceed the duplicate limit
+        while (retries < MAX_RETRIES) {
+            const candidate = getRandomShape();
+            
+            // Validate shape is not empty
+            if (!candidate || !Array.isArray(candidate) || candidate.length === 0) {
+                retries++;
+                continue;
             }
-            shapes.push(retryShape);
-        } else {
-            shapes.push(shape);
+            
+            // Get the base shape index (ignoring rotation)
+            const shapeIdx = getShapeIndex(candidate);
+            const currentCount = shapeIndexCounts.get(shapeIdx) || 0;
+            
+            // Accept if under the limit
+            if (currentCount < MAX_SAME_SHAPE) {
+                shape = candidate;
+                shapeIndexCounts.set(shapeIdx, currentCount + 1);
+                break;
+            }
+            
+            retries++;
         }
+        
+        // If we couldn't find a non-duplicate after retries, accept any valid shape
+        if (!shape) {
+            shape = getRandomShape();
+            if (!shape || !Array.isArray(shape) || shape.length === 0) {
+                throw new Error(`[SHAPES] Failed to generate valid shape. This should never happen.`);
+            }
+            const shapeIdx = getShapeIndex(shape);
+            shapeIndexCounts.set(shapeIdx, (shapeIndexCounts.get(shapeIdx) || 0) + 1);
+        }
+        
+        shapes.push(shape);
     }
     return shapes;
 }
@@ -459,11 +489,14 @@ function simulateLineClearing(grid: boolean[][]): void {
  * Generates shapes for easy mode using state simulation
  * Guarantees that all three pieces can be placed sequentially by simulating
  * placements on a virtual board and running line-clearing logic after each placement
+ * Limits to max 2 of the same shape type unless no other option
  * @param board - The game board to check against
  * @returns An array of 3 shapes that can be placed sequentially
  */
 export function generateEasyShapes(board: Board): Shape[] {
     const hand: Shape[] = [];
+    const shapeIndexCounts: Map<number, number> = new Map(); // Track count of each shape type
+    const MAX_SAME_SHAPE = 2;
     const MAX_ATTEMPTS_PER_PIECE = 50;
     
     // Create virtual board as a deep copy of current board state
@@ -473,8 +506,9 @@ export function generateEasyShapes(board: Board): Shape[] {
     for (let pieceIndex = 0; pieceIndex < 3; pieceIndex++) {
         let pieceFound = false;
         let attempts = 0;
+        let fallbackCandidate: Shape | null = null; // Store a valid but duplicate shape as fallback
         
-        // Try to find a piece that fits
+        // Try to find a piece that fits and doesn't exceed duplicate limit
         while (!pieceFound && attempts < MAX_ATTEMPTS_PER_PIECE) {
             attempts++;
             const candidate = getRandomShape(true); // Weighted for easy mode
@@ -483,16 +517,41 @@ export function generateEasyShapes(board: Board): Shape[] {
             const validPositions = getValidPositionsForGrid(virtualGrid, candidate);
             
             if (validPositions.length > 0) {
-                // Piece fits! Place it on virtual board
-                // Pick a random valid position
+                // Check duplicate limit
+                const shapeIdx = getShapeIndex(candidate);
+                const currentCount = shapeIndexCounts.get(shapeIdx) || 0;
+                
+                if (currentCount < MAX_SAME_SHAPE) {
+                    // Piece fits and under duplicate limit! Place it on virtual board
+                    const position = validPositions[Math.floor(Math.random() * validPositions.length)];
+                    placeShapeOnGrid(virtualGrid, candidate, position);
+                    
+                    // Simulate line clearing
+                    simulateLineClearing(virtualGrid);
+                    
+                    // Add to hand
+                    hand.push(candidate);
+                    shapeIndexCounts.set(shapeIdx, currentCount + 1);
+                    pieceFound = true;
+                } else {
+                    // Store as fallback in case we can't find a non-duplicate
+                    if (!fallbackCandidate) {
+                        fallbackCandidate = candidate;
+                    }
+                }
+            }
+        }
+        
+        // If no non-duplicate found, use fallback if available
+        if (!pieceFound && fallbackCandidate) {
+            const validPositions = getValidPositionsForGrid(virtualGrid, fallbackCandidate);
+            if (validPositions.length > 0) {
                 const position = validPositions[Math.floor(Math.random() * validPositions.length)];
-                placeShapeOnGrid(virtualGrid, candidate, position);
-                
-                // Simulate line clearing
+                placeShapeOnGrid(virtualGrid, fallbackCandidate, position);
                 simulateLineClearing(virtualGrid);
-                
-                // Add to hand
-                hand.push(candidate);
+                hand.push(fallbackCandidate);
+                const shapeIdx = getShapeIndex(fallbackCandidate);
+                shapeIndexCounts.set(shapeIdx, (shapeIndexCounts.get(shapeIdx) || 0) + 1);
                 pieceFound = true;
             }
         }
