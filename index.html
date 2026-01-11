@@ -6,7 +6,7 @@
     <meta name="screen-orientation" content="portrait">
     <meta name="mobile-web-app-capable" content="yes">
     <title>Block Placement Puzzle</title>
-    <link rel="stylesheet" href="/styles/main.css">
+    <link rel="stylesheet" href="/styles/main.css?v=2">
 </head>
 <body data-theme="classic">
     <div id="app">
@@ -97,10 +97,7 @@
                 <span>Show grid lines</span>
                 <input type="checkbox" id="setting-show-grid" checked>
             </label>
-            <label class="settings-row">
-                <span>Show ghost preview</span>
-                <input type="checkbox" id="setting-show-ghost" checked>
-            </label>
+            <!-- Ghost preview removed - always enabled -->
             <label class="settings-row">
                 <span>Enable clear animations</span>
                 <input type="checkbox" id="setting-enable-animations" checked>
@@ -125,6 +122,10 @@
                 <span>Debug logging (dev)</span>
                 <input type="checkbox" id="setting-dev-mode">
             </label>
+            <div class="settings-row" id="download-log-row" style="display: none;">
+                <span>Download dev log</span>
+                <button id="download-dev-log-btn" type="button" class="settings-download-btn">Download</button>
+            </div>
             <div class="settings-row">
                 <span>Control zone height</span>
                 <input type="range" id="setting-control-zone-height" min="0.2" max="0.5" step="0.01" value="0.33">
@@ -161,9 +162,6 @@
                 
                 <dt>Show grid lines</dt>
                 <dd>Display grid lines on the board to help with piece alignment.</dd>
-                
-                <dt>Show ghost preview</dt>
-                <dd>Show a semi-transparent preview of where the piece will land.</dd>
                 
                 <dt>Enable clear animations</dt>
                 <dd>Play animations when rows/columns are cleared.</dd>

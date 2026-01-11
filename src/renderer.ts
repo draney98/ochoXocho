@@ -983,22 +983,7 @@ export class Renderer {
                     this.drawBlock(x, y, blockSize, shapeColor, queueShapeBorder);
                 }
 
-                // Draw point value in bottom right corner if setting is enabled
-                if (this.settings.showPointValues) {
-                    const shapeIndex = getShapeIndex(shape);
-                    // Note: Queue shows base point value, not level-adjusted
-                    const pointValue = getShapePointValue(shapeIndex, 0);
-                    this.ctx.fillStyle = queuePointText;
-                    this.ctx.font = `bold 14px ${SYSTEM_FONT_STACK}`;
-                    this.ctx.textAlign = 'right';
-                    this.ctx.textBaseline = 'bottom';
-                    // Snap text position to integer pixels to prevent subpixel blur
-                    this.ctx.fillText(
-                        pointValue.toString(),
-                        Math.round(rect.x + rect.width - 6),
-                        Math.round(rect.y + QUEUE_ITEM_HEIGHT - 6)
-                    );
-                }
+                // Point values removed from queue display per user request
             }
             // If no shape at this index, the area remains empty but still occupies its fixed position
         }

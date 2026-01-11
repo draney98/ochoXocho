@@ -544,9 +544,7 @@ export class InputHandler {
             
             if (isValid && cellChanged) {
                 // Trigger haptic feedback for successful snap to valid cell
-                if ('vibrate' in navigator) {
-                    navigator.vibrate(10); // Short subtle bump for valid placement preview
-                }
+                this.triggerHapticFeedback(10);
             }
             
             // Update last projected grid cell for next comparison
@@ -899,9 +897,7 @@ export class InputHandler {
             
             if (isValid && cellChanged) {
                 // Trigger haptic feedback for successful snap to valid cell
-                if ('vibrate' in navigator) {
-                    navigator.vibrate(10); // Short subtle bump for valid placement preview
-                }
+                this.triggerHapticFeedback(10);
             }
             
             // Update last projected grid cell for next comparison
@@ -1029,9 +1025,7 @@ export class InputHandler {
                     }
                     
                     // Haptic feedback on valid placement
-                    if ('vibrate' in navigator) {
-                        navigator.vibrate(20); // Slightly longer vibration for placement
-                    }
+                    this.triggerHapticFeedback(20);
                 } else {
                     if (this.settings.devMode && gridPos) {
                         console.log(`  ✗ Placement REJECTED: canPlaceShape returned false`);
@@ -1110,6 +1104,22 @@ export class InputHandler {
      */
     getDragState(): DragState {
         return this.dragState;
+    }
+    
+    /**
+     * Triggers haptic feedback on supported devices.
+     * Note: navigator.vibrate() is NOT supported on iOS Safari (platform limitation).
+     * This will only work on Android and some desktop browsers.
+     * @param duration - Vibration duration in milliseconds
+     */
+    private triggerHapticFeedback(duration: number): void {
+        try {
+            if (navigator.vibrate) {
+                navigator.vibrate(duration);
+            }
+        } catch {
+            // Vibration not supported or failed - ignore silently
+        }
     }
 }
 

@@ -15,6 +15,7 @@ import {
 } from './config';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from './constants';
 import { waitForFonts } from './fontConfig';
+import { devLogger } from './devLogger';
 
 /**
  * Loads settings from localStorage, falling back to defaults
@@ -204,7 +205,7 @@ function setupSettingsControls(game: Game, initialSettings: GameSettings, update
 
     // Sync inputs with initial settings so toggles reflect any future default changes
     if (gridInput) gridInput.checked = initialSettings.showGrid;
-    if (ghostInput) ghostInput.checked = initialSettings.showGhostPreview;
+    // Ghost preview is always on - no longer a user setting
     if (animationInput) animationInput.checked = initialSettings.enableAnimations;
     if (themeSelect) themeSelect.value = initialSettings.theme;
     if (soundInput) soundInput.checked = initialSettings.soundEnabled;
@@ -212,6 +213,30 @@ function setupSettingsControls(game: Game, initialSettings: GameSettings, update
     if (pointValuesInput) pointValuesInput.checked = initialSettings.showPointValues;
     if (autoplaceInput) autoplaceInput.checked = initialSettings.autoplaceEnabled;
     if (devModeInput) devModeInput.checked = initialSettings.devMode ?? false;
+    
+    // Initialize dev logger and download button
+    const downloadLogRow = document.getElementById('download-log-row');
+    const downloadLogBtn = document.getElementById('download-dev-log-btn');
+    
+    const updateDevLogVisibility = (enabled: boolean) => {
+        if (downloadLogRow) {
+            downloadLogRow.style.display = enabled ? 'flex' : 'none';
+        }
+        if (enabled) {
+            devLogger.enable();
+        } else {
+            devLogger.disable();
+        }
+    };
+    
+    // Initialize dev logger based on initial setting
+    updateDevLogVisibility(initialSettings.devMode ?? false);
+    
+    // Handle download button click
+    downloadLogBtn?.addEventListener('click', () => {
+        devLogger.downloadLogs();
+    });
+    
     if (playerNameInput) {
         const playerName = initialSettings.playerName || '   ';
         // Display only first 3 characters, uppercase
@@ -250,7 +275,7 @@ function setupSettingsControls(game: Game, initialSettings: GameSettings, update
 
         const updatedSettings: GameSettings = {
             showGrid: gridInput?.checked ?? true,
-            showGhostPreview: ghostInput?.checked ?? true,
+            showGhostPreview: true, // Always enabled - no longer a user setting
             enableAnimations: animationInput?.checked ?? true,
             soundEnabled: soundInput?.checked ?? true,
             theme: themeValue,
@@ -267,7 +292,7 @@ function setupSettingsControls(game: Game, initialSettings: GameSettings, update
         game.updateSettings(updatedSettings);
         saveSettings(updatedSettings); // Save to localStorage
         updateAutoplaceButtonVisibility(updatedSettings.autoplaceEnabled);
-        
+        updateDevLogVisibility(updatedSettings.devMode);
     };
     
     /**
@@ -307,7 +332,8 @@ function setupSettingsControls(game: Game, initialSettings: GameSettings, update
     setInterval(updateModeSelectState, 500);
     updateModeSelectState(); // Initial check
 
-    [gridInput, ghostInput, animationInput, soundInput, pointValuesInput, autoplaceInput, devModeInput].forEach(input => {
+    // ghostInput removed - ghost preview is always on
+    [gridInput, animationInput, soundInput, pointValuesInput, autoplaceInput, devModeInput].forEach(input => {
         input?.addEventListener('change', () => {
             pushToGame();
         });
@@ -340,7 +366,12 @@ function setupSettingsControls(game: Game, initialSettings: GameSettings, update
     });
     
     // Player name input - update on blur (when user finishes typing)
-    // Limit to 3 characters and convert to uppercase
+    // Clear to empty on focus, limit to 3 characters and convert to uppercase
+    playerNameInput?.addEventListener('focus', (e) => {
+        const input = e.target as HTMLInputElement;
+        // Clear the field when user focuses to allow fresh input
+        input.value = '';
+    });
     playerNameInput?.addEventListener('input', (e) => {
         const input = e.target as HTMLInputElement;
         // Convert to uppercase and limit to 3 characters
@@ -763,34 +794,25 @@ function setupResponsiveUI(canvas: HTMLCanvasElement): void {
             }
         });
         
-        // Update progress bar height
+        // Update progress bar - spans full screen width
         const progressContainer = document.getElementById('level-progress-container');
         if (progressContainer) {
             progressContainer.style.height = `${progressBarHeight}px`;
         }
         
-        // Update progress boxes to be square and fill horizontal space
+        // Update progress boxes to fill full screen width (can be rectangles)
         const progressBoxes = document.querySelectorAll('.progress-box');
-        const linesPerLevel = getLinesPerLevel();
         const borderRadius = Math.max(3, Math.min(6, progressBarHeight * 0.125));
         
-        // Calculate box size: fill width with gaps between boxes
-        // Container has 2px padding, boxes have 2px gap between them (1px margin on each side)
-        const containerPadding = 4; // 2px on each side
-        const totalGaps = (linesPerLevel - 1) * 2; // 2px gap between each box (1px margin each side)
-        const availableWidth = canvasWidth - containerPadding - totalGaps;
-        const boxSize = Math.floor(availableWidth / linesPerLevel);
-        
-        // Ensure boxes are square and don't exceed container height
-        const maxBoxSize = progressBarHeight - 4; // Account for 2px margin top and bottom
-        const finalBoxSize = Math.min(boxSize, maxBoxSize);
-        
+        // Progress boxes now use flex: 1 to fill available width
+        // Height is set by CSS to fill container
         progressBoxes.forEach(box => {
             const boxEl = box as HTMLElement;
             boxEl.style.borderRadius = `${borderRadius}px`;
-            boxEl.style.width = `${finalBoxSize}px`;
-            boxEl.style.height = `${finalBoxSize}px`;
-            boxEl.style.flex = '0 0 auto'; // Don't flex, use fixed size
+            // Let CSS handle width (flex: 1) and height
+            boxEl.style.width = '';
+            boxEl.style.height = '';
+            boxEl.style.flex = '1 1 auto'; // Flex to fill available space
         });
     };
     
