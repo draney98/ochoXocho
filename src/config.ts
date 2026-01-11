@@ -155,8 +155,8 @@ export const HIGH_SCORE_CONFIG = {
  * Optimized for mobile (360x640)
  */
 export const RESPONSIVE_CANVAS_LIMITS = {
-    minHeight: 400,
+    minHeight: 300, // Allow more shrinking for very small screens / Safari large text
     maxHeight: 900,
-    verticalPadding: 100, // Reduced for mobile
+    verticalPadding: 50, // Minimal padding to maximize canvas space
     horizontalPadding: 10, // Reduced for mobile
 } as const;

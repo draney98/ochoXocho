@@ -106,6 +106,8 @@ html {
     /* Prevent iOS Safari from inflating font sizes in landscape or large text modes */
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
+    /* Lock the base font size to prevent Safari Large Text from scaling the whole page */
+    font-size: 16px !important;
 }
 
 body {
@@ -837,7 +839,10 @@ body[data-theme="midnight"] #auto-place-button {
     }
     
     #app {
-        padding: 15px 10px; /* Reduce horizontal padding on mobile */
+        padding: 5px 5px; /* Minimal padding on mobile to maximize canvas space */
+        min-height: 100dvh; /* Use dynamic viewport height */
+        padding-bottom: env(safe-area-inset-bottom); /* Account for home indicator */
+        padding-top: env(safe-area-inset-top); /* Account for notch/status bar */
     }
     
     #game-container {

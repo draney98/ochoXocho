@@ -610,16 +610,28 @@ function updateModeDisplay(mode: GameMode): void {
 
 function setupResponsiveCanvas(canvas: HTMLCanvasElement): void {
     const updateCanvasSize = () => {
-        // Account for #app padding on mobile (10px each side = 20px total)
+        // Account for #app padding on mobile (5px each side = 10px total)
         const isMobile = window.innerWidth <= 768;
-        const appPadding = isMobile ? 20 : 0;
+        const appPadding = isMobile ? 10 : 0;
         
         // Use visualViewport API for Safari compatibility (handles dynamic toolbars, zoom, large text)
         // Falls back to window dimensions if visualViewport is not available
+        // Also check documentElement.clientHeight as another fallback for Safari Large Text
         const viewportWidth = window.visualViewport?.width ?? window.innerWidth;
-        const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+        let viewportHeight = window.visualViewport?.height ?? window.innerHeight;
         
-        const availableHeight = viewportHeight - RESPONSIVE_CANVAS_LIMITS.verticalPadding;
+        // Safari Large Text mode: visualViewport.height may still be larger than actual visible area
+        // Use the smaller of visualViewport.height and documentElement.clientHeight
+        if (isMobile && document.documentElement.clientHeight < viewportHeight) {
+            viewportHeight = document.documentElement.clientHeight;
+        }
+        
+        // On mobile, account for UI elements below canvas (buttons ~50px, stats ~25px, safe areas)
+        // Use minimal vertical padding to maximize canvas space
+        const uiElementsHeight = isMobile ? 90 : 0; // Approximate height of buttons + stats on mobile
+        const verticalPadding = isMobile ? 10 : RESPONSIVE_CANVAS_LIMITS.verticalPadding;
+        
+        const availableHeight = viewportHeight - verticalPadding - uiElementsHeight;
         const availableWidth = viewportWidth - RESPONSIVE_CANVAS_LIMITS.horizontalPadding - appPadding;
         
         // The board itself is square (BOARD_PIXEL_SIZE x BOARD_PIXEL_SIZE = 600x600)
@@ -636,10 +648,16 @@ function setupResponsiveCanvas(canvas: HTMLCanvasElement): void {
         // Uniform scaling of the entire canvas ensures the board stays square
         let finalScale = Math.min(widthScale, heightScale);
         
-        // Clamp to min/max limits
-        const minScale = RESPONSIVE_CANVAS_LIMITS.minHeight / CANVAS_HEIGHT;
+        // Clamp to max limit only - on mobile, allow unlimited shrinking to fit screen
         const maxScale = RESPONSIVE_CANVAS_LIMITS.maxHeight / CANVAS_HEIGHT;
-        finalScale = Math.max(minScale, Math.min(finalScale, maxScale));
+        if (isMobile) {
+            // On mobile, allow unlimited shrinking to fit any viewport size
+            finalScale = Math.min(finalScale, maxScale);
+        } else {
+            // On desktop, apply min/max limits
+            const minScale = RESPONSIVE_CANVAS_LIMITS.minHeight / CANVAS_HEIGHT;
+            finalScale = Math.max(minScale, Math.min(finalScale, maxScale));
+        }
         
         // Apply scale to canvas - uniform scaling maintains board square aspect ratio
         const scaledWidth = CANVAS_WIDTH * finalScale;
