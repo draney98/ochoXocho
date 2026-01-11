@@ -604,8 +604,10 @@ export class Renderer {
                     const centerX = Math.round(blockX + blockSize / 2);
                     const centerY = Math.round(blockY + blockSize / 2);
                     
-                    // Use a semi-transparent white for less contrast
-                    this.ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+                    // Select text color for maximum WCAG contrast against block color
+                    // Uses relative luminance to choose black or white
+                    const textColor = this.getContrastTextColor(color);
+                    this.ctx.fillStyle = textColor;
                     // Font size should be slightly smaller (about 65% of cell size)
                     const fontSize = Math.floor(CELL_SIZE * 0.65);
                     this.ctx.font = `bold ${fontSize}px ${SYSTEM_FONT_STACK}`;
@@ -623,6 +625,37 @@ export class Renderer {
                 }
             }
         }
+    }
+
+    /**
+     * Calculates the optimal text color (black or white) for maximum WCAG contrast
+     * against a given background color using relative luminance.
+     * @param backgroundColor - Hex color string (e.g., "#ff0000")
+     * @returns '#000000' (black) or '#ffffff' (white) based on which has higher contrast
+     */
+    private getContrastTextColor(backgroundColor: string): string {
+        const hex = backgroundColor.replace('#', '');
+        
+        // Parse RGB values
+        const r = parseInt(hex.substring(0, 2), 16) / 255;
+        const g = parseInt(hex.substring(2, 4), 16) / 255;
+        const b = parseInt(hex.substring(4, 6), 16) / 255;
+        
+        // Convert to linear RGB (sRGB to linear)
+        const linearR = r <= 0.04045 ? r / 12.92 : Math.pow((r + 0.055) / 1.055, 2.4);
+        const linearG = g <= 0.04045 ? g / 12.92 : Math.pow((g + 0.055) / 1.055, 2.4);
+        const linearB = b <= 0.04045 ? b / 12.92 : Math.pow((b + 0.055) / 1.055, 2.4);
+        
+        // Calculate relative luminance (WCAG formula)
+        const luminance = 0.2126 * linearR + 0.7152 * linearG + 0.0722 * linearB;
+        
+        // Calculate contrast ratios against black (0) and white (1)
+        // Contrast ratio = (L1 + 0.05) / (L2 + 0.05) where L1 > L2
+        const contrastWithWhite = (1 + 0.05) / (luminance + 0.05);
+        const contrastWithBlack = (luminance + 0.05) / (0 + 0.05);
+        
+        // Return the color with higher contrast ratio
+        return contrastWithBlack > contrastWithWhite ? '#000000' : '#ffffff';
     }
 
     /**
