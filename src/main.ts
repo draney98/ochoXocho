@@ -511,22 +511,30 @@ function setupLeaderboardPopup(initialSettings: GameSettings): void {
     let currentLeaderboardPeriod: LeaderboardPeriod = 'ever';
     
     /**
-     * Formats a timestamp to a readable date string
+     * Formats a timestamp based on the leaderboard period
+     * - today: shows time (e.g., "8:00am")
+     * - week: shows day of week (e.g., "Tue")
+     * - ever: shows compact date (e.g., "1/12/25")
      */
-    function formatDate(timestamp: number): string {
+    function formatDate(timestamp: number, period: LeaderboardPeriod): string {
         const date = new Date(timestamp);
-        const now = new Date();
-        const diffMs = now.getTime() - date.getTime();
-        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
         
-        if (diffDays === 0) {
-            return 'Today';
-        } else if (diffDays === 1) {
-            return 'Yesterday';
-        } else if (diffDays < 7) {
-            return `${diffDays} days ago`;
+        if (period === 'today') {
+            // Show time for today's scores (e.g., "8:00am")
+            return date.toLocaleTimeString('en-US', {
+                hour: 'numeric',
+                minute: '2-digit',
+                hour12: true
+            }).toLowerCase();
+        } else if (period === 'week') {
+            // Show day of week for this week's scores (e.g., "Tue")
+            return date.toLocaleDateString('en-US', { weekday: 'short' });
         } else {
-            return date.toLocaleDateString();
+            // Show compact date for all-time scores (e.g., "1/12/25")
+            const month = date.getMonth() + 1;
+            const day = date.getDate();
+            const year = date.getFullYear() % 100; // Last 2 digits of year
+            return `${month}/${day}/${year}`;
         }
     }
     
@@ -549,7 +557,7 @@ function setupLeaderboardPopup(initialSettings: GameSettings): void {
     /**
      * Renders the leaderboard entries
      */
-    function renderLeaderboard(entries: LeaderboardEntry[]): void {
+    function renderLeaderboard(entries: LeaderboardEntry[], period: LeaderboardPeriod): void {
         if (!leaderboardContainer) return;
         
         if (entries.length === 0) {
@@ -563,7 +571,7 @@ function setupLeaderboardPopup(initialSettings: GameSettings): void {
                     <span class="leaderboard-rank">#${entry.rank}</span>
                     <span class="leaderboard-name">${escapeHtml((entry.playerName || '   ').substring(0, 3).toUpperCase().padEnd(3, ' '))}</span>
                     <span class="leaderboard-score">${formatNumber(entry.score)}</span>
-                    <span class="leaderboard-date">${formatDate(entry.timestamp)}</span>
+                    <span class="leaderboard-date">${formatDate(entry.timestamp, period)}</span>
                 </div>
             `;
         }).join('');
@@ -608,7 +616,7 @@ function setupLeaderboardPopup(initialSettings: GameSettings): void {
                 console.log(`[LEADERBOARD] Received ${entries.length} entries`);
             }
             leaderboardLoading.style.display = 'none';
-            renderLeaderboard(entries);
+            renderLeaderboard(entries, period);
         } catch (error) {
             const currentSettings = loadSettings();
             if (currentSettings.devMode) {
