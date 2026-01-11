@@ -1,50 +1,50 @@
 :root {
-    --bg-gradient: linear-gradient(135deg, #3b82f6 0%, #2563eb 50%, #1e40af 100%);
+    --bg-gradient: linear-gradient(135deg, #6b7280 0%, #4b5563 50%, #374151 100%);
     --container-bg: #ffffff;
-    --container-shadow: rgba(30, 58, 138, 0.2);
-    --text-color: #333333;
-    --muted-text-color: #444444;
-    --accent-color: #2563eb;
+    --container-shadow: rgba(55, 65, 81, 0.2);
+    --text-color: #1f2937;
+    --muted-text-color: #4b5563;
+    --accent-color: #4b5563;
     --accent-color-contrast: #ffffff;
-    --button-hover: #1e40af;
-    --button-active: #1e3a8a;
-    --canvas-border: #dbeafe;
-    --grid-color: #e0e0e0;
-    --queue-strip-bg: #eff6ff;
+    --button-hover: #374151;
+    --button-active: #1f2937;
+    --canvas-border: #e5e7eb;
+    --grid-color: #d1d5db;
+    --queue-strip-bg: #f3f4f6;
     --queue-card-bg: #ffffff;
-    --queue-card-border: #dbeafe;
-    --queue-shape-border: #1e40af;
-    --queue-point-text: #60a5fa;
+    --queue-card-border: #e5e7eb;
+    --queue-shape-border: #374151;
+    --queue-point-text: #6b7280;
     --panel-bg: #ffffff;
-    --panel-text-color: #333333;
+    --panel-text-color: #1f2937;
     --settings-button-bg: rgba(255, 255, 255, 0.95);
-    --settings-button-color: #2563eb;
-    --settings-button-shadow: rgba(30, 58, 138, 0.25);
-    --control-border: rgba(0, 0, 0, 0.1);
+    --settings-button-color: #4b5563;
+    --settings-button-shadow: rgba(55, 65, 81, 0.25);
+    --control-border: rgba(0, 0, 0, 0.15);
 }
 
 body[data-theme="classic"] {
-    --bg-gradient: linear-gradient(135deg, #3b82f6 0%, #2563eb 50%, #1e40af 100%);
+    --bg-gradient: linear-gradient(135deg, #6b7280 0%, #4b5563 50%, #374151 100%);
     --container-bg: #ffffff;
-    --container-shadow: rgba(30, 58, 138, 0.2);
-    --text-color: #333333;
-    --muted-text-color: #444444;
-    --accent-color: #2563eb;
-    --button-hover: #1e40af;
-    --button-active: #1e3a8a;
-    --canvas-border: #dbeafe;
-    --grid-color: #e0e0e0;
-    --queue-strip-bg: #eff6ff;
+    --container-shadow: rgba(55, 65, 81, 0.2);
+    --text-color: #1f2937;
+    --muted-text-color: #4b5563;
+    --accent-color: #4b5563;
+    --button-hover: #374151;
+    --button-active: #1f2937;
+    --canvas-border: #e5e7eb;
+    --grid-color: #d1d5db;
+    --queue-strip-bg: #f3f4f6;
     --queue-card-bg: #ffffff;
-    --queue-card-border: #dbeafe;
-    --queue-shape-border: #1e40af;
-    --queue-point-text: #60a5fa;
+    --queue-card-border: #e5e7eb;
+    --queue-shape-border: #374151;
+    --queue-point-text: #6b7280;
     --panel-bg: #ffffff;
-    --panel-text-color: #333333;
+    --panel-text-color: #1f2937;
     --settings-button-bg: rgba(255, 255, 255, 0.95);
-    --settings-button-color: #2563eb;
-    --settings-button-shadow: rgba(30, 58, 138, 0.25);
-    --control-border: rgba(0, 0, 0, 0.1);
+    --settings-button-color: #4b5563;
+    --settings-button-shadow: rgba(55, 65, 81, 0.25);
+    --control-border: rgba(0, 0, 0, 0.15);
 }
 
 body[data-theme="midnight"] {
@@ -113,17 +113,18 @@ html {
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
     background: var(--bg-gradient);
-    /* Use dvh (dynamic viewport height) for Safari, with vh fallback */
-    min-height: 100vh;
-    min-height: 100dvh;
+    /* Use fixed height to constrain layout - prevents Safari from oversizing */
+    height: 100vh;
+    height: 100dvh; /* Dynamic viewport - Safari progressive enhancement */
+    /* Also support JS-driven --vh custom property for accurate mobile viewport */
+    height: calc(var(--vh, 1vh) * 100);
     display: flex;
     justify-content: center;
     align-items: flex-start;
     padding: 0;
     margin: 0;
     color: var(--text-color);
-    overflow-x: hidden;
-    overflow-y: auto;
+    overflow: hidden; /* Prevent scrolling - everything must fit */
     /* Prevent iOS Safari from zooming on double-tap */
     touch-action: manipulation;
 }
@@ -133,6 +134,9 @@ body {
     flex-direction: column;
     align-items: center;
     width: 100%;
+    height: 100%;
+    max-height: 100dvh;
+    max-height: calc(var(--vh, 1vh) * 100); /* JS-driven viewport height */
     padding: 15px 15px 15px 15px; /* Add padding on all sides */
     /* Add safe area insets for iOS notch/home indicator */
     padding-top: max(15px, env(safe-area-inset-top));
@@ -141,6 +145,7 @@ body {
     padding-right: max(15px, env(safe-area-inset-right));
     margin: 0;
     box-sizing: border-box;
+    overflow: hidden; /* Contain everything within visible viewport */
 }
 
 #game-container {
@@ -149,10 +154,12 @@ body {
     padding: 0;
     box-shadow: none;
     max-width: 100%;
+    flex: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
-    overflow: visible;
+    min-height: 0; /* Allow flex shrink */
+    overflow: hidden;
 }
 
 #top-stats {
@@ -836,11 +843,15 @@ body[data-theme="midnight"] #auto-place-button {
     body {
         background: var(--bg-gradient) !important;
         padding: 0;
+        /* Force fixed height on mobile to prevent Safari viewport issues */
+        height: 100dvh;
+        height: calc(var(--vh, 1vh) * 100);
     }
     
     #app {
         padding: 5px 5px; /* Minimal padding on mobile to maximize canvas space */
-        min-height: 100dvh; /* Use dynamic viewport height */
+        height: 100%; /* Fill parent instead of min-height */
+        max-height: calc(var(--vh, 1vh) * 100);
         padding-bottom: env(safe-area-inset-bottom); /* Account for home indicator */
         padding-top: env(safe-area-inset-top); /* Account for notch/status bar */
     }
@@ -850,6 +861,8 @@ body[data-theme="midnight"] #auto-place-button {
         background: transparent;
         box-shadow: none;
         border-radius: 0;
+        flex: 1;
+        min-height: 0; /* Allow flex shrink */
     }
     
     #top-stats {

@@ -73,8 +73,41 @@ function setupProgressBoxes(): void {
     }
 }
 
+/**
+ * Sets a CSS custom property --vh that accurately reflects the visible viewport height.
+ * This is more reliable than 100vh/100dvh on iOS Safari where the browser chrome
+ * (address bar, toolbar) affects the actual visible area.
+ */
+function setViewportHeight(): void {
+    // Use window.innerHeight as the most reliable source
+    let vh = window.innerHeight;
+    
+    // On Safari, also check visualViewport and use the smaller value
+    if (window.visualViewport) {
+        vh = Math.min(vh, window.visualViewport.height);
+    }
+    
+    // Set custom property as 1% of viewport height (like vh unit)
+    document.documentElement.style.setProperty('--vh', `${vh * 0.01}px`);
+}
+
+// Set viewport height immediately (before DOMContentLoaded)
+setViewportHeight();
+
+// Update on resize and orientation change
+window.addEventListener('resize', setViewportHeight);
+window.addEventListener('orientationchange', setViewportHeight);
+
+// Also listen to visualViewport changes for Safari
+if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', setViewportHeight);
+}
+
 // Wait for DOM to be ready
 document.addEventListener('DOMContentLoaded', async () => {
+    // Recalculate viewport height after DOM is ready (Safari may have stabilized)
+    setViewportHeight();
+    
     const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
     
     if (!canvas) {
@@ -614,28 +647,35 @@ function setupResponsiveCanvas(canvas: HTMLCanvasElement): void {
         const isMobile = window.innerWidth <= 768;
         const appPadding = isMobile ? 10 : 0;
         
-        // Use visualViewport API for Safari compatibility (handles dynamic toolbars, zoom, large text)
-        // Falls back to window dimensions if visualViewport is not available
-        // Also check documentElement.clientHeight as another fallback for Safari Large Text
-        const viewportWidth = window.visualViewport?.width ?? window.innerWidth;
-        let viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+        // Get viewport width - use innerWidth as primary source
+        const viewportWidth = window.innerWidth;
         
-        // Safari Large Text mode: visualViewport.height may still be larger than actual visible area
-        // Use the smaller of visualViewport.height and documentElement.clientHeight
-        if (isMobile && document.documentElement.clientHeight < viewportHeight) {
+        // Get viewport height - use window.innerHeight as primary source (most reliable on Safari)
+        let viewportHeight = window.innerHeight;
+        
+        // On Safari, also check visualViewport and use the SMALLER value
+        // This handles cases where Safari reports different heights for different APIs
+        if (window.visualViewport) {
+            viewportHeight = Math.min(viewportHeight, window.visualViewport.height);
+        }
+        
+        // Also check documentElement.clientHeight as another fallback
+        if (document.documentElement.clientHeight < viewportHeight) {
             viewportHeight = document.documentElement.clientHeight;
         }
         
-        // On mobile, account for UI elements below canvas (buttons ~50px, stats ~25px, safe areas)
-        // Use minimal vertical padding to maximize canvas space
-        const uiElementsHeight = isMobile ? 90 : 0; // Approximate height of buttons + stats on mobile
+        // On mobile, account for Safari's dynamic toolbar, home indicator, and UI elements
+        // Safari's toolbar can be ~50px at top, home indicator ~34px at bottom
+        // Plus our UI elements (buttons ~50px, stats ~25px)
+        // Total buffer: ~120px to ensure everything fits
+        const safariToolbarBuffer = isMobile ? 120 : 0;
         const verticalPadding = isMobile ? 10 : RESPONSIVE_CANVAS_LIMITS.verticalPadding;
         
-        const availableHeight = viewportHeight - verticalPadding - uiElementsHeight;
+        const availableHeight = viewportHeight - verticalPadding - safariToolbarBuffer;
         const availableWidth = viewportWidth - RESPONSIVE_CANVAS_LIMITS.horizontalPadding - appPadding;
         
-        // The board itself is square (BOARD_PIXEL_SIZE x BOARD_PIXEL_SIZE = 600x600)
-        // The canvas is 600px wide x 820px tall (600px board + 220px queue)
+        // The board itself is square (BOARD_PIXEL_SIZE x BOARD_PIXEL_SIZE = 540x540)
+        // The canvas is 600px wide x 780px tall (540px board + 20px offset + 220px queue)
         // To ensure the board stays square, we must scale the entire canvas uniformly
         
         // Calculate scale based on width - canvas width must fit
@@ -652,7 +692,8 @@ function setupResponsiveCanvas(canvas: HTMLCanvasElement): void {
         const maxScale = RESPONSIVE_CANVAS_LIMITS.maxHeight / CANVAS_HEIGHT;
         if (isMobile) {
             // On mobile, allow unlimited shrinking to fit any viewport size
-            finalScale = Math.min(finalScale, maxScale);
+            // Ensure scale is positive (sanity check)
+            finalScale = Math.max(0.1, Math.min(finalScale, maxScale));
         } else {
             // On desktop, apply min/max limits
             const minScale = RESPONSIVE_CANVAS_LIMITS.minHeight / CANVAS_HEIGHT;
@@ -667,7 +708,15 @@ function setupResponsiveCanvas(canvas: HTMLCanvasElement): void {
         canvas.style.height = `${scaledHeight}px`;
     };
     
+    // Initial size calculation
     updateCanvasSize();
+    
+    // Add delayed recalculations for Safari to stabilize its viewport measurements
+    // Safari often reports incorrect viewport height on initial load
+    setTimeout(updateCanvasSize, 100);
+    setTimeout(updateCanvasSize, 500);
+    
+    // Listen to resize events
     window.addEventListener('resize', updateCanvasSize);
     
     // Listen to visualViewport changes for Safari (handles zoom, keyboard, dynamic toolbars)
