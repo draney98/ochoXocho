@@ -237,6 +237,14 @@ function setupSettingsControls(game: Game, initialSettings: GameSettings, update
         devLogger.downloadLogs();
     });
     
+    // Force refresh button - reloads with cache-busting parameter (preserves localStorage)
+    const forceRefreshBtn = document.getElementById('force-refresh-btn');
+    forceRefreshBtn?.addEventListener('click', () => {
+        const url = new URL(window.location.href);
+        url.searchParams.set('v', Date.now().toString());
+        window.location.href = url.toString();
+    });
+    
     if (playerNameInput) {
         const playerName = initialSettings.playerName || '   ';
         // Display only first 3 characters, uppercase
