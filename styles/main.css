@@ -102,10 +102,18 @@ body[data-theme="sunset"] {
     box-sizing: border-box;
 }
 
+html {
+    /* Prevent iOS Safari from inflating font sizes in landscape or large text modes */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+}
+
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
     background: var(--bg-gradient);
+    /* Use dvh (dynamic viewport height) for Safari, with vh fallback */
     min-height: 100vh;
+    min-height: 100dvh;
     display: flex;
     justify-content: center;
     align-items: flex-start;
@@ -114,6 +122,8 @@ body {
     color: var(--text-color);
     overflow-x: hidden;
     overflow-y: auto;
+    /* Prevent iOS Safari from zooming on double-tap */
+    touch-action: manipulation;
 }
 
 #app {
@@ -122,6 +132,11 @@ body {
     align-items: center;
     width: 100%;
     padding: 15px 15px 15px 15px; /* Add padding on all sides */
+    /* Add safe area insets for iOS notch/home indicator */
+    padding-top: max(15px, env(safe-area-inset-top));
+    padding-bottom: max(15px, env(safe-area-inset-bottom));
+    padding-left: max(15px, env(safe-area-inset-left));
+    padding-right: max(15px, env(safe-area-inset-right));
     margin: 0;
     box-sizing: border-box;
 }
@@ -271,6 +286,11 @@ body {
     /* Removing max-width/max-height/width:auto/height:auto to prevent CSS from distorting the aspect ratio */
     /* Ensure canvas maintains aspect ratio - prevents distortion */
     image-rendering: pixelated;
+    /* Prevent Safari from applying any transform on the canvas */
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+    /* Prevent touch callouts on long press (Safari) */
+    -webkit-touch-callout: none;
 }
 
 #game-canvas:active {

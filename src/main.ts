@@ -613,8 +613,14 @@ function setupResponsiveCanvas(canvas: HTMLCanvasElement): void {
         // Account for #app padding on mobile (10px each side = 20px total)
         const isMobile = window.innerWidth <= 768;
         const appPadding = isMobile ? 20 : 0;
-        const availableHeight = window.innerHeight - RESPONSIVE_CANVAS_LIMITS.verticalPadding;
-        const availableWidth = window.innerWidth - RESPONSIVE_CANVAS_LIMITS.horizontalPadding - appPadding;
+        
+        // Use visualViewport API for Safari compatibility (handles dynamic toolbars, zoom, large text)
+        // Falls back to window dimensions if visualViewport is not available
+        const viewportWidth = window.visualViewport?.width ?? window.innerWidth;
+        const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+        
+        const availableHeight = viewportHeight - RESPONSIVE_CANVAS_LIMITS.verticalPadding;
+        const availableWidth = viewportWidth - RESPONSIVE_CANVAS_LIMITS.horizontalPadding - appPadding;
         
         // The board itself is square (BOARD_PIXEL_SIZE x BOARD_PIXEL_SIZE = 600x600)
         // The canvas is 600px wide x 820px tall (600px board + 220px queue)
@@ -645,6 +651,12 @@ function setupResponsiveCanvas(canvas: HTMLCanvasElement): void {
     
     updateCanvasSize();
     window.addEventListener('resize', updateCanvasSize);
+    
+    // Listen to visualViewport changes for Safari (handles zoom, keyboard, dynamic toolbars)
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', updateCanvasSize);
+        window.visualViewport.addEventListener('scroll', updateCanvasSize);
+    }
 }
 
 function setupResponsiveUI(canvas: HTMLCanvasElement): void {
