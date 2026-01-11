@@ -250,9 +250,9 @@ function setupSettingsControls(game: Game, initialSettings: GameSettings, update
         // Display only first 3 characters, uppercase
         playerNameInput.value = playerName.substring(0, 3).toUpperCase();
     }
-    if (controlZoneHeightInput) controlZoneHeightInput.value = String(initialSettings.controlZoneHeight ?? 0.33);
-    if (controlZoneMaxScaleInput) controlZoneMaxScaleInput.value = String(initialSettings.controlZoneMaxScale ?? 3.0);
-    if (controlZoneMinScaleInput) controlZoneMinScaleInput.value = String(initialSettings.controlZoneMinScale ?? 1.5);
+    if (controlZoneHeightInput) controlZoneHeightInput.value = String(initialSettings.controlZoneHeight ?? 0.5);
+    if (controlZoneMaxScaleInput) controlZoneMaxScaleInput.value = String(initialSettings.controlZoneMaxScale ?? 4.0);
+    if (controlZoneMinScaleInput) controlZoneMinScaleInput.value = String(initialSettings.controlZoneMinScale ?? 2.0);
     if (dragSnapSmoothingInput) dragSnapSmoothingInput.value = String(initialSettings.dragSnapSmoothing ?? 0.5);
     
     // Update value displays
@@ -292,9 +292,9 @@ function setupSettingsControls(game: Game, initialSettings: GameSettings, update
             autoplaceEnabled: autoplaceInput?.checked ?? true,
             playerName: (playerNameInput?.value.trim().substring(0, 3).toUpperCase() || '').padEnd(3, ' '),
             devMode: devModeInput?.checked ?? true, // Default to true
-            controlZoneHeight: controlZoneHeightInput ? parseFloat(controlZoneHeightInput.value) : (initialSettings.controlZoneHeight ?? 0.33),
-            controlZoneMaxScale: controlZoneMaxScaleInput ? parseFloat(controlZoneMaxScaleInput.value) : (initialSettings.controlZoneMaxScale ?? 3.0),
-            controlZoneMinScale: controlZoneMinScaleInput ? parseFloat(controlZoneMinScaleInput.value) : (initialSettings.controlZoneMinScale ?? 1.5),
+            controlZoneHeight: controlZoneHeightInput ? parseFloat(controlZoneHeightInput.value) : (initialSettings.controlZoneHeight ?? 0.5),
+            controlZoneMaxScale: controlZoneMaxScaleInput ? parseFloat(controlZoneMaxScaleInput.value) : (initialSettings.controlZoneMaxScale ?? 4.0),
+            controlZoneMinScale: controlZoneMinScaleInput ? parseFloat(controlZoneMinScaleInput.value) : (initialSettings.controlZoneMinScale ?? 2.0),
             dragSnapSmoothing: dragSnapSmoothingInput ? parseFloat(dragSnapSmoothingInput.value) : (initialSettings.dragSnapSmoothing ?? 0.5),
         };
         game.updateSettings(updatedSettings);
