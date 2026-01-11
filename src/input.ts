@@ -9,6 +9,7 @@ import {
     BOARD_PIXEL_SIZE,
     BOARD_CELL_COUNT,
     CELL_SIZE,
+    CANVAS_WIDTH,
     CANVAS_HEIGHT,
     BOARD_OFFSET_X,
     BOARD_OFFSET_Y,
@@ -164,16 +165,19 @@ export class InputHandler {
     }
 
     /**
-     * Converts screen event coordinates to normalized canvas coordinates
+     * Converts screen event coordinates to logical canvas coordinates
      * Uses getBoundingClientRect() to account for CSS scaling
-     * This ensures 1 pixel of movement on screen equals 1 pixel in canvas space
+     * Uses CANVAS_WIDTH/CANVAS_HEIGHT (logical dimensions) instead of canvas.width/height
+     * (which are scaled by devicePixelRatio for high-DPI displays)
      * @param event - MouseEvent or TouchEvent
-     * @returns Normalized canvas coordinates {x, y}
+     * @returns Logical canvas coordinates {x, y}
      */
     private getCanvasCoordinates(event: MouseEvent | TouchEvent): { x: number; y: number } {
         const rect = this.canvas.getBoundingClientRect();
-        const scaleX = this.canvas.width / rect.width;
-        const scaleY = this.canvas.height / rect.height;
+        // Use logical canvas dimensions, not physical (devicePixelRatio-scaled) dimensions
+        // This ensures coordinates match the logical coordinate system used by all game logic
+        const scaleX = CANVAS_WIDTH / rect.width;
+        const scaleY = CANVAS_HEIGHT / rect.height;
         
         // Get client coordinates from event
         let clientX: number;
@@ -193,7 +197,7 @@ export class InputHandler {
             return { x: 0, y: 0 };
         }
         
-        // Calculate normalized canvas coordinates
+        // Calculate logical canvas coordinates
         const x = (clientX - rect.left) * scaleX;
         const y = (clientY - rect.top) * scaleY;
         
