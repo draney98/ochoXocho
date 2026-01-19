@@ -2022,7 +2022,9 @@ export class Renderer {
         score: number = 0,
         linesCleared: number = 0,
         leaderboardRank: number | null = null,
-        animatingShapes: AnimatingShape[] = []
+        animatingShapes: AnimatingShape[] = [],
+        pointsAnimationProgress: number = 0,
+        pointsAnimationValue: number = 0
     ): void {
         // Update current level for highlight color calculation
         this.currentLevel = level;
@@ -2071,6 +2073,137 @@ export class Renderer {
         if (levelUpProgress > 0 && levelUpProgress < 1) {
             this.drawLevelUp(levelUpProgress);
         }
+        
+        if (pointsAnimationProgress > 0 && pointsAnimationProgress < 1 && pointsAnimationValue > 200) {
+            this.drawPointsAnimation(pointsAnimationProgress, pointsAnimationValue);
+        }
+    }
+    
+    /**
+     * Draws points animation that appears when clearing lines/columns worth more than 200 points
+     * Animation gets more dramatic for every 100 points over 200
+     * @param progress - Animation progress from 0 to 1
+     * @param points - The point value to display
+     */
+    drawPointsAnimation(progress: number, points: number): void {
+        // Calculate drama level: 0 for 200-299, 1 for 300-399, 2 for 400-499, etc.
+        const dramaLevel = Math.floor((points - 200) / 100);
+        
+        // Fade in quickly, then fade out slowly
+        // Show at full opacity from 0 to 0.25, then fade out from 0.25 to 1.0
+        let alpha: number;
+        if (progress <= 0.25) {
+            // Fade in quickly (0 to 0.25)
+            alpha = progress / 0.25;
+        } else {
+            // Fade out slowly (0.25 to 1.0)
+            alpha = 1 - ((progress - 0.25) / 0.75);
+        }
+        
+        // Scale animation: start small, grow to full size with bounce
+        // More dramatic = larger scale
+        const baseScale = 1.2; // Increased base scale
+        const dramaScale = 0.3 * dramaLevel; // +0.3 scale per 100 points over 200
+        const maxScale = baseScale + dramaScale;
+        
+        let scale: number;
+        if (progress <= 0.15) {
+            // Grow from 0.3 to maxScale (more dramatic entrance)
+            scale = 0.3 + (progress / 0.15) * (maxScale - 0.3);
+        } else if (progress <= 0.35) {
+            // Bounce back slightly then settle
+            const bounceProgress = (progress - 0.15) / 0.2;
+            const bounceAmount = (maxScale - baseScale) * 0.3; // 30% bounce
+            scale = maxScale - (bounceProgress * bounceAmount);
+        } else {
+            // Stay at baseScale
+            scale = baseScale;
+        }
+        
+        this.ctx.save();
+        
+        // Center on entire canvas, not just board
+        const centerX = Math.round(CANVAS_WIDTH / 2);
+        const centerY = Math.round((BOARD_OFFSET_Y + BOARD_PIXEL_SIZE / 2));
+        
+        // Calculate font size based on scale and drama level - MUCH larger
+        const baseFontSize = 96; // Doubled from 48
+        const dramaFontSize = 24 * dramaLevel; // +24px per 100 points over 200 (doubled)
+        const scaledFontSize = Math.round((baseFontSize + dramaFontSize) * scale);
+        
+        // Format points with commas and add "+" prefix
+        const pointsText = `+${points.toLocaleString('en-US')}`;
+        
+        // Draw background circle/glow for emphasis
+        const bgRadius = scaledFontSize * 0.8;
+        const bgAlpha = alpha * 0.3;
+        const shadowColor = this.getDramaShadowColor(dramaLevel);
+        
+        // Draw multiple glow layers for more emphasis
+        for (let i = 0; i < 3; i++) {
+            const glowRadius = bgRadius + (i * 20);
+            const glowAlpha = bgAlpha * (1 - i * 0.3);
+            this.ctx.globalAlpha = glowAlpha;
+            this.ctx.fillStyle = shadowColor;
+            this.ctx.beginPath();
+            this.ctx.arc(centerX, centerY, glowRadius, 0, Math.PI * 2);
+            this.ctx.fill();
+        }
+        
+        // Draw text outline for better visibility
+        this.ctx.globalAlpha = alpha;
+        this.ctx.fillStyle = '#fff';
+        this.ctx.font = `bold ${scaledFontSize}px ${SYSTEM_FONT_STACK}`;
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        
+        // Shadow effect gets more dramatic with higher points
+        // Base shadow blur: 15, +10 per 100 points over 200
+        const shadowBlur = 15 + (dramaLevel * 10);
+        
+        this.ctx.shadowColor = shadowColor;
+        this.ctx.shadowBlur = shadowBlur;
+        this.ctx.shadowOffsetX = 0;
+        this.ctx.shadowOffsetY = 0;
+        
+        // Draw text outline (stroke) for extra emphasis
+        this.ctx.strokeStyle = '#000';
+        this.ctx.lineWidth = Math.max(2, scaledFontSize * 0.05);
+        this.ctx.strokeText(pointsText, centerX, centerY);
+        
+        // Draw main text
+        this.ctx.fillText(pointsText, centerX, centerY);
+        
+        // Add extra glow layers for very high scores (400+)
+        if (dramaLevel >= 2) {
+            // Add multiple additional glow layers
+            for (let i = 0; i < 2; i++) {
+                this.ctx.shadowBlur = shadowBlur * (1.5 + i * 0.5);
+                this.ctx.globalAlpha = alpha * (0.4 - i * 0.1);
+                this.ctx.fillText(pointsText, centerX, centerY);
+            }
+        }
+        
+        // Reset shadow
+        this.ctx.shadowBlur = 0;
+        this.ctx.restore();
+    }
+    
+    /**
+     * Gets shadow color based on drama level
+     * More dramatic = brighter/more colorful glow
+     */
+    private getDramaShadowColor(dramaLevel: number): string {
+        const colors = [
+            '#4ECDC4',  // Base (200-299): teal
+            '#FFD93D',  // Level 1 (300-399): yellow
+            '#FF6B6B',  // Level 2 (400-499): red
+            '#A8E6CF',  // Level 3 (500-599): green
+            '#FF8B94',  // Level 4 (600-699): pink
+            '#95E1D3',  // Level 5 (700-799): mint
+        ];
+        // Cycle through colors for very high scores
+        return colors[Math.min(dramaLevel, colors.length - 1)];
     }
 }
 

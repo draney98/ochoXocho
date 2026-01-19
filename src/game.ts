@@ -45,6 +45,8 @@ export class Game {
     private levelUpStartTime: number | null = null;
     private leaderboardRank: number | null = null; // Rank on leaderboard (if top 10)
     private readonly LEVEL_UP_ANIMATION_DURATION = ANIMATION_CONFIG.levelUpMs;
+    private pointsAnimationStartTime: number | null = null;
+    private pointsAnimationValue: number = 0;
     private isAutoPlacing: boolean = false; // Track if autoplace is in progress
     private onAutoPlaceStateChange?: (isPlacing: boolean) => void; // Callback for autoplace state changes
     private settings: GameSettings;
@@ -241,6 +243,20 @@ export class Game {
         if (levelUpProgress >= 1) {
             this.levelUpStartTime = null;
         }
+        
+        // Calculate points animation progress
+        // Animation duration scales with points: base 2000ms, +200ms per 100 points over 200
+        const pointsAnimationDuration = this.pointsAnimationStartTime !== null
+            ? 2000 + Math.floor((this.pointsAnimationValue - 200) / 100) * 200
+            : 2000;
+        const pointsAnimationProgress = this.pointsAnimationStartTime !== null
+            ? Math.min((Date.now() - this.pointsAnimationStartTime) / pointsAnimationDuration, 1)
+            : 0;
+        // Clear points animation if it's complete
+        if (pointsAnimationProgress >= 1) {
+            this.pointsAnimationStartTime = null;
+            this.pointsAnimationValue = 0;
+        }
         this.renderer.render(
             this.board,
             this.state.placedBlocks,
@@ -255,7 +271,9 @@ export class Game {
             this.state.score,
             this.state.linesCleared,
             this.leaderboardRank,
-            this.animatingShapes
+            this.animatingShapes,
+            pointsAnimationProgress,
+            this.pointsAnimationValue
         );
     }
 
@@ -603,6 +621,12 @@ export class Game {
         );
         this.state.score += points;
         this.updateScoreDisplay();
+        
+        // Trigger points animation if points > 200
+        if (points > 200) {
+            this.pointsAnimationStartTime = Date.now();
+            this.pointsAnimationValue = points;
+        }
         
         // Check leaderboard after score update to see if this is a new high score
         this.checkHighScore();
