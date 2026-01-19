@@ -571,20 +571,13 @@ function setupLeaderboardPopup(initialSettings: GameSettings): void {
     function renderLeaderboard(entries: LeaderboardEntry[], period: LeaderboardPeriod): void {
         if (!leaderboardContainer) return;
         
-        if (entries.length === 0) {
-            leaderboardContainer.innerHTML = '<div class="leaderboard-empty">No scores yet. Be the first!</div>';
-            return;
-        }
-        
-        // Strictly limit to top 10 entries (defensive programming - API should already limit)
-        // If we receive more than 10, log a warning in dev mode
-        const currentSettings = loadSettings();
-        if (currentSettings.devMode && entries.length > 10) {
-            console.warn(`[LEADERBOARD] Received ${entries.length} entries, limiting to 10`);
-        }
+        // Always show exactly 10 rows
+        // Pad with empty rows if we have fewer than 10 entries
         const topEntries = entries.slice(0, 10);
+        const emptyRowsNeeded = Math.max(0, 10 - topEntries.length);
         
-        const html = topEntries.map(entry => {
+        // Render existing entries
+        const entriesHtml = topEntries.map(entry => {
             return `
                 <div class="leaderboard-entry">
                     <span class="leaderboard-rank">#${entry.rank}</span>
@@ -595,7 +588,20 @@ function setupLeaderboardPopup(initialSettings: GameSettings): void {
             `;
         }).join('');
         
-        leaderboardContainer.innerHTML = html;
+        // Render empty rows for missing entries
+        const emptyRowsHtml = Array.from({ length: emptyRowsNeeded }, (_, i) => {
+            const rank = topEntries.length + i + 1;
+            return `
+                <div class="leaderboard-entry leaderboard-entry-empty">
+                    <span class="leaderboard-rank">#${rank}</span>
+                    <span class="leaderboard-name">---</span>
+                    <span class="leaderboard-score">---</span>
+                    <span class="leaderboard-date">---</span>
+                </div>
+            `;
+        }).join('');
+        
+        leaderboardContainer.innerHTML = entriesHtml + emptyRowsHtml;
     }
     
     // Cache for leaderboard data to avoid unnecessary refetches when switching views

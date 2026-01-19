@@ -2247,7 +2247,7 @@ export class Renderer {
             textColor = '#4ade80'; // Green for continue
             shadowColor = '#16a34a';
         } else {
-            comboText = `COMBO BROKE`;
+            comboText = `COMBO BROKEN`;
             textColor = '#fbbf24'; // Amber for break
             shadowColor = '#f59e0b';
         }

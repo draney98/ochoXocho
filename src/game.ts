@@ -52,8 +52,8 @@ export class Game {
     private comboAnimationMultiplier: number = 0;
     private isAutoPlacing: boolean = false; // Track if autoplace is in progress
     private onAutoPlaceStateChange?: (isPlacing: boolean) => void; // Callback for autoplace state changes
-    private lastClearTurn: number = -1; // Turn number when lines were last cleared (-1 = never cleared)
-    private comboMultiplier: number = 1.0; // Running combo multiplier (starts at 1.1 when combo begins, adds 0.1 per combo)
+    private placementsSinceLastClear: number = 0; // Number of placements since last line clear (resets to 0 on clear)
+    private comboMultiplier: number = 1.0; // Running combo multiplier (starts at 1.025 when combo begins, adds 0.025 per combo)
     private settings: GameSettings;
     private soundManager: SoundManager;
     private isNewHighScore: boolean = false; // Track if current score is a new high score
@@ -414,34 +414,13 @@ export class Game {
         this.state.turn++;
         this.updateTurnDisplay();
 
-        // Check if combo broke (more than 3 turns since last clear)
-        if (this.lastClearTurn !== -1 && this.comboMultiplier > 1.0) {
-            const turnsSinceLastClear = this.state.turn - this.lastClearTurn;
-            if (turnsSinceLastClear > 3) {
-                // Combo broke - apply multiplier to all blocks currently on the screen
-                // (This happens before line clearing, so all blocks on screen get the multiplier)
-                if (this.settings.devMode) {
-                    console.log(`[COMBO] Combo broke after ${turnsSinceLastClear} turns. Applying multiplier ${this.comboMultiplier.toFixed(3)}x to all blocks on screen.`);
-                }
-                
-                // Trigger combo break animation
-                this.comboAnimationStartTime = Date.now();
-                this.comboAnimationType = 'break';
-                this.comboAnimationMultiplier = this.comboMultiplier;
-                
-                // Apply multiplier to all blocks currently on the screen
-                this.state.placedBlocks.forEach(block => {
-                    block.pointValue = Math.round(block.pointValue * this.comboMultiplier);
-                });
-                
-                // Reset multiplier
-                this.comboMultiplier = 1.0;
-            }
-        }
+        // Increment placements since last clear
+        this.placementsSinceLastClear++;
 
         // Color scheme updates are now handled when level changes (every 10 levels)
 
         // Check for full rows and columns
+        // This will also handle combo logic based on whether lines were cleared
         this.checkAndClearLines();
 
         // If required number of shapes have been placed, generate new queue based on mode
@@ -567,12 +546,34 @@ export class Game {
         
         const fullRows = this.board.getFullRows();
         const fullColumns = this.board.getFullColumns();
+        const linesCleared = fullRows.length + fullColumns.length;
 
-        if (fullRows.length === 0 && fullColumns.length === 0) {
+        // Check if combo broke (4th placement WITHOUT a line clear)
+        // This must happen BEFORE the early return, so we can check even when no lines are cleared
+        if (linesCleared === 0) {
+            if (this.comboMultiplier > 1.0 && this.placementsSinceLastClear >= 4) {
+                // Combo broke on 4th placement without line clear
+                // Apply multiplier to all blocks currently on the screen
+                console.log(`[COMBO] Combo broke! Applying multiplier ${this.comboMultiplier.toFixed(3)}x to all blocks, then resetting to 1.000x`);
+                
+                // Trigger combo break animation
+                this.comboAnimationStartTime = Date.now();
+                this.comboAnimationType = 'break';
+                this.comboAnimationMultiplier = this.comboMultiplier;
+                
+                // Apply multiplier to all blocks currently on the screen
+                this.state.placedBlocks.forEach(block => {
+                    block.pointValue = Math.round(block.pointValue * this.comboMultiplier);
+                });
+                
+                // Reset multiplier and placement counter
+                this.comboMultiplier = 1.0;
+                this.placementsSinceLastClear = 0;
+            }
+            
+            // Early return if no lines to clear (but combo break check already happened above)
             return;
         }
-
-        const linesCleared = fullRows.length + fullColumns.length;
 
         const shouldAnimate = this.settings.enableAnimations;
 
@@ -675,68 +676,34 @@ export class Game {
         this.state.linesCleared += linesCleared;
         this.updateLinesDisplay();
 
-        // Check if this is a combo (3 or fewer turns since last clear)
-        const turnsSinceLastClear = this.lastClearTurn === -1 ? Infinity : this.state.turn - this.lastClearTurn;
-        const isCombo = turnsSinceLastClear <= 3;
-        
-        // If combo broke before this clear (shouldn't happen since we check before, but safety check)
-        if (!isCombo && this.lastClearTurn !== -1 && this.comboMultiplier > 1.0) {
-            if (this.settings.devMode) {
-                console.log(`[COMBO] Combo broke (${turnsSinceLastClear} turns). Applying multiplier ${this.comboMultiplier.toFixed(3)}x to all remaining blocks.`);
+        // If lines were cleared, check if this is a combo (cleared lines within 3 placements of last clear)
+        if (linesCleared > 0) {
+            // Lines were cleared - check if this is a combo (cleared lines within 3 placements of last clear)
+            // placementsSinceLastClear was just incremented before this placement, so we check if it's <= 3
+            const isCombo = this.placementsSinceLastClear <= 3;
+            
+            // If this is a combo, increase the multiplier by 0.025 for each line cleared
+            if (isCombo) {
+                if (this.comboMultiplier === 1.0) {
+                    // Starting a new combo - start at 1.025, then add 0.025 for each additional line
+                    this.comboMultiplier = 1.025 + (linesCleared - 1) * 0.025;
+                    console.log(`[COMBO] Combo started! Multiplier: ${this.comboMultiplier.toFixed(3)}x (${linesCleared} line${linesCleared > 1 ? 's' : ''} cleared)`);
+                    // Don't show animation for first combo
+                } else {
+                    // Continuing combo - add 0.025 for each line cleared
+                    const previousMultiplier = this.comboMultiplier;
+                    this.comboMultiplier += linesCleared * 0.025;
+                    console.log(`[COMBO] Combo continues! Multiplier: ${previousMultiplier.toFixed(3)}x → ${this.comboMultiplier.toFixed(3)}x (${linesCleared} line${linesCleared > 1 ? 's' : ''} cleared)`);
+                    
+                    // Trigger combo continue animation (only when continuing, not starting)
+                    this.comboAnimationStartTime = Date.now();
+                    this.comboAnimationType = 'continue';
+                    this.comboAnimationMultiplier = this.comboMultiplier;
+                }
             }
             
-            // Trigger combo break animation
-            this.comboAnimationStartTime = Date.now();
-            this.comboAnimationType = 'break';
-            this.comboAnimationMultiplier = this.comboMultiplier;
-            
-            // Apply multiplier only to blocks that will remain on the screen (have cells not in cleared lines)
-            const clearedRowsSet = new Set(fullRows);
-            const clearedColsSet = new Set(fullColumns);
-            
-            this.state.placedBlocks.forEach(block => {
-                // Check if this block has any cells that will remain (not in cleared lines/columns)
-                const hasRemainingCells = block.shape.some(cell => {
-                    const absoluteX = block.position.x + cell.x;
-                    const absoluteY = block.position.y + cell.y;
-                    return !clearedRowsSet.has(absoluteY) && !clearedColsSet.has(absoluteX);
-                });
-                
-                // Only apply multiplier to blocks that will remain on the screen
-                if (hasRemainingCells) {
-                    block.pointValue = Math.round(block.pointValue * this.comboMultiplier);
-                }
-            });
-            
-            this.comboMultiplier = 1.0;
-        }
-        
-        // If this is a combo, increase the multiplier
-        if (isCombo) {
-            if (this.comboMultiplier === 1.0) {
-                // Starting a new combo
-                this.comboMultiplier = 1.025;
-                if (this.settings.devMode) {
-                    console.log(`[COMBO] Combo started! Multiplier: ${this.comboMultiplier.toFixed(3)}x`);
-                }
-            } else {
-                // Continuing combo
-                this.comboMultiplier += 0.025;
-                if (this.settings.devMode) {
-                    console.log(`[COMBO] Combo continues! Multiplier: ${this.comboMultiplier.toFixed(3)}x (${turnsSinceLastClear} turns since last clear)`);
-                }
-                
-                // Trigger combo continue animation
-                this.comboAnimationStartTime = Date.now();
-                this.comboAnimationType = 'continue';
-                this.comboAnimationMultiplier = this.comboMultiplier;
-            }
-        } else if (this.lastClearTurn === -1) {
-            // First clear ever - start combo
-            this.comboMultiplier = 1.025;
-            if (this.settings.devMode) {
-                console.log(`[COMBO] First clear - starting combo! Multiplier: ${this.comboMultiplier.toFixed(3)}x`);
-            }
+            // Reset placements counter when lines are cleared (combo continues)
+            this.placementsSinceLastClear = 0;
         }
         
         // Darken all remaining blocks and increment their line clear bonuses
@@ -744,9 +711,6 @@ export class Game {
             block.darkness = Math.max(0, block.darkness - GAMEPLAY_CONFIG.darknessReduction);
             block.lineClearBonuses += linesCleared; // Increment line clear bonuses by 1 for each line/column cleared
         });
-        
-        // Update last clear turn
-        this.lastClearTurn = this.state.turn;
 
         // Update level progress
         this.state.levelProgress += linesCleared * GAMEPLAY_CONFIG.levelProgressPerLine;
@@ -1373,7 +1337,7 @@ export class Game {
         this.animatingShapes = [];
         this.gameOverStartTime = null;
         this.isNewHighScore = false;
-        this.lastClearTurn = -1; // Reset combo tracking
+        this.placementsSinceLastClear = 0; // Reset combo tracking
         this.comboMultiplier = 1.0; // Reset combo multiplier
         this.comboAnimationStartTime = null; // Reset combo animation
         this.comboAnimationType = null;

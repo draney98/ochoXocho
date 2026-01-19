@@ -823,6 +823,11 @@ body[data-theme="midnight"] #auto-place-button {
     align-items: center;
 }
 
+.leaderboard-entry-empty {
+    opacity: 0.3;
+    background: transparent;
+}
+
 .leaderboard-rank {
     font-weight: bold;
     color: var(--accent-color);
@@ -962,7 +967,8 @@ body[data-theme="midnight"] #auto-place-button {
     /* Canvas size is controlled by JavaScript to maintain square board */
     /* No CSS constraints needed on mobile */
 
-    #settings-panel {
+    #settings-panel,
+    #leaderboard-panel {
         right: 10px;
         left: 10px;
         width: auto;
@@ -972,15 +978,18 @@ body[data-theme="midnight"] #auto-place-button {
         max-height: 85vh;
     }
 
-    #settings-panel.is-visible {
+    #settings-panel.is-visible,
+    #leaderboard-panel.is-visible {
         transform: translate(0, -50%);
     }
 
-    #settings-backdrop {
+    #settings-backdrop,
+    #leaderboard-backdrop {
         z-index: 14;
     }
 
-    #settings-panel {
+    #settings-panel,
+    #leaderboard-panel {
         z-index: 16;
     }
 
