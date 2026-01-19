@@ -49,6 +49,7 @@ export class Game {
     private pointsAnimationValue: number = 0;
     private isAutoPlacing: boolean = false; // Track if autoplace is in progress
     private onAutoPlaceStateChange?: (isPlacing: boolean) => void; // Callback for autoplace state changes
+    private lastClearTurn: number = -1; // Turn number when lines were last cleared (-1 = never cleared)
     private settings: GameSettings;
     private soundManager: SoundManager;
     private isNewHighScore: boolean = false; // Track if current score is a new high score
@@ -643,11 +644,27 @@ export class Game {
         this.state.linesCleared += linesCleared;
         this.updateLinesDisplay();
 
+        // Check if this is a combo (3 or fewer turns since last clear)
+        const turnsSinceLastClear = this.lastClearTurn === -1 ? Infinity : this.state.turn - this.lastClearTurn;
+        const isCombo = turnsSinceLastClear <= 3;
+        
+        if (isCombo && this.settings.devMode) {
+            console.log(`[COMBO] Lines cleared within ${turnsSinceLastClear} turns! Incrementing all blocks by 1 point.`);
+        }
+        
         // Darken all remaining blocks and increment their line clear bonuses
         this.state.placedBlocks.forEach(block => {
             block.darkness = Math.max(0, block.darkness - GAMEPLAY_CONFIG.darknessReduction);
             block.lineClearBonuses += linesCleared; // Increment line clear bonuses by 1 for each line/column cleared
+            
+            // Combo bonus: increment base point value if cleared within 3 turns
+            if (isCombo) {
+                block.pointValue += 1;
+            }
         });
+        
+        // Update last clear turn
+        this.lastClearTurn = this.state.turn;
 
         // Update level progress
         this.state.levelProgress += linesCleared * GAMEPLAY_CONFIG.levelProgressPerLine;
@@ -1274,6 +1291,7 @@ export class Game {
         this.animatingShapes = [];
         this.gameOverStartTime = null;
         this.isNewHighScore = false;
+        this.lastClearTurn = -1; // Reset combo tracking
         this.inputHandler.updateBoard(this.board);
         this.inputHandler.updateQueue(this.state.queue);
         this.renderer.updateSettings(this.settings);
