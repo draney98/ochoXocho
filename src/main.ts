@@ -591,6 +591,48 @@ function setupLeaderboardPopup(initialSettings: GameSettings): void {
         leaderboardContainer.innerHTML = html;
     }
     
+    // Cache for leaderboard data to avoid unnecessary refetches when switching views
+    const leaderboardCache: Map<string, LeaderboardEntry[]> = new Map();
+    
+    /**
+     * Gets cache key for a mode/period combination
+     */
+    function getCacheKey(mode: GameMode, period: LeaderboardPeriod): string {
+        return `${mode}-${period}`;
+    }
+    
+    /**
+     * Refreshes all leaderboard combinations in the background
+     * This ensures all data is fresh when the user switches between views
+     */
+    async function refreshAllLeaderboards(): Promise<void> {
+        const modes: GameMode[] = ['easy', 'hard'];
+        const periods: LeaderboardPeriod[] = ['today', 'week', 'ever'];
+        const currentSettings = loadSettings();
+        
+        // Fetch all combinations in parallel
+        const fetchPromises = modes.flatMap(mode =>
+            periods.map(async (period) => {
+                try {
+                    const entries = await getLeaderboard(mode, period);
+                    const cacheKey = getCacheKey(mode, period);
+                    leaderboardCache.set(cacheKey, entries);
+                    if (currentSettings.devMode) {
+                        console.log(`[LEADERBOARD] Refreshed ${mode}/${period}: ${entries.length} entries`);
+                    }
+                } catch (error) {
+                    if (currentSettings.devMode) {
+                        console.warn(`[LEADERBOARD] Failed to refresh ${mode}/${period}:`, error);
+                    }
+                    // Don't update cache on error - keep old data if available
+                }
+            })
+        );
+        
+        // Wait for all fetches to complete (but don't block UI)
+        await Promise.allSettled(fetchPromises);
+    }
+    
     /**
      * Loads and displays the leaderboard for the current mode and period
      */
@@ -618,12 +660,24 @@ function setupLeaderboardPopup(initialSettings: GameSettings): void {
             leaderboardEverBtn.classList.toggle('active', period === 'ever');
         }
         
+        // Check cache first for instant display
+        const cacheKey = getCacheKey(mode, period);
+        const cachedEntries = leaderboardCache.get(cacheKey);
+        
+        if (cachedEntries) {
+            // Show cached data immediately
+            leaderboardLoading.style.display = 'none';
+            renderLeaderboard(cachedEntries, period);
+        }
+        
         try {
             const currentSettings = loadSettings();
             if (currentSettings.devMode) {
                 console.log(`[LEADERBOARD] Loading leaderboard for mode: ${mode}, period: ${period}`);
             }
+            // Always fetch fresh data (will update cache and display)
             const entries = await getLeaderboard(mode, period);
+            leaderboardCache.set(cacheKey, entries); // Update cache
             if (currentSettings.devMode) {
                 console.log(`[LEADERBOARD] Received ${entries.length} entries`);
             }
@@ -638,6 +692,10 @@ function setupLeaderboardPopup(initialSettings: GameSettings): void {
             if (leaderboardError) {
                 leaderboardError.style.display = 'block';
                 leaderboardError.textContent = `Failed to load leaderboard: ${error instanceof Error ? error.message : 'Unknown error'}`;
+            }
+            // If we had cached data, show it even on error
+            if (cachedEntries) {
+                renderLeaderboard(cachedEntries, period);
             }
         }
     }
@@ -672,8 +730,15 @@ function setupLeaderboardPopup(initialSettings: GameSettings): void {
         // Prevent body scroll when panel is open on mobile
         if (open) {
             document.body.style.overflow = 'hidden';
-            // Load leaderboard when panel opens
+            // Load current leaderboard immediately
             loadLeaderboard(currentLeaderboardMode, currentLeaderboardPeriod);
+            // Refresh all leaderboard combinations in the background
+            refreshAllLeaderboards().catch(error => {
+                const currentSettings = loadSettings();
+                if (currentSettings.devMode) {
+                    console.warn('[LEADERBOARD] Background refresh failed:', error);
+                }
+            });
         } else {
             document.body.style.overflow = '';
         }
