@@ -80,7 +80,9 @@ app.get('/api/leaderboard', async (req, res) => {
     try {
         const mode = req.query.mode || 'easy';
         const period = req.query.period || 'ever'; // today, week, or ever
-        const limit = parseInt(req.query.limit) || 10;
+        // Parse limit, default to 10, and ensure it's a valid positive integer
+        const parsedLimit = parseInt(req.query.limit, 10);
+        const limit = (isNaN(parsedLimit) || parsedLimit <= 0) ? 10 : Math.min(parsedLimit, 100);
 
         if (mode !== 'easy' && mode !== 'hard') {
             return res.status(400).json({ success: false, error: 'Invalid mode' });
@@ -92,8 +94,11 @@ app.get('/api/leaderboard', async (req, res) => {
 
         const scores = await getLeaderboard(mode, period, limit);
 
+        // Ensure we never return more than the requested limit (defensive programming)
+        const limitedScores = scores.slice(0, limit);
+
         res.json({
-            scores: scores
+            scores: limitedScores
         });
     } catch (error) {
         console.error('Error fetching leaderboard:', error);

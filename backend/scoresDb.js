@@ -134,12 +134,17 @@ async function getLeaderboard(mode, period, limit) {
         }
         // period === 'ever' uses all scores (no additional filter)
 
+        // Ensure limit is a valid positive integer, cap at 100 for safety
+        const safeLimit = Math.max(1, Math.min(Math.floor(limit || 10), 100));
         query += ` ORDER BY score DESC LIMIT $${params.length + 1}`;
-        params.push(Math.min(limit, 100)); // Cap at 100 for safety
+        params.push(safeLimit);
 
         const result = await pool.query(query, params);
 
-        return result.rows.map((row, index) => ({
+        // Defensive: ensure we never return more than the requested limit
+        const limitedRows = result.rows.slice(0, safeLimit);
+
+        return limitedRows.map((row, index) => ({
             rank: index + 1,
             playerName: row.player_name,
             score: row.score,

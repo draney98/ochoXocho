@@ -569,7 +569,12 @@ function setupLeaderboardPopup(initialSettings: GameSettings): void {
             return;
         }
         
-        // Limit to top 10 entries (defensive programming - API should already limit)
+        // Strictly limit to top 10 entries (defensive programming - API should already limit)
+        // If we receive more than 10, log a warning in dev mode
+        const currentSettings = loadSettings();
+        if (currentSettings.devMode && entries.length > 10) {
+            console.warn(`[LEADERBOARD] Received ${entries.length} entries, limiting to 10`);
+        }
         const topEntries = entries.slice(0, 10);
         
         const html = topEntries.map(entry => {
