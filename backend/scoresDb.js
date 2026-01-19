@@ -91,16 +91,14 @@ function getTodayStart() {
 }
 
 /**
- * Gets the start of this week (Monday UTC)
- * @returns {number} Timestamp of this week's start
+ * Gets the start of the last 7 days (rolling 7 days from now in UTC)
+ * @returns {number} Timestamp of 7 days ago
  */
 function getWeekStart() {
     const now = new Date();
-    const day = now.getUTCDay();
-    const diff = now.getUTCDate() - day + (day === 0 ? -6 : 1); // Adjust to Monday
-    now.setUTCDate(diff);
-    now.setUTCHours(0, 0, 0, 0);
-    return now.getTime();
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); // 7 days in milliseconds
+    sevenDaysAgo.setUTCHours(0, 0, 0, 0); // Set to midnight UTC
+    return sevenDaysAgo.getTime();
 }
 
 /**

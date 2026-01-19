@@ -117,8 +117,8 @@ export const DEFAULT_SETTINGS: GameSettings = {
     playerName: '   ', // Default 3 spaces (old school arcade style)
     devMode: true, // Dev mode: on by default, enables debug logging
     controlZoneHeight: 0.5, // Bottom half of screen (50%)
-    controlZoneMaxScale: 4.0, // Maximum scaling at bottom of control zone (max 8.0)
-    controlZoneMinScale: 2.0, // Minimum scaling at top of control zone (max 4.0)
+    controlZoneMaxScale: 4, // Maximum scaling at bottom of control zone (max 8)
+    controlZoneMinScale: 2, // Minimum scaling at top of control zone (max 4)
     dragSnapSmoothing: 0.5, // Smoothing factor for drag snapping (0.1=smooth, 1.0=instant)
 };
 

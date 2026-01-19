@@ -118,10 +118,10 @@ export async function recordScore(
  * Gets the leaderboard from the backend API
  * @param mode - The game mode ('easy' or 'hard')
  * @param period - Time period filter ('today', 'week', or 'ever')
- * @returns Promise resolving to an array of leaderboard entries
+ * @returns Promise resolving to an array of leaderboard entries (top 10)
  */
 export async function getLeaderboard(mode: GameMode, period: LeaderboardPeriod = 'ever'): Promise<import('./types').LeaderboardEntry[]> {
-    return fetchLeaderboard(mode, period, 50);
+    return fetchLeaderboard(mode, period, 10);
 }
 
 /**

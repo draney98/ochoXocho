@@ -251,8 +251,8 @@ function setupSettingsControls(game: Game, initialSettings: GameSettings, update
         playerNameInput.value = playerName.substring(0, 3).toUpperCase();
     }
     if (controlZoneHeightInput) controlZoneHeightInput.value = String(initialSettings.controlZoneHeight ?? 0.5);
-    if (controlZoneMaxScaleInput) controlZoneMaxScaleInput.value = String(initialSettings.controlZoneMaxScale ?? 4.0);
-    if (controlZoneMinScaleInput) controlZoneMinScaleInput.value = String(initialSettings.controlZoneMinScale ?? 2.0);
+    if (controlZoneMaxScaleInput) controlZoneMaxScaleInput.value = String(initialSettings.controlZoneMaxScale ?? 4);
+    if (controlZoneMinScaleInput) controlZoneMinScaleInput.value = String(initialSettings.controlZoneMinScale ?? 2);
     if (dragSnapSmoothingInput) dragSnapSmoothingInput.value = String(initialSettings.dragSnapSmoothing ?? 0.5);
     
     // Update value displays
@@ -260,10 +260,10 @@ function setupSettingsControls(game: Game, initialSettings: GameSettings, update
         controlZoneHeightValue.textContent = `${Math.round(parseFloat(controlZoneHeightInput.value) * 100)}%`;
     }
     if (controlZoneMaxScaleValue && controlZoneMaxScaleInput) {
-        controlZoneMaxScaleValue.textContent = `${parseFloat(controlZoneMaxScaleInput.value).toFixed(1)}x`;
+        controlZoneMaxScaleValue.textContent = `${Math.round(parseFloat(controlZoneMaxScaleInput.value))}x`;
     }
     if (controlZoneMinScaleValue && controlZoneMinScaleInput) {
-        controlZoneMinScaleValue.textContent = `${parseFloat(controlZoneMinScaleInput.value).toFixed(1)}x`;
+        controlZoneMinScaleValue.textContent = `${Math.round(parseFloat(controlZoneMinScaleInput.value))}x`;
     }
     if (dragSnapSmoothingValue && dragSnapSmoothingInput) {
         dragSnapSmoothingValue.textContent = parseFloat(dragSnapSmoothingInput.value).toFixed(2);
@@ -293,8 +293,8 @@ function setupSettingsControls(game: Game, initialSettings: GameSettings, update
             playerName: (playerNameInput?.value.trim().substring(0, 3).toUpperCase() || '').padEnd(3, ' '),
             devMode: devModeInput?.checked ?? true, // Default to true
             controlZoneHeight: controlZoneHeightInput ? parseFloat(controlZoneHeightInput.value) : (initialSettings.controlZoneHeight ?? 0.5),
-            controlZoneMaxScale: controlZoneMaxScaleInput ? parseFloat(controlZoneMaxScaleInput.value) : (initialSettings.controlZoneMaxScale ?? 4.0),
-            controlZoneMinScale: controlZoneMinScaleInput ? parseFloat(controlZoneMinScaleInput.value) : (initialSettings.controlZoneMinScale ?? 2.0),
+            controlZoneMaxScale: controlZoneMaxScaleInput ? Math.round(parseFloat(controlZoneMaxScaleInput.value)) : (initialSettings.controlZoneMaxScale ?? 4),
+            controlZoneMinScale: controlZoneMinScaleInput ? Math.round(parseFloat(controlZoneMinScaleInput.value)) : (initialSettings.controlZoneMinScale ?? 2),
             dragSnapSmoothing: dragSnapSmoothingInput ? parseFloat(dragSnapSmoothingInput.value) : (initialSettings.dragSnapSmoothing ?? 0.5),
         };
         game.updateSettings(updatedSettings);
@@ -344,13 +344,13 @@ function setupSettingsControls(game: Game, initialSettings: GameSettings, update
     });
     controlZoneMaxScaleInput?.addEventListener('input', () => {
         if (controlZoneMaxScaleValue && controlZoneMaxScaleInput) {
-            controlZoneMaxScaleValue.textContent = `${parseFloat(controlZoneMaxScaleInput.value).toFixed(1)}x`;
+            controlZoneMaxScaleValue.textContent = `${Math.round(parseFloat(controlZoneMaxScaleInput.value))}x`;
         }
         pushToGame();
     });
     controlZoneMinScaleInput?.addEventListener('input', () => {
         if (controlZoneMinScaleValue && controlZoneMinScaleInput) {
-            controlZoneMinScaleValue.textContent = `${parseFloat(controlZoneMinScaleInput.value).toFixed(1)}x`;
+            controlZoneMinScaleValue.textContent = `${Math.round(parseFloat(controlZoneMinScaleInput.value))}x`;
         }
         pushToGame();
     });
@@ -512,6 +512,7 @@ function setupLeaderboardPopup(initialSettings: GameSettings): void {
     
     /**
      * Formats a timestamp based on the leaderboard period
+     * Uses UTC (server time) for consistency with server-side filtering
      * - today: shows time (e.g., "8:00am")
      * - week: shows day of week (e.g., "Tue")
      * - ever: shows compact date (e.g., "1/12/25")
@@ -520,20 +521,22 @@ function setupLeaderboardPopup(initialSettings: GameSettings): void {
         const date = new Date(timestamp);
         
         if (period === 'today') {
-            // Show time for today's scores (e.g., "8:00am")
-            return date.toLocaleTimeString('en-US', {
-                hour: 'numeric',
-                minute: '2-digit',
-                hour12: true
-            }).toLowerCase();
+            // Show time for today's scores in UTC (server time) (e.g., "8:00am")
+            const hours = date.getUTCHours();
+            const minutes = date.getUTCMinutes();
+            const ampm = hours >= 12 ? 'pm' : 'am';
+            const displayHours = hours % 12 || 12; // Convert to 12-hour format
+            const displayMinutes = minutes.toString().padStart(2, '0');
+            return `${displayHours}:${displayMinutes}${ampm}`;
         } else if (period === 'week') {
-            // Show day of week for this week's scores (e.g., "Tue")
-            return date.toLocaleDateString('en-US', { weekday: 'short' });
+            // Show day of week for this week's scores in UTC (e.g., "Tue")
+            const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            return days[date.getUTCDay()];
         } else {
-            // Show compact date for all-time scores (e.g., "1/12/25")
-            const month = date.getMonth() + 1;
-            const day = date.getDate();
-            const year = date.getFullYear() % 100; // Last 2 digits of year
+            // Show compact date for all-time scores in UTC (e.g., "1/12/25")
+            const month = date.getUTCMonth() + 1;
+            const day = date.getUTCDate();
+            const year = date.getUTCFullYear() % 100; // Last 2 digits of year
             return `${month}/${day}/${year}`;
         }
     }
@@ -556,6 +559,7 @@ function setupLeaderboardPopup(initialSettings: GameSettings): void {
     
     /**
      * Renders the leaderboard entries
+     * Limits to top 10 entries for each combination of mode and period
      */
     function renderLeaderboard(entries: LeaderboardEntry[], period: LeaderboardPeriod): void {
         if (!leaderboardContainer) return;
@@ -565,7 +569,10 @@ function setupLeaderboardPopup(initialSettings: GameSettings): void {
             return;
         }
         
-        const html = entries.map(entry => {
+        // Limit to top 10 entries (defensive programming - API should already limit)
+        const topEntries = entries.slice(0, 10);
+        
+        const html = topEntries.map(entry => {
             return `
                 <div class="leaderboard-entry">
                     <span class="leaderboard-rank">#${entry.rank}</span>
