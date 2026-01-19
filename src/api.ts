@@ -120,7 +120,6 @@ export async function getLeaderboard(
     
     if (devMode) {
         console.log(`[API] Fetching leaderboard from: ${url}`);
-        console.log(`[API] API_CONFIG.baseUrl: ${API_CONFIG.baseUrl}`);
     }
     
     try {

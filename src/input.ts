@@ -109,21 +109,21 @@ export class InputHandler {
             const isValid = canPlaceShape(this.board, this.dragState.shape, this.dragState.mousePosition);
             
             // In dev mode, log detailed state for debugging
-            if (this.settings.devMode) {
-                console.log(`[BOARD UPDATE] Re-validated position (${this.dragState.mousePosition.x}, ${this.dragState.mousePosition.y}): ${isValid}`);
-                // Log the actual grid state for the shape's blocks
-                for (const block of this.dragState.shape) {
-                    const absX = this.dragState.mousePosition.x + block.x;
-                    const absY = this.dragState.mousePosition.y + block.y;
-                    if (absX >= 0 && absX < 8 && absY >= 0 && absY < 8) {
-                        const gridValue = grid[absY][absX];
-                        const isEmpty = this.board.isCellEmpty({ x: absX, y: absY });
-                        if (gridValue || !isEmpty) {
-                            console.log(`  [BOARD UPDATE] Block (${block.x},${block.y}) -> grid(${absX},${absY}): grid[${absY}][${absX}]=${gridValue}, isCellEmpty=${isEmpty}`);
-                        }
-                    }
-                }
-            }
+            // if (this.settings.devMode) {
+            //     console.log(`[BOARD UPDATE] Re-validated position (${this.dragState.mousePosition.x}, ${this.dragState.mousePosition.y}): ${isValid}`);
+            //     // Log the actual grid state for the shape's blocks
+            //     for (const block of this.dragState.shape) {
+            //         const absX = this.dragState.mousePosition.x + block.x;
+            //         const absY = this.dragState.mousePosition.y + block.y;
+            //         if (absX >= 0 && absX < 8 && absY >= 0 && absY < 8) {
+            //             const gridValue = grid[absY][absX];
+            //             const isEmpty = this.board.isCellEmpty({ x: absX, y: absY });
+            //             if (gridValue || !isEmpty) {
+            //                 console.log(`  [BOARD UPDATE] Block (${block.x},${block.y}) -> grid(${absX},${absY}): grid[${absY}][${absX}]=${gridValue}, isCellEmpty=${isEmpty}`);
+            //             }
+            //         }
+            //     }
+            // }
             
             this.dragState.isValidPosition = isValid;
         }
@@ -458,11 +458,11 @@ export class InputHandler {
         
         // Verbose logging for debugging (mouse)
         if (this.settings.devMode) {
-            console.log('[DRAG_MOVE_MOUSE] Coordinate trace:');
-            console.log(`  anchorPoint: (${this.dragState.anchorPoint.x.toFixed(1)}, ${this.dragState.anchorPoint.y.toFixed(1)})`);
-            console.log(`  projectedPos: (${projectedPos.x.toFixed(1)}, ${projectedPos.y.toFixed(1)})`);
-            console.log(`  visualPieceTopLeft: (${visualPieceTopLeft.x.toFixed(1)}, ${visualPieceTopLeft.y.toFixed(1)})`);
-            console.log(`  shape offsets: minX=${minX}, minY=${minY}`);
+            // console.log('[DRAG_MOVE_MOUSE] Coordinate trace:');
+            // console.log(`  anchorPoint: (${this.dragState.anchorPoint.x.toFixed(1)}, ${this.dragState.anchorPoint.y.toFixed(1)})`);
+            // console.log(`  projectedPos: (${projectedPos.x.toFixed(1)}, ${projectedPos.y.toFixed(1)})`);
+            // console.log(`  visualPieceTopLeft: (${visualPieceTopLeft.x.toFixed(1)}, ${visualPieceTopLeft.y.toFixed(1)})`);
+            // console.log(`  shape offsets: minX=${minX}, minY=${minY}`);
         }
         
         // Calculate grid position from visual piece TOP-LEFT
@@ -474,8 +474,8 @@ export class InputHandler {
             
             if (this.settings.devMode) {
                 const isValid = canPlaceShape(this.board, this.dragState.shape, gridPos);
-                console.log(`  gridPos candidate: (${gridPos.x}, ${gridPos.y})`);
-                console.log(`  canPlaceShape result: ${isValid}`);
+                // console.log(`  gridPos candidate: (${gridPos.x}, ${gridPos.y})`);
+                // console.log(`  canPlaceShape result: ${isValid}`);
             }
             
             // CRITICAL: Always validate with the absolute latest board state
@@ -514,16 +514,16 @@ export class InputHandler {
                     const lastLog = (this as any).lastInvalidLog;
                     const logKey = `${gridPos.x},${gridPos.y}`;
                     if (!lastLog || lastLog !== logKey) {
-                        console.log(`[VALIDATION] Position (${gridPos.x}, ${gridPos.y}) invalid.`);
-                        console.log(`  Cursor: (${canvasX.toFixed(1)}, ${canvasY.toFixed(1)})`);
-                        console.log(`  Grid cell under cursor: (${Math.floor(canvasX / CELL_SIZE)}, ${Math.floor(canvasY / CELL_SIZE)})`);
+                        // console.log(`[VALIDATION] Position (${gridPos.x}, ${gridPos.y}) invalid.`);
+                        // console.log(`  Cursor: (${canvasX.toFixed(1)}, ${canvasY.toFixed(1)})`);
+                        // console.log(`  Grid cell under cursor: (${Math.floor(canvasX / CELL_SIZE)}, ${Math.floor(canvasY / CELL_SIZE)})`);
                         const minX = Math.min(...this.dragState.shape.map(b => b.x));
                         const minY = Math.min(...this.dragState.shape.map(b => b.y));
-                        console.log(`  Shape top-left offset: (${minX}, ${minY})`);
-                        console.log(`  canPlaceShape=${isValid}, manualCheck=${manualCheck}`);
+                        // console.log(`  Shape top-left offset: (${minX}, ${minY})`);
+                        // console.log(`  canPlaceShape=${isValid}, manualCheck=${manualCheck}`);
                         if (invalidBlocks.length > 0) {
                             invalidBlocks.forEach(({block, abs, reason}) => {
-                                console.log(`  Block (${block.x},${block.y}) -> grid(${abs.x},${abs.y}): ${reason}`);
+                                // console.log(`  Block (${block.x},${block.y}) -> grid(${abs.x},${abs.y}): ${reason}`);
                             });
                         }
                         (this as any).lastInvalidLog = logKey;
@@ -595,15 +595,6 @@ export class InputHandler {
             y: visualPieceCenter.y - shapeHeight / 2
         };
         
-        // Verbose logging for debugging (mouse)
-        if (this.settings.devMode) {
-            console.log('[DROP_MOUSE] Coordinate trace:');
-            console.log(`  anchorPoint: (${this.dragState.anchorPoint.x.toFixed(1)}, ${this.dragState.anchorPoint.y.toFixed(1)})`);
-            console.log(`  projectedPos: (${projectedPos.x.toFixed(1)}, ${projectedPos.y.toFixed(1)})`);
-            console.log(`  visualPieceTopLeft: (${visualPieceTopLeft.x.toFixed(1)}, ${visualPieceTopLeft.y.toFixed(1)})`);
-            console.log(`  shape offsets: minX=${minX}, minY=${minY}`);
-        }
-
         // Check if VISUAL PIECE (not mouse) is over the queue area - if so, restore to queue
         // The visual piece top-left Y position determines if it's over the board or queue
         const visualPieceOverQueueArea = visualPieceTopLeft.y >= BOARD_OFFSET_Y + BOARD_PIXEL_SIZE;
@@ -616,10 +607,6 @@ export class InputHandler {
             let placementSource = 'visual-piece';
             let isValid = false;
             
-            if (this.settings.devMode) {
-                console.log(`  visual-piece gridPos: ${gridPos ? `(${gridPos.x}, ${gridPos.y})` : 'null'}`);
-            }
-            
             // Validate visual piece position if it exists
             if (gridPos && gridPos.x >= 0 && gridPos.x < BOARD_CELL_COUNT &&
                 gridPos.y >= 0 && gridPos.y < BOARD_CELL_COUNT) {
@@ -628,27 +615,11 @@ export class InputHandler {
             
             // If visual piece position fails, try neighborhood probing around projected position
             if (!gridPos || !isValid) {
-                if (this.settings.devMode) {
-                    console.log(`  visual-piece position failed, probing neighborhood around projectedPos`);
-                }
                 gridPos = this.probeNeighborhoodForPlacement(projectedPos, this.dragState.shape);
                 placementSource = 'neighborhood';
                 
-                if (this.settings.devMode) {
-                    console.log(`  neighborhood gridPos: ${gridPos ? `(${gridPos.x}, ${gridPos.y})` : 'null'}`);
-                }
-                
                 if (gridPos) {
                     isValid = canPlaceShape(this.board, this.dragState.shape, gridPos);
-                }
-            }
-                
-            if (this.settings.devMode) {
-                if (gridPos) {
-                    console.log(`  final gridPos: (${gridPos.x}, ${gridPos.y}), source: ${placementSource}`);
-                    console.log(`  canPlaceShape result: ${isValid}`);
-                } else {
-                    console.log(`  final gridPos: null (no valid placement found)`);
                 }
             }
                 
@@ -656,10 +627,6 @@ export class InputHandler {
                 // Pass -1 as shapeIndex since shape was already removed from queue
                 this.onPlaceShape(-1, gridPos);
                 shapePlaced = true;
-                
-                if (this.settings.devMode) {
-                    console.log(`  ✓ Placement SUCCEEDED at (${gridPos.x}, ${gridPos.y})`);
-                }
             } else {
                 if (this.settings.devMode) {
                     console.log(`  ✗ Placement REJECTED`);

@@ -2024,7 +2024,10 @@ export class Renderer {
         leaderboardRank: number | null = null,
         animatingShapes: AnimatingShape[] = [],
         pointsAnimationProgress: number = 0,
-        pointsAnimationValue: number = 0
+        pointsAnimationValue: number = 0,
+        comboAnimationProgress: number = 0,
+        comboAnimationType: 'continue' | 'break' | null = null,
+        comboAnimationMultiplier: number = 0
     ): void {
         // Update current level for highlight color calculation
         this.currentLevel = level;
@@ -2076,6 +2079,10 @@ export class Renderer {
         
         if (pointsAnimationProgress > 0 && pointsAnimationProgress < 1 && pointsAnimationValue > 200) {
             this.drawPointsAnimation(pointsAnimationProgress, pointsAnimationValue);
+        }
+        
+        if (comboAnimationProgress > 0 && comboAnimationProgress < 1 && comboAnimationType !== null) {
+            this.drawComboAnimation(comboAnimationProgress, comboAnimationType, comboAnimationMultiplier);
         }
     }
     
@@ -2185,6 +2192,97 @@ export class Renderer {
         }
         
         // Reset shadow
+        this.ctx.shadowBlur = 0;
+        this.ctx.restore();
+    }
+    
+    /**
+     * Draws combo animation that appears when a combo continues or breaks
+     * @param progress - Animation progress from 0 to 1
+     * @param type - Type of combo event ('continue' or 'break')
+     * @param multiplier - The combo multiplier value
+     */
+    drawComboAnimation(progress: number, type: 'continue' | 'break', multiplier: number): void {
+        // Fade in quickly, then fade out slowly
+        let alpha: number;
+        if (progress <= 0.2) {
+            // Fade in quickly (0 to 0.2)
+            alpha = progress / 0.2;
+        } else {
+            // Fade out slowly (0.2 to 1.0)
+            alpha = 1 - ((progress - 0.2) / 0.8);
+        }
+        
+        // Scale animation: start small, grow to full size with bounce
+        let scale: number;
+        if (progress <= 0.15) {
+            // Grow from 0.3 to 1.3
+            scale = 0.3 + (progress / 0.15) * 1.0;
+        } else if (progress <= 0.3) {
+            // Bounce back slightly
+            const bounceProgress = (progress - 0.15) / 0.15;
+            scale = 1.3 - (bounceProgress * 0.2);
+        } else {
+            // Stay at base scale
+            scale = 1.1;
+        }
+        
+        this.ctx.save();
+        
+        // Center on entire canvas, slightly above center
+        const centerX = Math.round(CANVAS_WIDTH / 2);
+        const centerY = Math.round((BOARD_OFFSET_Y + BOARD_PIXEL_SIZE / 2) - 60);
+        
+        // Calculate font size based on scale
+        const baseFontSize = 64;
+        const scaledFontSize = Math.round(baseFontSize * scale);
+        
+        // Determine text and color based on type
+        let comboText: string;
+        let textColor: string;
+        let shadowColor: string;
+        
+        if (type === 'continue') {
+            comboText = `COMBO!`;
+            textColor = '#4ade80'; // Green for continue
+            shadowColor = '#16a34a';
+        } else {
+            comboText = `COMBO BROKE`;
+            textColor = '#fbbf24'; // Amber for break
+            shadowColor = '#f59e0b';
+        }
+        
+        // Draw background glow
+        const glowRadius = scaledFontSize * 0.6;
+        this.ctx.filter = `blur(10px)`;
+        this.ctx.globalAlpha = alpha * 0.4;
+        this.ctx.fillStyle = shadowColor;
+        this.ctx.beginPath();
+        this.ctx.arc(centerX, centerY, glowRadius * 1.5, 0, Math.PI * 2);
+        this.ctx.fill();
+        this.ctx.filter = 'none';
+        
+        // Draw text outline for better visibility
+        this.ctx.globalAlpha = alpha;
+        this.ctx.fillStyle = textColor;
+        this.ctx.font = `bold ${scaledFontSize}px ${SYSTEM_FONT_STACK}`;
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        
+        // Shadow effect
+        this.ctx.shadowColor = shadowColor;
+        this.ctx.shadowBlur = 15;
+        this.ctx.shadowOffsetX = 0;
+        this.ctx.shadowOffsetY = 0;
+        
+        // Draw text outline (stroke)
+        this.ctx.strokeStyle = '#000';
+        this.ctx.lineWidth = 3;
+        this.ctx.strokeText(comboText, centerX, centerY);
+        
+        // Draw main text with shadow
+        this.ctx.fillText(comboText, centerX, centerY);
+        
         this.ctx.shadowBlur = 0;
         this.ctx.restore();
     }

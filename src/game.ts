@@ -47,9 +47,13 @@ export class Game {
     private readonly LEVEL_UP_ANIMATION_DURATION = ANIMATION_CONFIG.levelUpMs;
     private pointsAnimationStartTime: number | null = null;
     private pointsAnimationValue: number = 0;
+    private comboAnimationStartTime: number | null = null;
+    private comboAnimationType: 'continue' | 'break' | null = null;
+    private comboAnimationMultiplier: number = 0;
     private isAutoPlacing: boolean = false; // Track if autoplace is in progress
     private onAutoPlaceStateChange?: (isPlacing: boolean) => void; // Callback for autoplace state changes
     private lastClearTurn: number = -1; // Turn number when lines were last cleared (-1 = never cleared)
+    private comboMultiplier: number = 1.0; // Running combo multiplier (starts at 1.1 when combo begins, adds 0.1 per combo)
     private settings: GameSettings;
     private soundManager: SoundManager;
     private isNewHighScore: boolean = false; // Track if current score is a new high score
@@ -258,6 +262,18 @@ export class Game {
             this.pointsAnimationStartTime = null;
             this.pointsAnimationValue = 0;
         }
+        
+        // Calculate combo animation progress
+        const COMBO_ANIMATION_DURATION = 1500; // 1.5 seconds
+        const comboAnimationProgress = this.comboAnimationStartTime !== null
+            ? Math.min((Date.now() - this.comboAnimationStartTime) / COMBO_ANIMATION_DURATION, 1)
+            : 0;
+        // Clear combo animation if it's complete
+        if (comboAnimationProgress >= 1) {
+            this.comboAnimationStartTime = null;
+            this.comboAnimationType = null;
+            this.comboAnimationMultiplier = 0;
+        }
         this.renderer.render(
             this.board,
             this.state.placedBlocks,
@@ -274,7 +290,10 @@ export class Game {
             this.leaderboardRank,
             this.animatingShapes,
             pointsAnimationProgress,
-            this.pointsAnimationValue
+            this.pointsAnimationValue,
+            comboAnimationProgress,
+            this.comboAnimationType,
+            this.comboAnimationMultiplier
         );
     }
 
@@ -388,15 +407,37 @@ export class Game {
         // Resume AudioContext on first user interaction (fixes autoplay policy)
         this.soundManager.resumeContext();
         this.soundManager.playPlace();
-        if (this.settings.devMode) {
-            console.log(`[PLACE] Placed shape at (${position.x}, ${position.y}), total blocks: ${this.state.placedBlocks.length}`);
-        }
 
         // Shape is removed from queue when dropped (for touch) or when drag started (for mouse)
         this.shapesPlacedThisTurn++;
         this.state.totalShapesPlaced++;
         this.state.turn++;
         this.updateTurnDisplay();
+
+        // Check if combo broke (more than 3 turns since last clear)
+        if (this.lastClearTurn !== -1 && this.comboMultiplier > 1.0) {
+            const turnsSinceLastClear = this.state.turn - this.lastClearTurn;
+            if (turnsSinceLastClear > 3) {
+                // Combo broke - apply multiplier to all blocks currently on the screen
+                // (This happens before line clearing, so all blocks on screen get the multiplier)
+                if (this.settings.devMode) {
+                    console.log(`[COMBO] Combo broke after ${turnsSinceLastClear} turns. Applying multiplier ${this.comboMultiplier.toFixed(3)}x to all blocks on screen.`);
+                }
+                
+                // Trigger combo break animation
+                this.comboAnimationStartTime = Date.now();
+                this.comboAnimationType = 'break';
+                this.comboAnimationMultiplier = this.comboMultiplier;
+                
+                // Apply multiplier to all blocks currently on the screen
+                this.state.placedBlocks.forEach(block => {
+                    block.pointValue = Math.round(block.pointValue * this.comboMultiplier);
+                });
+                
+                // Reset multiplier
+                this.comboMultiplier = 1.0;
+            }
+        }
 
         // Color scheme updates are now handled when level changes (every 10 levels)
 
@@ -467,16 +508,7 @@ export class Game {
             
             // Return updated block with remaining cells, or null if all cells were removed
             if (remainingCells.length === 0) {
-                if (this.settings.devMode) {
-                    console.log(`[CLEAR] Removed entire block at (${block.position.x}, ${block.position.y})`);
-                }
                 return null;
-            }
-            
-            if (remainingCells.length < block.shape.length) {
-                if (this.settings.devMode) {
-                    console.log(`[CLEAR] Partially removed block: ${block.shape.length} -> ${remainingCells.length} cells`);
-                }
             }
             
             return {
@@ -490,7 +522,6 @@ export class Game {
         
         if (beforeCount !== afterCount || beforeTotalCells !== afterTotalCells) {
             if (this.settings.devMode) {
-                console.log(`[CLEAR] Shape count: ${beforeCount} -> ${afterCount}, Total cells: ${beforeTotalCells} -> ${afterTotalCells}`);
                 console.log(`[CLEAR] Cleared rows: [${fullRows.join(', ')}], columns: [${fullColumns.join(', ')}]`);
             }
         }
@@ -648,19 +679,70 @@ export class Game {
         const turnsSinceLastClear = this.lastClearTurn === -1 ? Infinity : this.state.turn - this.lastClearTurn;
         const isCombo = turnsSinceLastClear <= 3;
         
-        if (isCombo && this.settings.devMode) {
-            console.log(`[COMBO] Lines cleared within ${turnsSinceLastClear} turns! Incrementing all blocks by 1 point.`);
+        // If combo broke before this clear (shouldn't happen since we check before, but safety check)
+        if (!isCombo && this.lastClearTurn !== -1 && this.comboMultiplier > 1.0) {
+            if (this.settings.devMode) {
+                console.log(`[COMBO] Combo broke (${turnsSinceLastClear} turns). Applying multiplier ${this.comboMultiplier.toFixed(3)}x to all remaining blocks.`);
+            }
+            
+            // Trigger combo break animation
+            this.comboAnimationStartTime = Date.now();
+            this.comboAnimationType = 'break';
+            this.comboAnimationMultiplier = this.comboMultiplier;
+            
+            // Apply multiplier only to blocks that will remain on the screen (have cells not in cleared lines)
+            const clearedRowsSet = new Set(fullRows);
+            const clearedColsSet = new Set(fullColumns);
+            
+            this.state.placedBlocks.forEach(block => {
+                // Check if this block has any cells that will remain (not in cleared lines/columns)
+                const hasRemainingCells = block.shape.some(cell => {
+                    const absoluteX = block.position.x + cell.x;
+                    const absoluteY = block.position.y + cell.y;
+                    return !clearedRowsSet.has(absoluteY) && !clearedColsSet.has(absoluteX);
+                });
+                
+                // Only apply multiplier to blocks that will remain on the screen
+                if (hasRemainingCells) {
+                    block.pointValue = Math.round(block.pointValue * this.comboMultiplier);
+                }
+            });
+            
+            this.comboMultiplier = 1.0;
+        }
+        
+        // If this is a combo, increase the multiplier
+        if (isCombo) {
+            if (this.comboMultiplier === 1.0) {
+                // Starting a new combo
+                this.comboMultiplier = 1.025;
+                if (this.settings.devMode) {
+                    console.log(`[COMBO] Combo started! Multiplier: ${this.comboMultiplier.toFixed(3)}x`);
+                }
+            } else {
+                // Continuing combo
+                this.comboMultiplier += 0.025;
+                if (this.settings.devMode) {
+                    console.log(`[COMBO] Combo continues! Multiplier: ${this.comboMultiplier.toFixed(3)}x (${turnsSinceLastClear} turns since last clear)`);
+                }
+                
+                // Trigger combo continue animation
+                this.comboAnimationStartTime = Date.now();
+                this.comboAnimationType = 'continue';
+                this.comboAnimationMultiplier = this.comboMultiplier;
+            }
+        } else if (this.lastClearTurn === -1) {
+            // First clear ever - start combo
+            this.comboMultiplier = 1.025;
+            if (this.settings.devMode) {
+                console.log(`[COMBO] First clear - starting combo! Multiplier: ${this.comboMultiplier.toFixed(3)}x`);
+            }
         }
         
         // Darken all remaining blocks and increment their line clear bonuses
         this.state.placedBlocks.forEach(block => {
             block.darkness = Math.max(0, block.darkness - GAMEPLAY_CONFIG.darknessReduction);
             block.lineClearBonuses += linesCleared; // Increment line clear bonuses by 1 for each line/column cleared
-            
-            // Combo bonus: increment base point value if cleared within 3 turns
-            if (isCombo) {
-                block.pointValue += 1;
-            }
         });
         
         // Update last clear turn
@@ -1292,6 +1374,10 @@ export class Game {
         this.gameOverStartTime = null;
         this.isNewHighScore = false;
         this.lastClearTurn = -1; // Reset combo tracking
+        this.comboMultiplier = 1.0; // Reset combo multiplier
+        this.comboAnimationStartTime = null; // Reset combo animation
+        this.comboAnimationType = null;
+        this.comboAnimationMultiplier = 0;
         this.inputHandler.updateBoard(this.board);
         this.inputHandler.updateQueue(this.state.queue);
         this.renderer.updateSettings(this.settings);
