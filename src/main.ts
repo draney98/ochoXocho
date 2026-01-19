@@ -16,6 +16,7 @@ import {
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from './constants';
 import { waitForFonts } from './fontConfig';
 import { devLogger } from './devLogger';
+import { VERSION } from './version';
 
 /**
  * Loads settings from localStorage, falling back to defaults
@@ -236,6 +237,12 @@ function setupSettingsControls(game: Game, initialSettings: GameSettings, update
     downloadLogBtn?.addEventListener('click', () => {
         devLogger.downloadLogs();
     });
+    
+    // Display version number
+    const versionDisplay = document.getElementById('version-display');
+    if (versionDisplay) {
+        versionDisplay.textContent = VERSION;
+    }
     
     // Force refresh button - reloads with cache-busting parameter (preserves localStorage)
     const forceRefreshBtn = document.getElementById('force-refresh-btn');
