@@ -54,6 +54,7 @@ export class Game {
     private onAutoPlaceStateChange?: (isPlacing: boolean) => void; // Callback for autoplace state changes
     private placementsSinceLastClear: number = 0; // Number of placements since last line clear (resets to 0 on clear)
     private comboMultiplier: number = 1.0; // Running combo multiplier (starts at 1.025 when combo begins, adds 0.025 per combo)
+    private comboCount: number = 0; // Number of consecutive line clears within 3 placements (for display)
     private settings: GameSettings;
     private soundManager: SoundManager;
     private isNewHighScore: boolean = false; // Track if current score is a new high score
@@ -293,7 +294,8 @@ export class Game {
             this.pointsAnimationValue,
             comboAnimationProgress,
             this.comboAnimationType,
-            this.comboAnimationMultiplier
+            this.comboAnimationMultiplier,
+            this.comboCount
         );
     }
 
@@ -548,27 +550,29 @@ export class Game {
         const fullColumns = this.board.getFullColumns();
         const linesCleared = fullRows.length + fullColumns.length;
 
-        // Check if combo broke (4th placement WITHOUT a line clear)
+        // Check if combo broke (3rd placement WITHOUT a line clear)
         // This must happen BEFORE the early return, so we can check even when no lines are cleared
         if (linesCleared === 0) {
-            if (this.comboMultiplier > 1.0 && this.placementsSinceLastClear >= 4) {
-                // Combo broke on 4th placement without line clear
+            if (this.comboMultiplier > 1.0 && this.placementsSinceLastClear >= 3) {
+                // Combo broke on 3rd placement without line clear
                 // Apply multiplier to all blocks currently on the screen
-                console.log(`[COMBO] Combo broke! Applying multiplier ${this.comboMultiplier.toFixed(3)}x to all blocks, then resetting to 1.000x`);
+                console.log(`[COMBO] Combo broke on ${this.placementsSinceLastClear}th placement! Applying multiplier ${this.comboMultiplier.toFixed(3)}x to all blocks, then resetting to 1.000x`);
                 
                 // Trigger combo break animation
                 this.comboAnimationStartTime = Date.now();
                 this.comboAnimationType = 'break';
                 this.comboAnimationMultiplier = this.comboMultiplier;
+                console.log(`[COMBO] Showing "COMBO BROKEN" message`);
                 
                 // Apply multiplier to all blocks currently on the screen
                 this.state.placedBlocks.forEach(block => {
                     block.pointValue = Math.round(block.pointValue * this.comboMultiplier);
                 });
                 
-                // Reset multiplier and placement counter
+                // Reset multiplier, placement counter, and combo count
                 this.comboMultiplier = 1.0;
                 this.placementsSinceLastClear = 0;
+                this.comboCount = 0;
             }
             
             // Early return if no lines to clear (but combo break check already happened above)
@@ -583,12 +587,11 @@ export class Game {
             
             for (const block of this.state.placedBlocks) {
                 // Calculate current point value for this block (base + line clear bonuses + level increments)
-                // Include the current clear bonuses (linesCleared) since blocks are being cleared now
                 const placementLevel = Math.floor(block.totalShapesPlacedAtPlacement / GAMEPLAY_CONFIG.shapesPerValueTier);
                 const currentLevel = Math.floor(this.state.totalShapesPlaced / GAMEPLAY_CONFIG.shapesPerValueTier);
                 const levelIncrements = currentLevel - placementLevel;
-                // Include current clear bonuses in the calculation to match displayed value
-                const currentPointValue = block.pointValue + block.lineClearBonuses + linesCleared + (levelIncrements * GAMEPLAY_CONFIG.pointsPerTier);
+                // Use the same formula as scoring: base + line clear bonuses + level increments
+                const currentPointValue = block.pointValue + block.lineClearBonuses + (levelIncrements * GAMEPLAY_CONFIG.pointsPerTier);
                 
                 // Determine if this block should explode (point value > explosion threshold)
                 const shouldExplode = currentPointValue > GAMEPLAY_CONFIG.explosionThreshold;
@@ -687,19 +690,25 @@ export class Game {
                 if (this.comboMultiplier === 1.0) {
                     // Starting a new combo - start at 1.025, then add 0.025 for each additional line
                     this.comboMultiplier = 1.025 + (linesCleared - 1) * 0.025;
+                    this.comboCount = 1; // First clear in combo
                     console.log(`[COMBO] Combo started! Multiplier: ${this.comboMultiplier.toFixed(3)}x (${linesCleared} line${linesCleared > 1 ? 's' : ''} cleared)`);
                     // Don't show animation for first combo
                 } else {
                     // Continuing combo - add 0.025 for each line cleared
                     const previousMultiplier = this.comboMultiplier;
                     this.comboMultiplier += linesCleared * 0.025;
-                    console.log(`[COMBO] Combo continues! Multiplier: ${previousMultiplier.toFixed(3)}x → ${this.comboMultiplier.toFixed(3)}x (${linesCleared} line${linesCleared > 1 ? 's' : ''} cleared)`);
+                    this.comboCount++; // Increment combo count
+                    console.log(`[COMBO] Combo continues! Count: x${this.comboCount}, Multiplier: ${previousMultiplier.toFixed(3)}x → ${this.comboMultiplier.toFixed(3)}x (${linesCleared} line${linesCleared > 1 ? 's' : ''} cleared)`);
                     
                     // Trigger combo continue animation (only when continuing, not starting)
                     this.comboAnimationStartTime = Date.now();
                     this.comboAnimationType = 'continue';
                     this.comboAnimationMultiplier = this.comboMultiplier;
+                    console.log(`[COMBO] Showing "COMBO x${this.comboCount}!" message`);
                 }
+            } else {
+                // Not a combo (more than 3 placements since last clear) - reset combo count
+                this.comboCount = 0;
             }
             
             // Reset placements counter when lines are cleared (combo continues)
@@ -1124,13 +1133,13 @@ export class Game {
         }> = [];
 
         for (const block of this.state.placedBlocks) {
-            // Calculate point value for game over bonus: base value + increments since placement
+            // Calculate point value for game over bonus: base value + line clear bonuses + increments since placement
             const placementLevel = Math.floor(block.totalShapesPlacedAtPlacement / GAMEPLAY_CONFIG.shapesPerValueTier);
             const currentLevel = Math.floor(this.state.totalShapesPlaced / GAMEPLAY_CONFIG.shapesPerValueTier);
             
             // Each block increments by points per tier for every tier of shapes placed after it was placed
             const levelIncrements = currentLevel - placementLevel;
-            const currentPointValue = block.pointValue + (levelIncrements * GAMEPLAY_CONFIG.pointsPerTier);
+            const currentPointValue = block.pointValue + block.lineClearBonuses + (levelIncrements * GAMEPLAY_CONFIG.pointsPerTier);
             
             for (const cell of block.shape) {
                 const absoluteX = block.position.x + cell.x;
@@ -1342,6 +1351,7 @@ export class Game {
         this.comboAnimationStartTime = null; // Reset combo animation
         this.comboAnimationType = null;
         this.comboAnimationMultiplier = 0;
+        this.comboCount = 0; // Reset combo count
         this.inputHandler.updateBoard(this.board);
         this.inputHandler.updateQueue(this.state.queue);
         this.renderer.updateSettings(this.settings);

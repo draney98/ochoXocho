@@ -2027,7 +2027,8 @@ export class Renderer {
         pointsAnimationValue: number = 0,
         comboAnimationProgress: number = 0,
         comboAnimationType: 'continue' | 'break' | null = null,
-        comboAnimationMultiplier: number = 0
+        comboAnimationMultiplier: number = 0,
+        comboCount: number = 0
     ): void {
         // Update current level for highlight color calculation
         this.currentLevel = level;
@@ -2082,7 +2083,7 @@ export class Renderer {
         }
         
         if (comboAnimationProgress > 0 && comboAnimationProgress < 1 && comboAnimationType !== null) {
-            this.drawComboAnimation(comboAnimationProgress, comboAnimationType, comboAnimationMultiplier);
+            this.drawComboAnimation(comboAnimationProgress, comboAnimationType, comboAnimationMultiplier, comboCount);
         }
     }
     
@@ -2202,7 +2203,7 @@ export class Renderer {
      * @param type - Type of combo event ('continue' or 'break')
      * @param multiplier - The combo multiplier value
      */
-    drawComboAnimation(progress: number, type: 'continue' | 'break', multiplier: number): void {
+    drawComboAnimation(progress: number, type: 'continue' | 'break', multiplier: number, comboCount: number = 0): void {
         // Fade in quickly, then fade out slowly
         let alpha: number;
         if (progress <= 0.2) {
@@ -2243,7 +2244,7 @@ export class Renderer {
         let shadowColor: string;
         
         if (type === 'continue') {
-            comboText = `COMBO!`;
+            comboText = `COMBO x${comboCount}!`;
             textColor = '#4ade80'; // Green for continue
             shadowColor = '#16a34a';
         } else {
