@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.1.2 - 2025-01-XX
+## 1.1.2 - 2025-01-21
 
 - End-of-project cleanup and improvements:
   - **Testing**: Fixed 3 failing input tests related to bottom row placement coordinate calculations

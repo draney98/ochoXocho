@@ -4,7 +4,7 @@
 
 import { Position, Shape, PlacedBlock, DragState, AnimatingCell, AnimatingShape, GameSettings } from './types';
 import { Board } from './board';
-import { getShapeColor, getShapeIndex, getShapePointValue } from './shapes';
+import { getShapeColor, getShapeIndex } from './shapes';
 import { getColorSet } from './colorConfig';
 import {
     BOARD_PIXEL_SIZE,
@@ -13,7 +13,6 @@ import {
     CANVAS_WIDTH,
     CANVAS_HEIGHT,
     QUEUE_AREA_HEIGHT,
-    QUEUE_AREA_PADDING,
     QUEUE_ITEM_HEIGHT,
     BOARD_OFFSET_X,
     BOARD_OFFSET_Y,
@@ -166,7 +165,7 @@ export class Renderer {
         // First try body (which has data-theme attribute)
         const body = document.body;
         if (body) {
-            let value = getComputedStyle(body).getPropertyValue(name).trim();
+            const value = getComputedStyle(body).getPropertyValue(name).trim();
             if (value) return value;
         }
         
@@ -495,7 +494,7 @@ export class Renderer {
      * @param color - Color to use for the block
      * @param borderColor - Color for the border (defaults to '#333')
      */
-    private drawBlock(blockX: number, blockY: number, blockSize: number, color: string, borderColor: string = '#333'): void {
+    private drawBlock(blockX: number, blockY: number, blockSize: number, color: string): void {
         // Draw the icon instead of a filled rectangle
         if (this.blockIconLoaded && this.blockIconImage) {
             this.ctx.save();
@@ -730,7 +729,6 @@ export class Renderer {
         const borderL = Math.max(0, l - 0.15);
         const borderC = (1 - Math.abs(2 * borderL - 1)) * s;
         const borderX = borderC * (1 - Math.abs((h / 60) % 2 - 1));
-        const borderM = borderL - borderC / 2;
         
         let borderR = 0, borderG = 0, borderB = 0;
         if (0 <= h && h < 60) {
@@ -916,7 +914,6 @@ export class Renderer {
         // Get theme colors for queue area (re-read on each render to catch theme changes)
         const queueStripBg = this.getCSSVariable('--queue-strip-bg') || '#f5f5f5';
         const queueShapeBorder = this.getCSSVariable('--queue-shape-border') || '#333333';
-        const queuePointText = this.getCSSVariable('--queue-point-text') || '#999999';
 
         // Draw queue background strip with theme color
         this.ctx.fillStyle = queueStripBg;
@@ -969,7 +966,7 @@ export class Renderer {
                     const y = offsetY + block.y * cellSize;
                     const blockSize = cellSize; // Use uniform cell size for all blocks
 
-                    this.drawBlock(x, y, blockSize, shapeColor, queueShapeBorder);
+                    this.drawBlock(x, y, blockSize, shapeColor);
                 }
 
                 // Point values removed from queue display per user request
@@ -1232,7 +1229,7 @@ export class Renderer {
         this.ctx.save();
         
         switch (animIndex % 17) {
-            case 0: // Fade out and scale down (original)
+            case 0: { // Fade out and scale down (original)
                 const alpha0 = 1 - progress;
                 const scale0 = 1 - progress * 0.5;
                 const size0 = baseSize * scale0;
@@ -1246,8 +1243,9 @@ export class Renderer {
                 this.ctx.lineWidth = 2;
                 this.ctx.stroke();
                 break;
+            }
                 
-            case 1: // Spin and fade
+            case 1: { // Spin and fade
                 const alpha1 = 1 - progress;
                 const rotation1 = progress * Math.PI * 2;
                 const scale1 = 1 - progress * 0.3;
@@ -1264,8 +1262,9 @@ export class Renderer {
                 this.ctx.lineWidth = 2;
                 this.ctx.stroke();
                 break;
+            }
                 
-            case 2: // Shrink to center
+            case 2: { // Shrink to center
                 const alpha2 = 1 - progress;
                 const scale2 = 1 - progress;
                 const size2 = baseSize * scale2;
@@ -1279,8 +1278,9 @@ export class Renderer {
                 this.ctx.lineWidth = 2;
                 this.ctx.stroke();
                 break;
+            }
                 
-            case 3: // Slide up and fade
+            case 3: { // Slide up and fade
                 const alpha3 = 1 - progress;
                 const slideY3 = -progress * CELL_SIZE;
                 this.ctx.globalAlpha = alpha3;
@@ -1292,8 +1292,9 @@ export class Renderer {
                 this.ctx.lineWidth = 2;
                 this.ctx.stroke();
                 break;
+            }
                 
-            case 4: // Expand and fade
+            case 4: { // Expand and fade
                 const alpha4 = 1 - progress;
                 const scale4 = 1 + progress * 0.5;
                 const size4 = baseSize * scale4;
@@ -1307,8 +1308,9 @@ export class Renderer {
                 this.ctx.lineWidth = 2;
                 this.ctx.stroke();
                 break;
+            }
                 
-            case 5: // Rotate 180 and shrink
+            case 5: { // Rotate 180 and shrink
                 const alpha5 = 1 - progress;
                 const rotation5 = progress * Math.PI;
                 const scale5 = 1 - progress * 0.6;
@@ -1325,8 +1327,9 @@ export class Renderer {
                 this.ctx.lineWidth = 2;
                 this.ctx.stroke();
                 break;
+            }
                 
-            case 6: // Fade with pulsing scale
+            case 6: { // Fade with pulsing scale
                 const alpha6 = 1 - progress;
                 const pulse6 = Math.sin(progress * Math.PI * 4) * 0.1;
                 const scale6 = 1 - progress * 0.4 + pulse6;
@@ -1341,6 +1344,7 @@ export class Renderer {
                 this.ctx.lineWidth = 2;
                 this.ctx.stroke();
                 break;
+            }
                 
             case 7: { // Flip horizontally and fade
                 const alpha = 1 - progress;

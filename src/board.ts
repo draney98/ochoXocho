@@ -2,7 +2,7 @@
  * Game board management for the 8x8 grid
  */
 
-import { Position, Shape, PlacedBlock } from './types';
+import { Position, Shape } from './types';
 import { BOARD_CELL_COUNT } from './constants';
 
 const BOARD_SIZE = BOARD_CELL_COUNT;

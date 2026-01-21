@@ -3,7 +3,7 @@
  */
 
 import { Position, DragState, Shape, GameSettings } from './types';
-import { snapToGrid, canPlaceShape } from './validator';
+import { canPlaceShape } from './validator';
 import { Board } from './board';
 import {
     BOARD_PIXEL_SIZE,
@@ -104,8 +104,6 @@ export class InputHandler {
         if (this.dragState.isDragging && this.dragState.shape && this.dragState.hasBoardPosition) {
             // Re-validate the current position with the fresh board state
             // Always re-validate - don't trust cached state
-            // Get a fresh grid copy to ensure we're reading the absolute latest state
-            const grid = this.board.getGrid();
             const isValid = canPlaceShape(this.board, this.dragState.shape, this.dragState.mousePosition);
             
             // In dev mode, log detailed state for debugging
@@ -150,7 +148,7 @@ export class InputHandler {
         };
         this.originalQueueIndex = -1;
         // Clear any cached validation state
-        (this as any).lastInvalidLog = null;
+        (this as unknown as { lastInvalidLog: string | null }).lastInvalidLog = null;
         if (this.settings.devMode) {
             console.log('[DEBUG] Input handler state reset');
         }
@@ -457,13 +455,6 @@ export class InputHandler {
         };
         
         // Verbose logging for debugging (mouse)
-        if (this.settings.devMode) {
-            // console.log('[DRAG_MOVE_MOUSE] Coordinate trace:');
-            // console.log(`  anchorPoint: (${this.dragState.anchorPoint.x.toFixed(1)}, ${this.dragState.anchorPoint.y.toFixed(1)})`);
-            // console.log(`  projectedPos: (${projectedPos.x.toFixed(1)}, ${projectedPos.y.toFixed(1)})`);
-            // console.log(`  visualPieceTopLeft: (${visualPieceTopLeft.x.toFixed(1)}, ${visualPieceTopLeft.y.toFixed(1)})`);
-            // console.log(`  shape offsets: minX=${minX}, minY=${minY}`);
-        }
         
         // Calculate grid position from visual piece TOP-LEFT
         const gridPos = this.calculateGridPosition(visualPieceTopLeft, this.dragState.shape);
@@ -473,9 +464,7 @@ export class InputHandler {
             this.dragState.hasBoardPosition = true;
             
             if (this.settings.devMode) {
-                const isValid = canPlaceShape(this.board, this.dragState.shape, gridPos);
-                // console.log(`  gridPos candidate: (${gridPos.x}, ${gridPos.y})`);
-                // console.log(`  canPlaceShape result: ${isValid}`);
+                canPlaceShape(this.board, this.dragState.shape, gridPos);
             }
             
             // CRITICAL: Always validate with the absolute latest board state
@@ -511,25 +500,18 @@ export class InputHandler {
                 }
                 
                 if (!isValid || !manualCheck) {
-                    const lastLog = (this as any).lastInvalidLog;
+                    const lastLog = (this as unknown as { lastInvalidLog: string | null }).lastInvalidLog;
                     const logKey = `${gridPos.x},${gridPos.y}`;
                     if (!lastLog || lastLog !== logKey) {
-                        // console.log(`[VALIDATION] Position (${gridPos.x}, ${gridPos.y}) invalid.`);
-                        // console.log(`  Cursor: (${canvasX.toFixed(1)}, ${canvasY.toFixed(1)})`);
-                        // console.log(`  Grid cell under cursor: (${Math.floor(canvasX / CELL_SIZE)}, ${Math.floor(canvasY / CELL_SIZE)})`);
-                        const minX = Math.min(...this.dragState.shape.map(b => b.x));
-                        const minY = Math.min(...this.dragState.shape.map(b => b.y));
-                        // console.log(`  Shape top-left offset: (${minX}, ${minY})`);
-                        // console.log(`  canPlaceShape=${isValid}, manualCheck=${manualCheck}`);
                         if (invalidBlocks.length > 0) {
-                            invalidBlocks.forEach(({block, abs, reason}) => {
-                                // console.log(`  Block (${block.x},${block.y}) -> grid(${abs.x},${abs.y}): ${reason}`);
+                            invalidBlocks.forEach(() => {
+                                // Debug logging removed
                             });
                         }
-                        (this as any).lastInvalidLog = logKey;
+                        (this as unknown as { lastInvalidLog: string | null }).lastInvalidLog = logKey;
                     }
                 } else {
-                    (this as any).lastInvalidLog = null;
+                    (this as unknown as { lastInvalidLog: string | null }).lastInvalidLog = null;
                 }
                 
                 if (manualCheck !== isValid) {
@@ -604,7 +586,6 @@ export class InputHandler {
         if (!visualPieceOverQueueArea) {
             // Calculate grid position from visual piece TOP-LEFT
             let gridPos = this.calculateGridPosition(visualPieceTopLeft, this.dragState.shape);
-            let placementSource = 'visual-piece';
             let isValid = false;
             
             // Validate visual piece position if it exists
@@ -616,7 +597,6 @@ export class InputHandler {
             // If visual piece position fails, try neighborhood probing around projected position
             if (!gridPos || !isValid) {
                 gridPos = this.probeNeighborhoodForPlacement(projectedPos, this.dragState.shape);
-                placementSource = 'neighborhood';
                 
                 if (gridPos) {
                     isValid = canPlaceShape(this.board, this.dragState.shape, gridPos);
@@ -831,7 +811,7 @@ export class InputHandler {
                 }
                 
                 if (!isValid || !manualCheck) {
-                    const lastLog = (this as any).lastInvalidLog;
+                    const lastLog = (this as unknown as { lastInvalidLog: string | null }).lastInvalidLog;
                     const logKey = `${gridPos.x},${gridPos.y}`;
                     if (!lastLog || lastLog !== logKey) {
                         console.log(`[VALIDATION] Position (${gridPos.x}, ${gridPos.y}) invalid.`);
@@ -846,10 +826,10 @@ export class InputHandler {
                                 console.log(`  Block (${block.x},${block.y}) -> grid(${abs.x},${abs.y}): ${reason}`);
                             });
                         }
-                        (this as any).lastInvalidLog = logKey;
+                        (this as unknown as { lastInvalidLog: string | null }).lastInvalidLog = logKey;
                     }
                 } else {
-                    (this as any).lastInvalidLog = null;
+                    (this as unknown as { lastInvalidLog: string | null }).lastInvalidLog = null;
                 }
                 
                 if (manualCheck !== isValid) {
@@ -938,7 +918,6 @@ export class InputHandler {
         if (!visualPieceOverQueueArea) {
             // Calculate grid position from visual piece TOP-LEFT
             let gridPos = this.calculateGridPosition(visualPieceTopLeft, this.dragState.shape);
-            let placementSource = 'visual-piece';
             let isValid = false;
             
             if (this.settings.devMode) {
@@ -957,7 +936,6 @@ export class InputHandler {
                     console.log(`  visual-piece position failed, probing neighborhood around projectedPos`);
                 }
                 gridPos = this.probeNeighborhoodForPlacement(projectedPos, this.dragState.shape);
-                placementSource = 'neighborhood';
                 
                 if (this.settings.devMode) {
                     console.log(`  neighborhood gridPos: ${gridPos ? `(${gridPos.x}, ${gridPos.y})` : 'null'}`);
@@ -970,7 +948,7 @@ export class InputHandler {
                 
             if (this.settings.devMode) {
                 if (gridPos) {
-                    console.log(`  final gridPos: (${gridPos.x}, ${gridPos.y}), source: ${placementSource}`);
+                    console.log(`  final gridPos: (${gridPos.x}, ${gridPos.y})`);
                     console.log(`  canPlaceShape result: ${isValid}`);
                 } else {
                     console.log(`  final gridPos: null (no valid placement found)`);

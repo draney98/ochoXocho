@@ -4,7 +4,7 @@
 
 import { Game } from './game';
 import { GameSettings, ThemeName, GameMode, LeaderboardEntry } from './types';
-import { getHighScores, recordScore, getLeaderboard } from './highScores';
+import { getHighScores, getLeaderboard } from './highScores';
 import { LeaderboardPeriod } from './api';
 import {
     DEFAULT_SETTINGS,
@@ -186,7 +186,6 @@ function setupSettingsControls(game: Game, initialSettings: GameSettings, update
     const closeButton = document.getElementById('close-settings-button');
 
     const gridInput = document.getElementById('setting-show-grid') as HTMLInputElement | null;
-    const ghostInput = document.getElementById('setting-show-ghost') as HTMLInputElement | null;
     const animationInput = document.getElementById('setting-enable-animations') as HTMLInputElement | null;
     const themeSelect = document.getElementById('setting-theme') as HTMLSelectElement | null;
     const soundInput = document.getElementById('setting-enable-sound') as HTMLInputElement | null;

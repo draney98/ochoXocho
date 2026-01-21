@@ -6,7 +6,6 @@
 import { STORAGE_KEYS, HIGH_SCORE_CONFIG } from './config';
 import { GameMode } from './types';
 import { submitScore, getLeaderboard as fetchLeaderboard, LeaderboardPeriod } from './api';
-import { getDeviceId } from './deviceId';
 
 interface HighScoreEntry {
     score: number;

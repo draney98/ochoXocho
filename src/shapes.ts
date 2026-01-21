@@ -4,9 +4,8 @@
 
 import { Shape, Position } from './types';
 import { Board } from './board';
-import { getValidPositions } from './validator';
 import { getColorSet, getColorSetIndex } from './colorConfig';
-import { EASY_MODE_CONFIG, GAMEPLAY_CONFIG, STORAGE_KEYS, DEFAULT_SETTINGS } from './config';
+import { GAMEPLAY_CONFIG, STORAGE_KEYS, DEFAULT_SETTINGS } from './config';
 import { BOARD_CELL_COUNT } from './constants';
 
 /**

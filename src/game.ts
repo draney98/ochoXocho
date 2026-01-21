@@ -2,7 +2,7 @@
  * Main game orchestrator - manages game loop, state, and all game systems
  */
 
-import { Position, Shape, PlacedBlock, DragState, GameState, AnimatingCell, AnimatingShape, GameSettings } from './types';
+import { Position, Shape, PlacedBlock, GameState, AnimatingCell, AnimatingShape, GameSettings } from './types';
 import { Board } from './board';
 import { generateShapes, generateEasyShapes, getShapeColor, getShapeIndex, getShapePointValue, updateColorScheme } from './shapes';
 import { Renderer } from './renderer';
@@ -548,8 +548,20 @@ export class Game {
     /**
      * Checks for full rows and columns, clears them, and awards points.
      * Handles explosion chain reactions, combo multipliers, and mode-specific behavior.
-     * In hard mode, creates un-explodable blocks where explosions occurred.
+     * 
+     * Combo System:
+     * - Tracks placements since last line clear
+     * - If lines are cleared within 3 placements, builds a combo multiplier (starts at 1.025, adds 0.025 per line)
+     * - If 3 placements occur without a clear, applies multiplier to all remaining blocks and resets
+     * 
+     * Explosion System:
+     * - Blocks with point value > 60 explode when cleared, removing adjacent cells in chain reactions
+     * - In easy mode: explosion-removed blocks count toward score
+     * - In hard mode: exploding blocks are replaced by un-explodable gray monominos
+     * 
      * Does NOT clear if game is over - board should remain visible.
+     * 
+     * @private
      */
     private checkAndClearLines(): void {
         // Never clear lines if game is over - board should stay visible

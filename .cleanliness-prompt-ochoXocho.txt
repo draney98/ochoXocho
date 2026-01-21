@@ -38,14 +38,20 @@ Preserve API contracts and response formats.
 2. Remove unused code
    Frontend
    Remove unused modules, functions, constants, and assets only when clearly unused.
+   Remove commented-out debug code (console.log statements, TODO comments that are obsolete).
    Do not remove code paths related to future levels, modes, or feature flags without confirmation.
 
 Backend
 Remove unused routes, middleware, queries, or utilities only when confirmed unused.
 
 3. Apply linting and style rules
+   Add lint and format scripts to package.json if ESLint/Prettier are configured but scripts are missing.
    Apply TypeScript and Node linting fixes only when they improve readability or reduce defects.
+   Fix case block declaration errors (wrap case statements with braces when declaring variables).
    Avoid reformatting or style only diffs.
+   
+   Note: After fixing linting issues, verify TypeScript compilation succeeds (`npm run build` or `tsc`).
+   Common issues include: missing type definitions, incorrect function signatures, unused interface declarations.
 
 4. Improve documentation
    Frontend
@@ -71,6 +77,7 @@ Add unit tests for data validation, query logic, and helpers where meaningful co
 
 Backend
 Add integration tests for leaderboard endpoints, including happy paths and failure cases, only where coverage gaps exist.
+If adding a full test framework is impractical, document testing approach in backend/test/README.md with manual testing instructions and curl examples.
 
 7. Review error handling
    Frontend
@@ -83,21 +90,25 @@ Ensure consistent HTTP status codes, error messages, and database failure handli
 8. Review performance sensitive areas
    Frontend
    Identify hot paths such as the main game loop and rendering cycle.
+   Verify event listeners are properly cleaned up on component destruction (or document why cleanup is unnecessary if component persists for app lifetime).
    Do not introduce additional allocations, object churn, or unnecessary recalculations.
    Call out any potential frame rate or latency regressions.
 
 Backend
 Review query efficiency for leaderboard access and writes.
+Verify database indexes are created for frequently queried columns.
 
 9. Audit dependencies
    Frontend
    Review Vite, TypeScript, and Vitest dependencies for unused or risky packages.
+   Run `npm audit` and document findings. Note that dev dependency vulnerabilities are lower priority than production dependencies.
 
 Backend
 Review Express, PostgreSQL client, and middleware dependencies.
 
 Automatically remove unused dependencies.
 Provide a separate summary proposing upgrades with rationale and risk assessment.
+For security vulnerabilities, prioritize production dependencies; dev dependency vulnerabilities may be acceptable if upgrading requires breaking changes.
 
 10. Perform a lightweight security review
     Frontend
@@ -111,12 +122,19 @@ Fix only confirmed issues.
     Update README with current build, run, and deployment steps.
     Update API documentation for leaderboard endpoints if needed.
     Update changelog, release notes, and versioning based only on actual changes made.
+    Verify version numbers are consistent between package.json and CHANGELOG.md.
 
 12. Final verification
-    Ensure frontend builds cleanly with Vite and tests pass.
-    Ensure backend starts cleanly and tests pass.
-    Ensure Render deployment configuration remains valid.
+    Ensure frontend builds cleanly with Vite (`npm run build` succeeds without errors).
+    Ensure all tests pass (`npm test` shows all test files and individual tests passing).
+    Ensure backend starts cleanly (server initializes without crashing, even if database is unavailable).
+    Ensure Render deployment configuration (`render.yaml`) remains valid and matches current project structure.
     If verification cannot be completed, report uncertainty rather than guessing.
+
+13. Propose any relevant, non-trivial, non-duplicative revisions to .cleanliness-prompt-ochoXocho.txt
+
+14. Propose any relevant, non-trivial, non-duplicative revisions to .cursorrules
+
 
 Reporting requirements
 At each step, summarize what was changed, what was skipped as already complete, identified risks, and anything requiring approval.

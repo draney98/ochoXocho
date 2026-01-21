@@ -23,6 +23,8 @@ This is a TypeScript-based block placement puzzle game built with Vite. The game
 ### TypeScript
 - Use strict mode (enforced by tsconfig.json)
 - Prefer explicit types over `any`
+- When type assertions are necessary, use `as unknown as TargetType` pattern for complex cases
+- Avoid `(obj as any).property` - prefer proper type definitions or `unknown` first
 - Use interfaces for object shapes, types for unions/intersections
 - Export types/interfaces from `types.ts` when shared across modules
 
@@ -38,6 +40,32 @@ This is a TypeScript-based block placement puzzle game built with Vite. The game
 - Include parameter types and return types in JSDoc
 - Explain "why" not "what" in comments
 - Keep comments up-to-date with code changes
+
+## Linting and Code Quality
+
+### ESLint and Prettier
+- Project uses ESLint with TypeScript plugin and Prettier for formatting
+- Run `npm run lint` to check and auto-fix issues
+- Run `npm run format` to format code with Prettier
+- Fix linting errors before committing code
+
+### TypeScript Switch Statements
+- When declaring variables in switch case blocks, wrap the case in braces:
+```typescript
+switch (value) {
+    case 0: { // Use braces when declaring variables
+        const localVar = compute();
+        break;
+    }
+    case 1: // No braces needed if no variable declarations
+        return value;
+}
+```
+
+### Removing Commented Code
+- Remove commented-out debug code (console.log statements, obsolete TODOs)
+- Keep only comments that explain "why", not "what"
+- If code is temporarily disabled for debugging, remove it rather than commenting
 
 ## Drag and Drop System
 
@@ -82,6 +110,13 @@ Use `calculateGridPositionFromEffectivePosition()` in `input.ts` to convert effe
 - Provide fallback to synthesized sounds when files fail
 - Never throw errors from sound operations
 
+### API Operations
+- Always handle network failures gracefully (return empty arrays/objects, don't throw)
+- Check devMode setting before logging API errors to console
+- Provide fallback behavior when backend is unavailable
+- Use try-catch blocks around fetch calls
+- Never block user interaction due to API failures
+
 ## Testing
 
 ### Test Structure
@@ -96,6 +131,12 @@ Use `calculateGridPositionFromEffectivePosition()` in `input.ts` to convert effe
 - Shape generation and placement validation
 - Do not test rendering or DOM manipulation directly
 
+### Backend Testing
+- Backend tests are documented in `backend/test/README.md`
+- Manual testing with curl is acceptable for simple Express APIs
+- If adding automated tests, use Jest with Supertest for Express endpoint testing
+- Test both happy paths and error cases (invalid input, database unavailable)
+
 ## Anti-Patterns
 
 ### Don't Do This:
@@ -109,6 +150,9 @@ Use `calculateGridPositionFromEffectivePosition()` in `input.ts` to convert effe
 - ❌ Create circular dependencies between modules
 - ❌ Modify game state directly in renderer
 - ❌ Use `innerHTML` with user-generated content (safe for controlled containers only)
+- ❌ Leave commented-out debug code in production
+- ❌ Declare variables in switch cases without braces
+- ❌ Use `(obj as any)` for type assertions - prefer `(obj as unknown as TargetType)`
 
 ### Do This Instead:
 - ✅ Use constants from `constants.ts`
@@ -181,9 +225,12 @@ Before submitting changes:
 - [ ] No circular dependencies
 - [ ] TypeScript compiles without errors
 - [ ] Build completes successfully (`npm run build`)
-- [ ] No linter errors
+- [ ] No linter errors (`npm run lint` passes)
+- [ ] Code is formatted (`npm run format` if needed)
 - [ ] Drag-and-drop uses effectivePosition pattern
 - [ ] Game logic remains pure (no DOM dependencies)
+- [ ] No commented-out debug code
+- [ ] Version numbers match between package.json and CHANGELOG.md
 
 ## Common Patterns
 
@@ -221,11 +268,21 @@ function loadSettings(): GameSettings {
 }
 ```
 
+### Type Assertions for Private Properties
+When accessing private properties that TypeScript can't verify, use the `unknown` intermediate type:
+```typescript
+// For accessing private debug state
+(this as unknown as { lastInvalidLog: string | null }).lastInvalidLog = null;
+```
+This is safer than `(this as any)` and makes the intent clearer.
+
 ## Version and Release
 
 - Update `CHANGELOG.md` for user-facing changes
 - Version follows semantic versioning (MAJOR.MINOR.PATCH)
+- **Always verify version consistency**: `package.json` version must match the latest entry in `CHANGELOG.md`
 - Build artifacts go to `dist/` directory
 - Test build before committing: `npm run build`
+- Run tests before committing: `npm test`
 
 

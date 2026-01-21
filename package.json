@@ -1,6 +1,6 @@
 {
   "name": "ocho-xocho",
-  "version": "1.1.0",
+  "version": "1.1.2",
   "description": "Block placement puzzle game",
   "type": "module",
   "scripts": {
@@ -11,7 +11,9 @@
     "preview": "vite preview",
     "test": "vitest",
     "test:ui": "vitest --ui",
-    "test:coverage": "vitest --coverage"
+    "test:coverage": "vitest --coverage",
+    "lint": "eslint \"src/**/*.ts\" --fix",
+    "format": "prettier --write \"src/**/*.{ts,js,json,css,md}\""
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^6.21.0",

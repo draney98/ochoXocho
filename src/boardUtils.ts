@@ -5,7 +5,6 @@
 import { Board } from './board';
 import { Shape, Position } from './types';
 import { BOARD_CELL_COUNT } from './constants';
-import { getValidPositions } from './validator';
 
 const BOARD_SIZE = BOARD_CELL_COUNT;
 
