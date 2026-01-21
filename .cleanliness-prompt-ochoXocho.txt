@@ -1,0 +1,123 @@
+Perform a full end of project cleanup on this codebase.
+
+Primary constraints
+Preserve existing behavior, public APIs, gameplay mechanics, timing, and rendering output.
+Do not change user visible behavior, controls, physics, scoring, or persistence semantics unless explicitly approved.
+Keep diffs minimal and localized. Avoid touching unrelated files or reformatting without cause.
+Only modify code when it improves clarity, correctness, maintainability, test coverage, or safety.
+Do not make cosmetic or speculative changes.
+
+Before starting
+Identify and summarize the intended architecture, including
+Pure game logic with no DOM or Canvas dependencies
+Canvas rendering layer
+Input handling layer
+Persistence via localStorage and backend API
+Frontend backend interaction boundaries
+
+Respect these separations strictly. Do not introduce cross layer coupling or move logic across boundaries unless fixing a real defect.
+
+For every step
+Before making changes, verify whether the step is already complete. If so, skip it.
+For each change, classify risk as low, medium, or high with a short justification.
+If a change requires approval, stop and wait before continuing.
+
+Execute the following steps in order.
+
+1. Refactor for clarity and maintainability
+   Frontend
+   Simplify TypeScript module structure, naming, and exports where unclear.
+   Ensure game logic remains pure and testable with no Canvas, DOM, or browser API usage.
+   Ensure rendering code only consumes game state and performs drawing.
+   Ensure input handling only translates events into game actions.
+
+Backend
+Simplify Express route handlers, middleware usage, and data flow where unclear.
+Preserve API contracts and response formats.
+
+2. Remove unused code
+   Frontend
+   Remove unused modules, functions, constants, and assets only when clearly unused.
+   Do not remove code paths related to future levels, modes, or feature flags without confirmation.
+
+Backend
+Remove unused routes, middleware, queries, or utilities only when confirmed unused.
+
+3. Apply linting and style rules
+   Apply TypeScript and Node linting fixes only when they improve readability or reduce defects.
+   Avoid reformatting or style only diffs.
+
+4. Improve documentation
+   Frontend
+   Add or refine doc comments explaining game rules, state transitions, timing assumptions, and rendering expectations.
+
+Backend
+Document API endpoints, request and response shapes, and error cases.
+
+Skip areas that are already clear and well documented.
+
+5. Improve unit test coverage using Vitest
+   Frontend
+   Add or improve tests for pure game logic only.
+   Do not test Canvas rendering output directly.
+   Tests should assert deterministic state transitions and outcomes.
+
+Backend
+Add unit tests for data validation, query logic, and helpers where meaningful coverage is missing.
+
+6. Improve integration tests
+   Frontend
+   Add integration tests only if there are meaningful interactions between game logic and input handling that are currently untested.
+
+Backend
+Add integration tests for leaderboard endpoints, including happy paths and failure cases, only where coverage gaps exist.
+
+7. Review error handling
+   Frontend
+   Ensure API failures, storage errors, and invalid state are handled explicitly and safely.
+   Do not add user facing alerts unless already part of the design.
+
+Backend
+Ensure consistent HTTP status codes, error messages, and database failure handling.
+
+8. Review performance sensitive areas
+   Frontend
+   Identify hot paths such as the main game loop and rendering cycle.
+   Do not introduce additional allocations, object churn, or unnecessary recalculations.
+   Call out any potential frame rate or latency regressions.
+
+Backend
+Review query efficiency for leaderboard access and writes.
+
+9. Audit dependencies
+   Frontend
+   Review Vite, TypeScript, and Vitest dependencies for unused or risky packages.
+
+Backend
+Review Express, PostgreSQL client, and middleware dependencies.
+
+Automatically remove unused dependencies.
+Provide a separate summary proposing upgrades with rationale and risk assessment.
+
+10. Perform a lightweight security review
+    Frontend
+    Review localStorage usage and API interaction for unsafe assumptions.
+
+Backend
+Review CORS configuration, input validation, SQL query safety, and environment variable handling.
+Fix only confirmed issues.
+
+11. Update documentation and release artifacts
+    Update README with current build, run, and deployment steps.
+    Update API documentation for leaderboard endpoints if needed.
+    Update changelog, release notes, and versioning based only on actual changes made.
+
+12. Final verification
+    Ensure frontend builds cleanly with Vite and tests pass.
+    Ensure backend starts cleanly and tests pass.
+    Ensure Render deployment configuration remains valid.
+    If verification cannot be completed, report uncertainty rather than guessing.
+
+Reporting requirements
+At each step, summarize what was changed, what was skipped as already complete, identified risks, and anything requiring approval.
+

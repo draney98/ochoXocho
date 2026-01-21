@@ -72,24 +72,40 @@ function simulateCalculateGridPosition(
 
 /**
  * Simulates coordinate calculations for drag operations
- * Placement is based on visual piece position (no shadow)
+ * Matches the actual implementation: visual piece center is offset, then top-left is calculated
  */
-function simulateDragCoordinates(fingerY: number) {
+function simulateDragCoordinates(fingerY: number, shape: Shape = MONOMINO) {
     const canvasX = BOARD_OFFSET_X + (BOARD_PIXEL_SIZE / 2); // Center X
     const canvasY = fingerY;
     
     // For touch, projectedPos uses reach mapping, but for testing we'll use 1:1
     const projectedPos = { x: canvasX, y: canvasY };
     
-    const visualPiecePosition = {
+    // Calculate visual piece CENTER (matching actual implementation)
+    const visualPieceCenter = {
         x: projectedPos.x,
         y: projectedPos.y + DRAG_VISUAL_OFFSET_Y
+    };
+    
+    // Calculate shape dimensions for centering
+    const minX = Math.min(...shape.map(b => b.x));
+    const minY = Math.min(...shape.map(b => b.y));
+    const maxX = Math.max(...shape.map(b => b.x));
+    const maxY = Math.max(...shape.map(b => b.y));
+    const shapeWidth = (maxX - minX + 1) * CELL_SIZE;
+    const shapeHeight = (maxY - minY + 1) * CELL_SIZE;
+    
+    // Top-left corner of the visual piece (matching renderer's centering)
+    const visualPieceTopLeft = {
+        x: visualPieceCenter.x - shapeWidth / 2,
+        y: visualPieceCenter.y - shapeHeight / 2
     };
     
     return {
         anchorPoint: { x: canvasX, y: canvasY },
         projectedPos,
-        visualPiecePosition,
+        visualPieceCenter,
+        visualPieceTopLeft,
     };
 }
 
@@ -102,13 +118,21 @@ describe('Bottom Row Placement', () => {
 
     describe('Single cell shape bottom row placement', () => {
         it('should place monomino in row 7 when finger is at bottom', () => {
-            // Simulate finger at bottom of board (row 7)
-            // Bottom row center: BOARD_OFFSET_Y + 7 * CELL_SIZE + CELL_SIZE/2
-            const bottomRowCenterY = BOARD_OFFSET_Y + 7 * CELL_SIZE + CELL_SIZE / 2;
-            const coords = simulateDragCoordinates(bottomRowCenterY);
+            // To place monomino in row 7, the visual piece top-left needs to be at row 7
+            // Visual piece top-left = visualPieceCenter - shapeHeight/2
+            // Visual piece center = fingerY + DRAG_VISUAL_OFFSET_Y
+            // For monomino: shapeHeight = CELL_SIZE, so top-left = center - CELL_SIZE/2
+            // We want top-left at: BOARD_OFFSET_Y + 7 * CELL_SIZE + CELL_SIZE/2 (center of row 7)
+            // So: center = BOARD_OFFSET_Y + 7 * CELL_SIZE + CELL_SIZE
+            // And: fingerY = center - DRAG_VISUAL_OFFSET_Y
+            const targetVisualTopLeftY = BOARD_OFFSET_Y + 7 * CELL_SIZE + CELL_SIZE / 2;
+            const visualPieceCenterY = targetVisualTopLeftY + CELL_SIZE / 2; // Monomino height/2
+            const fingerY = visualPieceCenterY - DRAG_VISUAL_OFFSET_Y;
             
-            // Calculate grid position from visual piece position
-            const gridPos = simulateCalculateGridPosition(coords.visualPiecePosition, MONOMINO);
+            const coords = simulateDragCoordinates(fingerY, MONOMINO);
+            
+            // Calculate grid position from visual piece top-left
+            const gridPos = simulateCalculateGridPosition(coords.visualPieceTopLeft, MONOMINO);
             
             expect(gridPos).not.toBeNull();
             if (gridPos) {
@@ -119,13 +143,13 @@ describe('Bottom Row Placement', () => {
 
         it('should place monomino in row 7 when visual piece position is calculated', () => {
             // Test with finger position that results in visual piece targeting bottom row
-            // Visual piece is 240px above finger
-            // For visual piece to be at row 7, we need: visualY = BOARD_OFFSET_Y + 7 * CELL_SIZE + CELL_SIZE/2
-            const targetVisualY = BOARD_OFFSET_Y + 7 * CELL_SIZE + CELL_SIZE / 2;
-            const fingerY = targetVisualY - DRAG_VISUAL_OFFSET_Y;
+            // For monomino, visual piece top-left should be at row 7 center
+            const targetVisualTopLeftY = BOARD_OFFSET_Y + 7 * CELL_SIZE + CELL_SIZE / 2;
+            const visualPieceCenterY = targetVisualTopLeftY + CELL_SIZE / 2;
+            const fingerY = visualPieceCenterY - DRAG_VISUAL_OFFSET_Y;
             
-            const coords = simulateDragCoordinates(fingerY);
-            const gridPos = simulateCalculateGridPosition(coords.visualPiecePosition, MONOMINO);
+            const coords = simulateDragCoordinates(fingerY, MONOMINO);
+            const gridPos = simulateCalculateGridPosition(coords.visualPieceTopLeft, MONOMINO);
             
             expect(gridPos).not.toBeNull();
             if (gridPos) {
@@ -139,11 +163,14 @@ describe('Bottom Row Placement', () => {
             // For 2x2 square to have bottom edge at row 7, the shape position should be y=6
             // (since shape has blocks at y=0 and y=1, so y=6 means blocks at rows 6 and 7)
             const targetShapeY = 6;
-            const targetVisualY = BOARD_OFFSET_Y + targetShapeY * CELL_SIZE + CELL_SIZE / 2;
-            const fingerY = targetVisualY - DRAG_VISUAL_OFFSET_Y;
+            // Visual piece top-left should be at the center of the target shape position
+            const targetVisualTopLeftY = BOARD_OFFSET_Y + targetShapeY * CELL_SIZE + CELL_SIZE / 2;
+            const shapeHeight = 2 * CELL_SIZE; // 2x2 square
+            const visualPieceCenterY = targetVisualTopLeftY + shapeHeight / 2;
+            const fingerY = visualPieceCenterY - DRAG_VISUAL_OFFSET_Y;
             
-            const coords = simulateDragCoordinates(fingerY);
-            const gridPos = simulateCalculateGridPosition(coords.visualPiecePosition, SQUARE_2X2);
+            const coords = simulateDragCoordinates(fingerY, SQUARE_2X2);
+            const gridPos = simulateCalculateGridPosition(coords.visualPieceTopLeft, SQUARE_2X2);
             
             expect(gridPos).not.toBeNull();
             if (gridPos) {
@@ -171,8 +198,8 @@ describe('Bottom Row Placement', () => {
             ];
             
             for (const fingerY of testPositions) {
-                const coords = simulateDragCoordinates(fingerY);
-                const gridPos = simulateCalculateGridPosition(coords.visualPiecePosition, MONOMINO);
+                const coords = simulateDragCoordinates(fingerY, MONOMINO);
+                const gridPos = simulateCalculateGridPosition(coords.visualPieceTopLeft, MONOMINO);
                 
                 // Should produce a valid grid position (may not be row 7, but should be valid)
                 if (gridPos) {
@@ -189,10 +216,10 @@ describe('Bottom Row Placement', () => {
             const CANVAS_HEIGHT = BOARD_OFFSET_Y + BOARD_PIXEL_SIZE + 220;
             const absoluteBottom = CANVAS_HEIGHT - 1;
             
-            const coords = simulateDragCoordinates(absoluteBottom);
+            const coords = simulateDragCoordinates(absoluteBottom, MONOMINO);
             
             // Visual piece position might be above board, so test both visual and projected
-            let gridPos = simulateCalculateGridPosition(coords.visualPiecePosition, MONOMINO);
+            let gridPos = simulateCalculateGridPosition(coords.visualPieceTopLeft, MONOMINO);
             
             // If visual piece fails, try projected (simulating fallback)
             if (!gridPos) {
@@ -208,9 +235,13 @@ describe('Bottom Row Placement', () => {
     describe('Regression tests for rows 0-6', () => {
         it('should place monomino in all rows 0-6', () => {
             for (let row = 0; row < 7; row++) {
-                const targetY = BOARD_OFFSET_Y + row * CELL_SIZE + CELL_SIZE / 2;
-                const coords = simulateDragCoordinates(targetY);
-                const gridPos = simulateCalculateGridPosition(coords.visualPiecePosition, MONOMINO);
+                // Calculate finger position to place monomino at target row
+                const targetVisualTopLeftY = BOARD_OFFSET_Y + row * CELL_SIZE + CELL_SIZE / 2;
+                const visualPieceCenterY = targetVisualTopLeftY + CELL_SIZE / 2;
+                const fingerY = visualPieceCenterY - DRAG_VISUAL_OFFSET_Y;
+                
+                const coords = simulateDragCoordinates(fingerY, MONOMINO);
+                const gridPos = simulateCalculateGridPosition(coords.visualPieceTopLeft, MONOMINO);
                 
                 expect(gridPos).not.toBeNull();
                 if (gridPos) {
@@ -222,9 +253,14 @@ describe('Bottom Row Placement', () => {
 
         it('should place vertical domino in rows 0-6', () => {
             for (let row = 0; row < 7; row++) {
-                const targetY = BOARD_OFFSET_Y + row * CELL_SIZE + CELL_SIZE / 2;
-                const coords = simulateDragCoordinates(targetY);
-                const gridPos = simulateCalculateGridPosition(coords.visualPiecePosition, DOMINO_V);
+                // For vertical domino, we want the top block at the target row
+                const targetVisualTopLeftY = BOARD_OFFSET_Y + row * CELL_SIZE + CELL_SIZE / 2;
+                const shapeHeight = 2 * CELL_SIZE; // Vertical domino
+                const visualPieceCenterY = targetVisualTopLeftY + shapeHeight / 2;
+                const fingerY = visualPieceCenterY - DRAG_VISUAL_OFFSET_Y;
+                
+                const coords = simulateDragCoordinates(fingerY, DOMINO_V);
+                const gridPos = simulateCalculateGridPosition(coords.visualPieceTopLeft, DOMINO_V);
                 
                 expect(gridPos).not.toBeNull();
                 if (gridPos) {
@@ -247,9 +283,15 @@ describe('Bottom Row Placement', () => {
             ];
             
             // For this shape to place bottom block at row 7, position should be y=7
-            const targetY = BOARD_OFFSET_Y + 7 * CELL_SIZE + CELL_SIZE / 2;
-            const coords = simulateDragCoordinates(targetY);
-            const gridPos = simulateCalculateGridPosition(coords.visualPiecePosition, L_SHAPE_UP);
+            // Shape has blocks at y=-1, 0, 0, so minY=-1, maxY=0
+            // To place bottom at row 7, gridPos.y should be 7 (since maxY=0, 7+0=7)
+            const targetVisualTopLeftY = BOARD_OFFSET_Y + 7 * CELL_SIZE + CELL_SIZE / 2;
+            const shapeHeight = 2 * CELL_SIZE; // Blocks span from y=-1 to y=0
+            const visualPieceCenterY = targetVisualTopLeftY + shapeHeight / 2;
+            const fingerY = visualPieceCenterY - DRAG_VISUAL_OFFSET_Y;
+            
+            const coords = simulateDragCoordinates(fingerY, L_SHAPE_UP);
+            const gridPos = simulateCalculateGridPosition(coords.visualPieceTopLeft, L_SHAPE_UP);
             
             // Should calculate correctly accounting for negative minY
             if (gridPos) {

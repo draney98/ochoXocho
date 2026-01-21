@@ -546,8 +546,10 @@ export class Game {
     }
 
     /**
-     * Checks for full rows and columns, clears them, and awards points
-     * Does NOT clear if game is over - board should remain visible
+     * Checks for full rows and columns, clears them, and awards points.
+     * Handles explosion chain reactions, combo multipliers, and mode-specific behavior.
+     * In hard mode, creates un-explodable blocks where explosions occurred.
+     * Does NOT clear if game is over - board should remain visible.
      */
     private checkAndClearLines(): void {
         // Never clear lines if game is over - board should stay visible

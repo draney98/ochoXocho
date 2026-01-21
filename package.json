@@ -14,10 +14,14 @@
     "test:coverage": "vitest --coverage"
   },
   "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^6.21.0",
+    "@typescript-eslint/parser": "^6.21.0",
     "@vitest/coverage-v8": "^1.0.0",
     "@vitest/ui": "^1.0.0",
     "concurrently": "^9.2.1",
+    "eslint": "^8.57.1",
     "jsdom": "^23.0.0",
+    "prettier": "^3.8.0",
     "typescript": "^5.2.2",
     "vite": "^5.0.0",
     "vitest": "^1.0.0"

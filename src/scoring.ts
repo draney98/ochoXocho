@@ -8,8 +8,17 @@ import { GAMEPLAY_CONFIG } from './config';
 
 /**
  * Calculates the score for cleared rows and columns.
- * Simply adds up the total point values of all blocks in the cleared lines/columns.
- * In easy mode, also counts explosion-removed blocks.
+ * Sums the point values of all blocks in cleared lines/columns.
+ * In easy mode, also counts explosion-removed blocks toward the score.
+ * 
+ * @param fullRows - Array of row indices that are completely filled
+ * @param fullColumns - Array of column indices that are completely filled
+ * @param placedBlocks - All blocks currently on the board
+ * @param boardCleared - Whether the entire board was cleared (unused but kept for API compatibility)
+ * @param totalShapesPlaced - Total number of shapes placed this game (for point value calculation)
+ * @param explosionRemovedCells - Optional set of cell keys (format: "x,y") removed by explosions
+ * @param mode - Game mode: 'easy' counts explosion points, 'hard' does not
+ * @returns Total score points from cleared lines/columns and explosions (if easy mode)
  */
 export function calculateScore(
     fullRows: number[],
@@ -17,8 +26,8 @@ export function calculateScore(
     placedBlocks: PlacedBlock[],
     boardCleared: boolean,
     totalShapesPlaced: number,
-    explosionRemovedCells?: Set<string>,  // Set of cell keys (x,y) removed by explosions
-    mode?: 'easy' | 'hard'  // Game mode - easy mode counts explosion points
+    explosionRemovedCells?: Set<string>,
+    mode?: 'easy' | 'hard'
 ): number {
     if (fullRows.length === 0 && fullColumns.length === 0 && (!explosionRemovedCells || explosionRemovedCells.size === 0)) {
         return 0;

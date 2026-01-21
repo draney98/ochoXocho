@@ -1,27 +1,69 @@
-    Perform a full end-of-project cleanup on this codebase. Before making any change, check whether the step is already complete; if it is, skip it. Only modify the code when it improves clarity, correctness, maintainability, or test coverage. Do not make cosmetic or unnecessary changes. Execute the steps in this order:
+Perform a full end of project cleanup on this codebase.
 
-    1. Refactor for clarity and maintainability: simplify logic, remove duplication, and standardize naming. Skip if the code already follows good structure.
+Primary constraints
+Preserve existing behavior, public APIs, and performance characteristics.
+Do not change functionality, interfaces, or architectural intent unless explicitly approved.
+Keep diffs minimal and localized. Avoid touching unrelated files or reformatting code without cause.
+Only modify code when it improves clarity, correctness, maintainability, test coverage, or safety.
+Do not make cosmetic or speculative changes.
 
-    2. Remove unused code: eliminate dead functions, imports, variables, or unreachable paths, but only if they are confirmed unused.
+Before starting
+Identify and summarize the core architecture, key invariants, and intentional design tradeoffs.
+Respect existing boundaries and abstractions. Do not refactor across them unless fixing a real defect.
 
-    3. Apply linting/style rules: fix violations only when doing so adds real value; avoid noise-only diffs.
+For every step
+Before making changes, verify whether the step is already complete. If so, skip it.
+For each change, classify risk as low, medium, or high and briefly explain why.
+If a change requires approval, stop and wait before continuing.
 
-    4. Add or improve docstrings and comments explaining intent. Skip parts that are already well documented.
+Execute the following steps in order.
 
-    5. Generate or update unit tests for public functions, but only where coverage is missing.
+1. Refactor for clarity and maintainability
+   Simplify logic, remove duplication, and standardize naming only where structure is genuinely unclear or error prone.
+   Do not refactor stable or intentional complexity.
 
-    6. Add or refine integration tests for key workflows, adding only what’s necessary.
+2. Remove unused code
+   Eliminate dead functions, imports, variables, or unreachable paths only when they are clearly unused and not reserved for future or conditional use.
 
-    7. Review error handling and improve it only if real gaps exist.
+3. Apply linting and style rules
+   Fix violations only when they improve readability or reduce defects.
+   Avoid noise only diffs.
 
-    8. Update README/API documentation to match current behavior, skipping sections that are already accurate.
+4. Improve documentation
+   Add or refine docstrings and comments to explain intent, constraints, and non obvious behavior.
+   Skip areas that are already well documented.
 
-    9. Audit dependencies: remove unused ones and propose upgrades only when safe and beneficial.
+5. Improve unit test coverage
+   Add or update tests for public functions where meaningful coverage is missing.
+   Tests should assert observable behavior and avoid implementation details.
 
-    10. Perform a lightweight security review and fix only genuine issues.
+6. Improve integration tests
+   Add or refine tests for key workflows only where coverage gaps exist or failures would be costly.
 
-    11. Prepare release materials (CHANGELOG, release notes, version bump) based on any actual changes made.
+7. Review error handling
+   Improve error handling only where there are real gaps, ambiguous failures, or poor diagnostics.
 
-    Validate deployment configuration and ensure the project builds cleanly.
-    
-    At each step, summarize what was changed, what was skipped as already complete, and anything requiring my approval.
+8. Review performance sensitive areas
+   Identify hot paths or critical operations.
+   Do not introduce additional allocations, queries, or calls.
+   Call out any potential regressions explicitly.
+
+9. Audit dependencies
+   Produce a dependency audit summary listing unused, outdated, risky, intentionally pinned, and critical dependencies.
+   Remove unused dependencies automatically.
+   Propose upgrades separately with rationale and risk assessment.
+
+10. Perform a lightweight security review
+    Identify genuine issues such as unsafe defaults, injection risks, or credential handling problems.
+    Fix only confirmed issues.
+
+11. Update documentation and release artifacts
+    Update README, API documentation, changelog, release notes, and versioning to reflect actual changes made.
+
+12. Final verification
+    Ensure the project builds cleanly, tests pass, and deployment configuration remains valid.
+    If verification cannot be completed, report uncertainty rather than guessing.
+
+Reporting requirements
+At each step, summarize what was changed, what was skipped as already complete, identified risks, and anything requiring approval.
+

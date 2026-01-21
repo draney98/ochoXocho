@@ -894,8 +894,8 @@ function setupResponsiveUI(canvas: HTMLCanvasElement): void {
         }
         
         // Dynamically adjust font sizes based on canvas width
-        // Base font size scales with canvas width (600px = 20px font)
-        const baseFontSize = Math.max(14, Math.min(24, (canvasWidth / 600) * 20));
+        // Base font size scales with canvas width (600px = 24px font)
+        const baseFontSize = Math.max(18, Math.min(28, (canvasWidth / 600) * 24));
         const progressBarHeight = Math.max(24, Math.min(40, (canvasWidth / 600) * 32));
         
         // Update font sizes

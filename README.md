@@ -99,32 +99,43 @@ ochoXocho/
 ## How to Play
 
 1. **Receive Shapes**: You start with 3 random shapes displayed beneath the board
-2. **Drag to Place**: Click and drag a shape from the queue onto the game board
+2. **Drag to Place**: Click and drag a shape from the queue onto the game board (or use touch on mobile)
 3. **Valid Placement**: Shapes can only be placed where all blocks fit in empty cells
 4. **Clear Lines**: When a row or column is completely filled, it clears automatically
-5. **Score Points**: Earn 100 points per cleared line with progressive multipliers when you clear several lines at once
-6. **New Shapes**: After placing 3 shapes, you receive 3 new ones
-7. **Game Over**: The game ends when no available shapes can be placed
-8. **Adjust Settings**: Use the gear icon in the top-right corner to toggle the grid, ghost preview, clear animations, change the visual design, or mute sound effects at any time
+5. **Score Points**: Earn points based on the value of blocks in cleared lines. Higher-value blocks = higher scores!
+6. **Build Combos**: Clear lines within 3 placements to build a combo multiplier that increases your score
+7. **Trigger Explosions**: Blocks with 60+ points explode when cleared, removing adjacent cells in chain reactions
+8. **Choose Your Mode**: 
+   - **Easy Mode**: Explosion-removed blocks count toward your score
+   - **Hard Mode**: Explosions create un-explodable blocks, and animations are faster
+9. **New Shapes**: After placing 3 shapes, you receive 3 new ones
+10. **Game Over**: The game ends when no available shapes can be placed
+11. **Adjust Settings**: Use the gear icon to customize your experience
 
 ## Settings
 
 The floating gear button opens a lightweight settings panel that lets you:
 
-- Hide or show the board grid lines
-- Hide or show the ghost placement preview
-- Toggle clear animations for a faster, distraction-free experience
-- Switch between the **Classic**, **Midnight**, and **Sunset** visual designs
-- Enable or disable sound effects
+- **Game Mode**: Choose between Easy and Hard difficulty
+- **Grid Lines**: Hide or show the board grid lines
+- **Ghost Preview**: Always enabled - shows where your piece will land
+- **Animations**: Toggle clear animations for a faster experience
+- **Themes**: Switch between Classic (gray), Midnight (dark), and Sunset (warm) visual designs
+- **Sound Effects**: Enable or disable audio feedback
+- **Control Zone**: Adjust the touch control area height and scaling for mobile play
+- **Auto Place**: Automatically place pieces using optimal placement algorithm
+- **Dev Mode**: Enable debug logging and developer features
 
 Changes apply instantly and persist until you refresh the page.
 
 ## Scoring System
 
-- **Base Points**: Each cleared row or column starts at 100 points.
-- **Simultaneous Clear Bonus**: When you clear multiple lines in the same move, the second line is worth 2× its base value, the third line 3×, etc.
-- **Board Clear Multiplier**: If that clear empties the entire board, the total for that move is multiplied by 5.
-- **Game Over Cleanup**: When no more moves are available, every remaining block disappears and awards 1 bonus point, so you’re rewarded for keeping the board tidy all game long.
+- **Base Points**: Each cleared row or column awards points based on the point values of blocks in that line.
+- **Point Value Progression**: Blocks increase in point value as you place more shapes, creating higher-scoring opportunities.
+- **Line Clear Bonuses**: Blocks receive bonuses each time lines are cleared while they remain on the board.
+- **Combo Multiplier**: When you clear lines within 3 placements of your last clear, you build a combo multiplier that increases with each consecutive clear. If you place 3 shapes without clearing, the multiplier is applied to all remaining blocks and resets.
+- **Explosion System**: Blocks with point values above 60 explode when cleared, removing all 8 adjacent cells (including diagonals) in a chain reaction. In **easy mode**, explosion-removed blocks count toward your score. In **hard mode**, explosions create un-explodable gray blocks that cannot explode again.
+- **Game Over Cleanup**: When no more moves are available, every remaining block disappears and awards points based on its current value.
 
 ## Mobile Porting Guide
 

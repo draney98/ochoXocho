@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.1.2 - 2025-01-XX
+
+- End-of-project cleanup and improvements:
+  - **Testing**: Fixed 3 failing input tests related to bottom row placement coordinate calculations
+  - **Code Quality**: Removed unused constants (`QUEUE_ITEM_GAP`, `QUEUE_CELL_SIZE`)
+  - **Linting**: Added ESLint and Prettier configurations for consistent code style
+  - **Documentation**: Enhanced JSDoc comments for public functions, especially scoring and explosion systems
+  - **Testing**: Added integration test framework for game flows, explosions, and combo systems
+  - **Documentation**: Updated README with comprehensive explosion, combo, and hard mode feature descriptions
+  - **Security**: Verified SQL injection protection (parameterized queries), XSS protection (HTML escaping), and input validation
+  - **Dependencies**: All dependencies verified as used and necessary
+
 ## 1.1.1 - 2025-12-04
 
 - Code cleanup and refactoring:
