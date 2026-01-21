@@ -16,7 +16,7 @@ import { getLeaderboard } from './api';
 import { GAMEPLAY_CONFIG, ANIMATION_CONFIG, GAME_OVER_CONFIG } from './config';
 import { getUIColorForLevel, getButtonColors } from './colorConfig';
 import { findOptimalPlacementOrder } from './boardUtils';
-import { getQueueItemRect } from './constants';
+import { getQueueItemRect, BOARD_CELL_COUNT } from './constants';
 
 /**
  * Game class orchestrates all game systems and manages the game loop
@@ -192,8 +192,12 @@ export class Game {
         this.animatingCells = this.animatingCells.filter(cell => {
             const elapsed = currentTime - cell.startTime;
             // Use different duration for explosions vs regular clears
+            // In hard mode, explosions take half the time
+            const baseExplosionMs = this.settings.mode === 'hard' 
+                ? ANIMATION_CONFIG.explosionMs / 2 
+                : ANIMATION_CONFIG.explosionMs;
             const duration = cell.type === 'explosion' 
-                ? ANIMATION_CONFIG.explosionMs 
+                ? baseExplosionMs 
                 : this.ANIMATION_DURATION;
             cell.progress = Math.min(elapsed / duration, 1);
             return cell.progress < 1; // Remove completed animations
@@ -470,21 +474,26 @@ export class Game {
      * @param fullRows - Array of cleared row indices
      * @param fullColumns - Array of cleared column indices
      */
-    private removeCellsFromShapes(fullRows: number[], fullColumns: number[]): void {
+    private removeCellsFromShapes(fullRows: number[], fullColumns: number[], cellsToRemove?: Set<string>): void {
         const beforeCount = this.state.placedBlocks.length;
         const beforeTotalCells = this.state.placedBlocks.reduce((sum, b) => sum + b.shape.length, 0);
         
         this.state.placedBlocks = this.state.placedBlocks.map(block => {
-            // Filter out cells that are in cleared rows or columns
+            // Filter out cells that are in cleared rows or columns, or in the cellsToRemove set
             const remainingCells = block.shape.filter(cell => {
                 const absoluteX = block.position.x + cell.x;
                 const absoluteY = block.position.y + cell.y;
                 
-                // Keep cell if it's NOT in any cleared row AND NOT in any cleared column
+                // Check if cell is in cleared row or column
                 const inClearedRow = fullRows.includes(absoluteY);
                 const inClearedColumn = fullColumns.includes(absoluteX);
                 
-                return !inClearedRow && !inClearedColumn;
+                // Check if cell is marked for removal by explosion
+                const key = `${absoluteX},${absoluteY}`;
+                const removedByExplosion = cellsToRemove?.has(key) ?? false;
+                
+                // Keep cell if it's NOT in any cleared row AND NOT in any cleared column AND NOT removed by explosion
+                return !inClearedRow && !inClearedColumn && !removedByExplosion;
             });
             
             // Return updated block with remaining cells, or null if all cells were removed
@@ -581,45 +590,144 @@ export class Game {
 
         const shouldAnimate = this.settings.enableAnimations;
 
+        // Build a map of cell positions to blocks for explosion chain reaction
+        const cellToBlockMap = new Map<string, { block: PlacedBlock; cell: Position; pointValue: number; isUnexplodable: boolean }>();
+        for (const block of this.state.placedBlocks) {
+            // Calculate current point value for this block
+            const placementLevel = Math.floor(block.totalShapesPlacedAtPlacement / GAMEPLAY_CONFIG.shapesPerValueTier);
+            const currentLevel = Math.floor(this.state.totalShapesPlaced / GAMEPLAY_CONFIG.shapesPerValueTier);
+            const levelIncrements = currentLevel - placementLevel;
+            const currentPointValue = block.pointValue + block.lineClearBonuses + (levelIncrements * GAMEPLAY_CONFIG.pointsPerTier);
+            const isUnexplodable = block.isUnexplodable ?? false;
+            
+            for (const cell of block.shape) {
+                const absoluteX = block.position.x + cell.x;
+                const absoluteY = block.position.y + cell.y;
+                const key = `${absoluteX},${absoluteY}`;
+                cellToBlockMap.set(key, { block, cell, pointValue: currentPointValue, isUnexplodable });
+            }
+        }
+
+        // Track cells that will be removed (from line clears and explosions)
+        const cellsToRemove = new Set<string>();
+        
+        // First, add all cells in cleared rows/columns
+        for (const block of this.state.placedBlocks) {
+            for (const cell of block.shape) {
+                const absoluteX = block.position.x + cell.x;
+                const absoluteY = block.position.y + cell.y;
+                const inClearedRow = fullRows.includes(absoluteY);
+                const inClearedColumn = fullColumns.includes(absoluteX);
+                if (inClearedRow || inClearedColumn) {
+                    const key = `${absoluteX},${absoluteY}`;
+                    cellsToRemove.add(key);
+                }
+            }
+        }
+
+        // Helper function to get adjacent cells (8 directions)
+        const getAdjacentCells = (x: number, y: number): Array<{ x: number; y: number }> => {
+            const adjacent: Array<{ x: number; y: number }> = [];
+            for (let dx = -1; dx <= 1; dx++) {
+                for (let dy = -1; dy <= 1; dy++) {
+                    if (dx === 0 && dy === 0) continue; // Skip the cell itself
+                    const adjX = x + dx;
+                    const adjY = y + dy;
+                    if (adjX >= 0 && adjX < BOARD_CELL_COUNT && adjY >= 0 && adjY < BOARD_CELL_COUNT) {
+                        adjacent.push({ x: adjX, y: adjY });
+                    }
+                }
+            }
+            return adjacent;
+        };
+
+        // Find all exploding cells and trigger chain reactions
+        const processedExplosions = new Set<string>();
+        const processExplosion = (x: number, y: number): void => {
+            const key = `${x},${y}`;
+            if (processedExplosions.has(key)) return; // Already processed
+            processedExplosions.add(key);
+            
+            const cellData = cellToBlockMap.get(key);
+            if (!cellData) return; // Cell doesn't exist
+            
+            // Check if this cell should explode (must not be un-explodable and must exceed threshold)
+            if (!cellData.isUnexplodable && cellData.pointValue > GAMEPLAY_CONFIG.explosionThreshold) {
+                // Mark this cell for removal
+                cellsToRemove.add(key);
+                
+                // Get all adjacent cells and recursively process them
+                const adjacent = getAdjacentCells(x, y);
+                for (const adj of adjacent) {
+                    const adjKey = `${adj.x},${adj.y}`;
+                    // Mark adjacent cell for removal
+                    cellsToRemove.add(adjKey);
+                    
+                    // Recursively check if adjacent cell also explodes (must not be un-explodable)
+                    const adjCellData = cellToBlockMap.get(adjKey);
+                    if (adjCellData && !adjCellData.isUnexplodable && adjCellData.pointValue > GAMEPLAY_CONFIG.explosionThreshold) {
+                        processExplosion(adj.x, adj.y);
+                    }
+                }
+            }
+        };
+
+        // Process all cells that are in cleared rows/columns and might explode
+        for (const block of this.state.placedBlocks) {
+            const placementLevel = Math.floor(block.totalShapesPlacedAtPlacement / GAMEPLAY_CONFIG.shapesPerValueTier);
+            const currentLevel = Math.floor(this.state.totalShapesPlaced / GAMEPLAY_CONFIG.shapesPerValueTier);
+            const levelIncrements = currentLevel - placementLevel;
+            const currentPointValue = block.pointValue + block.lineClearBonuses + (levelIncrements * GAMEPLAY_CONFIG.pointsPerTier);
+            
+            for (const cell of block.shape) {
+                const absoluteX = block.position.x + cell.x;
+                const absoluteY = block.position.y + cell.y;
+                const inClearedRow = fullRows.includes(absoluteY);
+                const inClearedColumn = fullColumns.includes(absoluteX);
+                
+                // If this cell is in a cleared row/column and should explode, trigger chain reaction
+                // Skip un-explodable blocks
+                const isUnexplodable = block.isUnexplodable ?? false;
+                if ((inClearedRow || inClearedColumn) && !isUnexplodable && currentPointValue > GAMEPLAY_CONFIG.explosionThreshold) {
+                    processExplosion(absoluteX, absoluteY);
+                }
+            }
+        }
+
         if (shouldAnimate) {
             // Start animations for cells being removed
             const currentTime = Date.now();
             
             for (const block of this.state.placedBlocks) {
-                // Calculate current point value for this block (base + line clear bonuses + level increments)
+                // Calculate current point value for this block
                 const placementLevel = Math.floor(block.totalShapesPlacedAtPlacement / GAMEPLAY_CONFIG.shapesPerValueTier);
                 const currentLevel = Math.floor(this.state.totalShapesPlaced / GAMEPLAY_CONFIG.shapesPerValueTier);
                 const levelIncrements = currentLevel - placementLevel;
-                // Use the same formula as scoring: base + line clear bonuses + level increments
                 const currentPointValue = block.pointValue + block.lineClearBonuses + (levelIncrements * GAMEPLAY_CONFIG.pointsPerTier);
-                
-                // Determine if this block should explode (point value > explosion threshold)
-                const shouldExplode = currentPointValue > GAMEPLAY_CONFIG.explosionThreshold;
                 
                 for (const cell of block.shape) {
                     const absoluteX = block.position.x + cell.x;
                     const absoluteY = block.position.y + cell.y;
+                    const key = `${absoluteX},${absoluteY}`;
                     
-                    const inClearedRow = fullRows.includes(absoluteY);
-                    const inClearedColumn = fullColumns.includes(absoluteX);
-                    
-                    if (inClearedRow || inClearedColumn) {
+                    // Check if this cell should be removed (line clear or explosion)
+                    if (cellsToRemove.has(key)) {
+                        const inClearedRow = fullRows.includes(absoluteY);
+                        const inClearedColumn = fullColumns.includes(absoluteX);
+                        
                         // Add staggered delay based on position for more varied animations
-                        // Calculate delay: cells in rows clear left-to-right, columns clear top-to-bottom
                         let staggerDelay = 0;
                         if (inClearedRow) {
-                            // Stagger horizontally: left cells clear first
                             staggerDelay = absoluteX * 15; // 15ms per cell
                         } else if (inClearedColumn) {
-                            // Stagger vertically: top cells clear first
                             staggerDelay = absoluteY * 15; // 15ms per cell
                         }
                         
                         // Use one animation per level (level-based, not cycling)
                         const animationIndex = (this.state.level - 1) % 17;
                         
-                        // Determine animation type based on point value
-                        const animationType = shouldExplode ? 'explosion' : 'clear';
+                        // Determine animation type: explosion if point value > threshold, otherwise clear
+                        const animationType = currentPointValue > GAMEPLAY_CONFIG.explosionThreshold ? 'explosion' : 'clear';
                         
                         // Add to animating cells with animation index and staggered start time
                         this.animatingCells.push({
@@ -648,12 +756,72 @@ export class Game {
         }
 
         const boardCleared = this.willBoardBeCleared(fullRows, fullColumns);
+        
+        // Track explosion-removed cells for scoring (easy mode) and creating un-explodable blocks (hard mode)
+        const explosionRemovedCells = new Set<string>();
+        
+        // Handle explosion-removed cells based on mode
+        if (cellsToRemove && cellsToRemove.size > 0) {
+            for (const key of cellsToRemove) {
+                const [x, y] = key.split(',').map(Number);
+                // Only process if not already cleared by row/column
+                const inClearedRow = fullRows.includes(y);
+                const inClearedColumn = fullColumns.includes(x);
+                if (!inClearedRow && !inClearedColumn) {
+                    // This cell was removed by explosion
+                    explosionRemovedCells.add(key);
+                    
+                    if (this.settings.mode === 'hard') {
+                        // In hard mode, create an un-explodable block (pointValue 0) in place of the exploding block
+                        // Find the original block that was at this position
+                        for (const block of this.state.placedBlocks) {
+                            for (const cell of block.shape) {
+                                const absoluteX = block.position.x + cell.x;
+                                const absoluteY = block.position.y + cell.y;
+                                if (absoluteX === x && absoluteY === y) {
+                                    // Check if this was an exploding block (point value > threshold)
+                                    const placementLevel = Math.floor(block.totalShapesPlacedAtPlacement / GAMEPLAY_CONFIG.shapesPerValueTier);
+                                    const currentLevel = Math.floor(this.state.totalShapesPlaced / GAMEPLAY_CONFIG.shapesPerValueTier);
+                                    const levelIncrements = currentLevel - placementLevel;
+                                    const currentPointValue = block.pointValue + block.lineClearBonuses + (levelIncrements * GAMEPLAY_CONFIG.pointsPerTier);
+                                    
+                                    if (currentPointValue > GAMEPLAY_CONFIG.explosionThreshold) {
+                                        // Create a new un-explodable block (monomino with pointValue 0)
+                                        const unExplodableBlock: PlacedBlock = {
+                                            shape: [{ x: 0, y: 0 }], // Monomino
+                                            position: { x, y },
+                                            color: '#808080', // Gray color for un-explodable blocks
+                                            pointValue: 0, // Cannot explode (pointValue 0)
+                                            lineClearBonuses: 0,
+                                            totalShapesPlacedAtPlacement: this.state.totalShapesPlaced,
+                                            shapeIndex: -1, // Special index for un-explodable blocks
+                                            darkness: 1.0,
+                                            isUnexplodable: true, // Mark as un-explodable
+                                        };
+                                        this.state.placedBlocks.push(unExplodableBlock);
+                                        // Place it on the board
+                                        this.board.placeShape(unExplodableBlock.shape, unExplodableBlock.position);
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Clear the cell from the board (will be removed from placedBlocks later)
+                    this.board.clearCell(x, y);
+                }
+            }
+        }
+        
         const points = calculateScore(
             fullRows,
             fullColumns,
             this.state.placedBlocks,
             boardCleared,
-            this.state.totalShapesPlaced
+            this.state.totalShapesPlaced,
+            explosionRemovedCells,
+            this.settings.mode
         );
         this.state.score += points;
         this.updateScoreDisplay();
@@ -737,10 +905,8 @@ export class Game {
                 console.log(`[COLOR] Level changed from ${previousLevel} to ${this.state.level}`);
             }
             updateColorScheme(this.state.level);
-            // Update colors for all placed blocks
-            this.state.placedBlocks.forEach(block => {
-                block.color = getShapeColor(block.shapeIndex);
-            });
+            // Don't update colors for existing blocks - they keep their original colors
+            // Only newly placed blocks will use the new color scheme
             // Update UI colors to match new level
             this.updateUIColors();
             // Start level up animation
@@ -754,9 +920,13 @@ export class Game {
         // Remove cells from shapes after animation completes
         if (shouldAnimate && this.animatingCells.length > 0) {
             // Wait for the longest animation to complete (explosions take longer than regular clears)
-            const maxAnimationDuration = Math.max(this.ANIMATION_DURATION, ANIMATION_CONFIG.explosionMs);
+            // In hard mode, explosions take half the time
+            const baseExplosionMs = this.settings.mode === 'hard' 
+                ? ANIMATION_CONFIG.explosionMs / 2 
+                : ANIMATION_CONFIG.explosionMs;
+            const maxAnimationDuration = Math.max(this.ANIMATION_DURATION, baseExplosionMs);
             setTimeout(() => {
-                this.removeCellsFromShapes(fullRows, fullColumns);
+                this.removeCellsFromShapes(fullRows, fullColumns, cellsToRemove);
                 // CRITICAL: Rebuild board grid from placedBlocks to ensure synchronization
                 this.rebuildBoardFromPlacedBlocks();
                 // Ensure board state is synchronized after cleanup
@@ -764,7 +934,7 @@ export class Game {
             }, maxAnimationDuration);
         } else {
             // No animations, clean up immediately
-            this.removeCellsFromShapes(fullRows, fullColumns);
+            this.removeCellsFromShapes(fullRows, fullColumns, cellsToRemove);
             // CRITICAL: Rebuild board grid from placedBlocks to ensure synchronization
             this.rebuildBoardFromPlacedBlocks();
             // Ensure board state is synchronized after cleanup

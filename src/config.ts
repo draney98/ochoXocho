@@ -23,7 +23,7 @@ export const GAMEPLAY_CONFIG = {
     shapesPerValueTier: 10,
     pointsPerTier: 10,
     pulseThreshold: 60, // Blocks with value > this will pulse
-    explosionThreshold: 90, // Blocks with value > this will explode
+    explosionThreshold: 60, // Blocks with value > this will explode (same as pulse threshold)
 } as const;
 
 /**
@@ -31,10 +31,10 @@ export const GAMEPLAY_CONFIG = {
  */
 export const ANIMATION_CONFIG = {
     lineClearMs: 300,
-    gameOverFadeMs: 1000,
-    pulseCycleMs: 1000, // Duration of one pulse cycle
-    explosionMs: 500, // Duration of explosion animation
-    levelUpMs: 2000, // Duration of level up text animation
+    gameOverFadeMs: 3000,
+    pulseCycleMs: 5000, // Duration of one pulse cycle (slower pulsing)
+    explosionMs: 800, // Duration of explosion animation (increased for more dramatic effect)
+    levelUpMs: 3000, // Duration of level up text animation
 } as const;
 
 /**

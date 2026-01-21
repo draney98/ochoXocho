@@ -207,27 +207,12 @@ export class Renderer {
         const g = parseInt(hex.substring(2, 4), 16);
         const b = parseInt(hex.substring(4, 6), 16);
         
-        // Check if current theme is dark (midnight)
-        const isDarkTheme = this.settings.theme === 'midnight';
-        
-        let adjustedR: number;
-        let adjustedG: number;
-        let adjustedB: number;
-        
-        if (isDarkTheme) {
-            // For dark themes: lighten by interpolating toward white
-            // When darkness = 1.0, use original color
-            // When darkness = 0.0, use white (255, 255, 255)
-            const lightness = 1.0 - factor; // Invert: darkness 0 = full lightness, darkness 1 = no lightness
-            adjustedR = Math.floor(r * (1 - lightness) + 255 * lightness);
-            adjustedG = Math.floor(g * (1 - lightness) + 255 * lightness);
-            adjustedB = Math.floor(b * (1 - lightness) + 255 * lightness);
-        } else {
-            // For light themes: darken by multiplying by darkness factor (current behavior)
-            adjustedR = Math.floor(r * factor);
-            adjustedG = Math.floor(g * factor);
-            adjustedB = Math.floor(b * factor);
-        }
+        // Darken by multiplying by darkness factor
+        // When darkness = 1.0, use original color
+        // When darkness = 0.0, use black (0, 0, 0)
+        const adjustedR = Math.floor(r * factor);
+        const adjustedG = Math.floor(g * factor);
+        const adjustedB = Math.floor(b * factor);
         
         // Convert back to hex
         return `#${adjustedR.toString(16).padStart(2, '0')}${adjustedG.toString(16).padStart(2, '0')}${adjustedB.toString(16).padStart(2, '0')}`;
@@ -478,7 +463,11 @@ export class Renderer {
                 // Apply pulsing effect if value > pulse threshold
                 const shouldPulse = displayValue > GAMEPLAY_CONFIG.pulseThreshold;
                 if (shouldPulse) {
-                    const pulseProgress = (Date.now() % ANIMATION_CONFIG.pulseCycleMs) / ANIMATION_CONFIG.pulseCycleMs;
+                    // In hard mode, pulsing takes half the time
+                    const pulseCycleMs = this.settings.mode === 'hard' 
+                        ? ANIMATION_CONFIG.pulseCycleMs / 2 
+                        : ANIMATION_CONFIG.pulseCycleMs;
+                    const pulseProgress = (Date.now() % pulseCycleMs) / pulseCycleMs;
                     // Pulse between 0.7 and 1.0 brightness using sine wave
                     const pulseBrightness = 0.7 + (Math.sin(pulseProgress * Math.PI * 2) * 0.15 + 0.15);
                     // Interpolate between current darkness and full brightness (1.0) based on pulseBrightness
@@ -1183,7 +1172,10 @@ export class Renderer {
         
         if (isExplosion) {
             // Explosion animation: expand and fade with particles
-            const alpha = 1 - cell.progress;
+            // Use smooth easing for fade: ease-out curve (starts fast, ends slow)
+            // This creates a smoother, more natural fade
+            const easedProgress = 1 - Math.pow(1 - cell.progress, 3); // Cubic ease-out
+            const alpha = 1 - easedProgress;
             const scale = 1 + cell.progress * 2; // Expand from 1x to 3x size
             
             const centerX = x + CELL_SIZE / 2;
@@ -2240,6 +2232,7 @@ export class Renderer {
         
         // Determine text and color based on type
         let comboText: string;
+        let comboTextLine2: string | null = null; // Second line for "COMBO BROKEN"
         let textColor: string;
         let shadowColor: string;
         
@@ -2248,7 +2241,8 @@ export class Renderer {
             textColor = '#4ade80'; // Green for continue
             shadowColor = '#16a34a';
         } else {
-            comboText = `COMBO BROKEN`;
+            comboText = `COMBO`;
+            comboTextLine2 = `BROKEN`;
             textColor = '#fbbf24'; // Amber for break
             shadowColor = '#f59e0b';
         }
@@ -2276,13 +2270,67 @@ export class Renderer {
         this.ctx.shadowOffsetX = 0;
         this.ctx.shadowOffsetY = 0;
         
-        // Draw text outline (stroke)
+        // Calculate line spacing for two-line text
+        const lineSpacing = scaledFontSize * 0.4; // 40% of font size between lines (increased for better separation)
+        const firstLineY = comboTextLine2 ? centerY - lineSpacing / 2 : centerY;
+        const secondLineY = comboTextLine2 ? centerY + lineSpacing / 2 : centerY;
+        
+        // For "COMBO BROKEN", delay the second line so it appears after "COMBO" is fully visible
+        // This prevents overlap during the scale animation
+        let secondLineAlpha = alpha;
+        let secondLineScale = scale;
+        if (comboTextLine2) {
+            // Delay "BROKEN" to appear only after "COMBO" has completely finished its scale animation
+            // "COMBO" scale animation completes at progress 0.3, so wait until 0.4 to start showing "BROKEN"
+            // This ensures "COMBO" is fully stable and visible before "BROKEN" starts appearing
+            if (progress <= 0.4) {
+                secondLineAlpha = 0; // Hide "BROKEN" completely until "COMBO" is fully stable
+                secondLineScale = 0.3;
+            } else {
+                // "BROKEN" fades in after "COMBO" is stable and visible
+                const secondLineProgress = (progress - 0.4) / 0.6; // Remap progress from 0.4-1.0 to 0-1.0
+                if (secondLineProgress <= 0.25) {
+                    // Fade in "BROKEN" smoothly (first 25% of remaining time)
+                    secondLineAlpha = (secondLineProgress / 0.25) * alpha;
+                    secondLineScale = 0.3 + (secondLineProgress / 0.25) * (scale - 0.3);
+                } else {
+                    // "BROKEN" follows same fade out as "COMBO" after it's fully visible
+                    secondLineAlpha = alpha;
+                    secondLineScale = scale;
+                }
+            }
+        }
+        
+        // Draw text outline (stroke) for first line
         this.ctx.strokeStyle = '#000';
         this.ctx.lineWidth = 3;
-        this.ctx.strokeText(comboText, centerX, centerY);
+        this.ctx.strokeText(comboText, centerX, firstLineY);
         
-        // Draw main text with shadow
-        this.ctx.fillText(comboText, centerX, centerY);
+        // Draw main text with shadow for first line
+        this.ctx.fillText(comboText, centerX, firstLineY);
+        
+        // Draw second line if it exists (with delayed animation)
+        if (comboTextLine2 && secondLineAlpha > 0) {
+            this.ctx.save();
+            this.ctx.globalAlpha = secondLineAlpha;
+            const secondLineFontSize = Math.round(baseFontSize * secondLineScale);
+            this.ctx.font = `bold ${secondLineFontSize}px ${SYSTEM_FONT_STACK}`;
+            
+            // Recalculate glow for second line
+            const secondLineGlowRadius = secondLineFontSize * 0.6;
+            this.ctx.filter = `blur(10px)`;
+            this.ctx.globalAlpha = secondLineAlpha * 0.4;
+            this.ctx.fillStyle = shadowColor;
+            this.ctx.beginPath();
+            this.ctx.arc(centerX, secondLineY, secondLineGlowRadius * 1.5, 0, Math.PI * 2);
+            this.ctx.fill();
+            this.ctx.filter = 'none';
+            
+            this.ctx.globalAlpha = secondLineAlpha;
+            this.ctx.strokeText(comboTextLine2, centerX, secondLineY);
+            this.ctx.fillText(comboTextLine2, centerX, secondLineY);
+            this.ctx.restore();
+        }
         
         this.ctx.shadowBlur = 0;
         this.ctx.restore();

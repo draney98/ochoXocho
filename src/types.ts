@@ -29,6 +29,7 @@ export interface PlacedBlock {
     totalShapesPlacedAtPlacement: number;  // Total shapes placed when this block was placed (ensures point values never decrease)
     shapeIndex: number;  // Index of the shape in the shape pool (preserved even when shape cells are removed)
     darkness: number;    // Darkness multiplier (1.0 = full brightness, decreases by 0.1 each clear)
+    isUnexplodable?: boolean;  // In hard mode, blocks created from explosions cannot explode (pointValue stays at 0)
 }
 
 /**
