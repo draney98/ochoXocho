@@ -499,8 +499,7 @@ body[data-theme="midnight"] #auto-place-button {
 /* Settings button styling is now combined with restart button above */
 
 #settings-backdrop,
-#leaderboard-backdrop,
-#player-name-backdrop {
+#leaderboard-backdrop {
     position: fixed;
     inset: 0;
     background: rgba(0, 0, 0, 0.35);
@@ -511,15 +510,29 @@ body[data-theme="midnight"] #auto-place-button {
 }
 
 #settings-backdrop.is-visible,
-#leaderboard-backdrop.is-visible,
+#leaderboard-backdrop.is-visible {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* Player name backdrop is darker for modal overlay */
+#player-name-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+    z-index: 28;
+}
+
 #player-name-backdrop.is-visible {
     opacity: 1;
     pointer-events: auto;
 }
 
 #settings-panel,
-#leaderboard-panel,
-#player-name-panel {
+#leaderboard-panel {
     position: fixed;
     top: 50%;
     right: 20px;
@@ -538,9 +551,33 @@ body[data-theme="midnight"] #auto-place-button {
 }
 
 #settings-panel.is-visible,
-#leaderboard-panel.is-visible,
-#player-name-panel.is-visible {
+#leaderboard-panel.is-visible {
     transform: translate(0, -50%);
+}
+
+/* Player name panel is centered modal overlay */
+#player-name-panel {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0.9);
+    width: 320px;
+    max-width: calc(100% - 40px);
+    background: var(--panel-bg);
+    border-radius: 16px;
+    padding: 22px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    transition: transform 0.25s ease, opacity 0.25s ease;
+    z-index: 30;
+    color: var(--panel-text-color);
+    opacity: 0;
+    pointer-events: none;
+}
+
+#player-name-panel.is-visible {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+    pointer-events: auto;
 }
 
 .settings-header {

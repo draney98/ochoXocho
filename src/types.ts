@@ -141,3 +141,18 @@ export interface LeaderboardEntry {
     deviceId: string;
 }
 
+/**
+ * Configuration for the DragController physics system
+ */
+export interface DragControllerConfig {
+    /** How quickly the piece follows the finger/cursor (ms). Lower = more responsive. */
+    responsiveTimeMs: number;
+    /** Distance in cells for snap influence to begin (0.5 = half a cell from center) */
+    snapRadiusCells: number;
+    /** Snap strength when finger is stationary (0.0-1.0) */
+    snapStrengthAtRest: number;
+    /** Duration of settle animation after release (ms) */
+    settleDurationMs: number;
+    /** Velocity dampening factor for snap reduction when moving fast */
+    velocityDampening: number;
+}

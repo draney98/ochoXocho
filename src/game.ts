@@ -44,6 +44,7 @@ export class Game {
     private gameOverStartTime: number | null = null;
     private readonly GAME_OVER_ANIMATION_DURATION = ANIMATION_CONFIG.gameOverFadeMs;
     private gameOverPopComplete: boolean = false;
+    private playerNamePromptShown: boolean = false; // Track if we've shown the player name prompt
     private levelUpStartTime: number | null = null;
     private leaderboardRank: number | null = null; // Rank on leaderboard (if top 10)
     private leaderboardRanks: { today: number | null; week: number | null; ever: number | null; todayTotal: number; weekTotal: number; everTotal: number } = {
@@ -160,25 +161,6 @@ export class Game {
     }
 
     private promptForPlayerNameCallback?: () => Promise<string>;
-
-    /**
-     * Sets the callback function for prompting the user for player name
-     * @param callback - Function that returns a Promise resolving to the player name
-     */
-    setPlayerNamePromptCallback(callback: () => Promise<string>): void {
-        this.promptForPlayerNameCallback = callback;
-    }
-
-    /**
-     * Prompts the user for player name if callback is set
-     * @returns Promise resolving to the player name, or empty string if cancelled
-     */
-    private async promptForPlayerName(): Promise<string> {
-        if (this.promptForPlayerNameCallback) {
-            return await this.promptForPlayerNameCallback();
-        }
-        return '';
-    }
 
     /**
      * Updates runtime settings originating from the UI panel
@@ -384,6 +366,55 @@ export class Game {
             this.comboAnimationType = null;
             this.comboAnimationMultiplier = 0;
         }
+        // Check if we should show the player name prompt (after game over screen is visible)
+        // Only show if ALL of these conditions are met:
+        // 1. Game is actually over
+        // 2. Game over screen has started (gameOverStartTime is set)
+        // 3. Popping animation is complete
+        // 4. Game over screen is visible (progress > 0.1)
+        // 5. We haven't shown the prompt yet
+        // 6. Safety: game has actually been played (not at initial state)
+        const shouldShowPrompt = this.state.gameOver && 
+            this.gameOverStartTime !== null && 
+            this.gameOverPopComplete && 
+            gameOverProgress > 0.1 && 
+            !this.playerNamePromptShown &&
+            (this.state.score > 0 || this.state.turn > 0 || this.state.totalShapesPlaced > 0);
+            
+        if (shouldShowPrompt) {
+            // Game over screen is visible, check if we need to prompt for player name
+            const playerName = (this.settings.playerName || '').trim();
+            if (!playerName || playerName === '' || playerName === '   ') {
+                // Show prompt asynchronously (don't block render loop)
+                this.playerNamePromptShown = true; // Set flag first to prevent multiple prompts
+                this.promptForPlayerName().then((enteredName) => {
+                    if (enteredName && enteredName.trim() !== '') {
+                        const formattedName = enteredName.padEnd(3, ' ');
+                        // Update settings with new player name
+                        const updatedSettings = { ...this.settings, playerName: formattedName };
+                        this.updateSettings(updatedSettings);
+                        // Save to localStorage
+                        try {
+                            const currentSettings = loadSettings();
+                            const savedSettings = { ...currentSettings, playerName: formattedName };
+                            saveSettings(savedSettings);
+                            
+                            // Update the settings panel input field to reflect the change
+                            const playerNameInput = document.getElementById('setting-player-name') as HTMLInputElement | null;
+                            if (playerNameInput) {
+                                playerNameInput.value = enteredName.substring(0, 3).toUpperCase();
+                            }
+                        } catch (e) {
+                            console.warn('Failed to save player name:', e);
+                        }
+                    }
+                });
+            } else {
+                // Player name already set, mark as shown to avoid checking again
+                this.playerNamePromptShown = true;
+            }
+        }
+        
         const hoverPosition = this.inputHandler.getHoverPosition();
         this.renderer.render(
             this.board,
@@ -762,6 +793,8 @@ export class Game {
 
         // Find all exploding cells and trigger chain reactions
         const processedExplosions = new Set<string>();
+        let explosionSoundPlayed = false; // Track if we've played the explosion sound for this sequence
+        
         const processExplosion = (x: number, y: number): void => {
             const key = `${x},${y}`;
             if (processedExplosions.has(key)) return; // Already processed
@@ -808,6 +841,11 @@ export class Game {
                 // Skip un-explodable blocks
                 const isUnexplodable = block.isUnexplodable ?? false;
                 if ((inClearedRow || inClearedColumn) && !isUnexplodable && currentPointValue > GAMEPLAY_CONFIG.explosionThreshold) {
+                    // Play explosion sound when first explosion is triggered (only once per explosion sequence)
+                    if (!explosionSoundPlayed) {
+                        this.soundManager.playExplosion();
+                        explosionSoundPlayed = true;
+                    }
                     processExplosion(absoluteX, absoluteY);
                 }
             }
@@ -1519,38 +1557,14 @@ export class Game {
         }, totalPopDuration);
 
         // Final cleanup after all animations
-        setTimeout(async () => {
-            // Check if player name is empty and prompt for initials
-            let playerName = (this.settings.playerName || '').trim();
-            // Check if player name is empty, only spaces, or default value
-            if (!playerName || playerName === '' || playerName === '   ') {
-                // Player name is empty, prompt for initials
-                playerName = await this.promptForPlayerName();
-                if (!playerName || playerName.trim() === '') {
-                    // User cancelled or entered nothing, use default
-                    playerName = '   ';
-                } else {
-                    // Update settings with new player name
-                    const updatedSettings = { ...this.settings, playerName: playerName.padEnd(3, ' ') };
-                    this.updateSettings(updatedSettings);
-                    // Save to localStorage
-                    try {
-                        const currentSettings = loadSettings();
-                        const savedSettings = { ...currentSettings, playerName: playerName.padEnd(3, ' ') };
-                        saveSettings(savedSettings);
-                    } catch (e) {
-                        console.warn('Failed to save player name:', e);
-                    }
-                }
-            }
-            
+        setTimeout(() => {
             // Record the final score for the current mode
             const deviceId = getDeviceId();
-            const formattedPlayerName = playerName.substring(0, 3).toUpperCase().padEnd(3, ' ');
+            const playerName = (this.settings.playerName || '   ').substring(0, 3).toUpperCase().padEnd(3, ' ');
             const finalScore = this.state.score;
             const mode = this.settings.mode;
             
-            recordScore(finalScore, mode, formattedPlayerName, deviceId).then((rank) => {
+            recordScore(finalScore, mode, playerName, deviceId).then((rank) => {
                 // Store rank if in top 10
                 if (rank !== null && rank <= 10) {
                     this.leaderboardRank = rank;
@@ -1635,6 +1649,9 @@ export class Game {
         this.inputHandler.updateQueue(this.state.queue);
         this.inputHandler.updateGameOverState(true);
         
+        // Reset the player name prompt flag so it can be shown when game over screen appears
+        this.playerNamePromptShown = false;
+        
         this.soundManager.playGameOver();
         // Start the bonus animation after a brief delay
         setTimeout(() => {
@@ -1705,6 +1722,8 @@ export class Game {
         this.animatingCells = [];
         this.animatingShapes = [];
         this.gameOverStartTime = null;
+        this.gameOverPopComplete = false; // Reset game over pop complete flag
+        this.playerNamePromptShown = false; // Reset prompt flag on game reset
         this.isNewHighScore = false;
         this.placementsSinceLastClear = 0; // Reset combo tracking
         this.comboMultiplier = 1.0; // Reset combo multiplier

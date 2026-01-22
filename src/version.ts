@@ -1,14 +1,20 @@
 /**
  * Version information
- * Base version is manually set, build number auto-increments based on git commit count
+ * Version is read from package.json at build time, build number auto-increments based on git commit count
  */
 
-// Base version (manually updated)
-export const BASE_VERSION = '0.5';
+// Package version is injected at build time via Vite define from package.json
+// In dev mode, it will be undefined, so we use a fallback
+const PACKAGE_VERSION = import.meta.env.VITE_PACKAGE_VERSION || '1.1.2';
 
 // Build number is injected at build time via Vite define
 // In dev mode, it will be undefined, so we use a placeholder
-export const BUILD_NUMBER = import.meta.env.VITE_BUILD_NUMBER || 'dev';
+const BUILD_NUMBER = import.meta.env.VITE_BUILD_NUMBER || 'dev';
 
-// Full version string
-export const VERSION = `${BASE_VERSION}.${BUILD_NUMBER}`;
+// Full version string: PACKAGE_VERSION.BUILD
+// Example: "1.1.2.123" or "1.1.2.dev" in dev mode
+// This ensures the version always matches package.json
+export const VERSION = `${PACKAGE_VERSION}.${BUILD_NUMBER}`;
+
+// Export base version (without build number) for backwards compatibility if needed
+export const BASE_VERSION = PACKAGE_VERSION;

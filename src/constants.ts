@@ -21,7 +21,9 @@ export const QUEUE_ITEM_WIDTH = 150;
 export const QUEUE_ITEM_HEIGHT = 150;
 
 // Drag and drop constants
-export const DRAG_VISUAL_OFFSET_Y = -240; // Vertical offset to lift piece above finger/cursor (negative = upward)
+// Visual lift to prevent finger occlusion on mobile
+// NOTE: Must be balanced with canvas geometry - too large makes bottom row unreachable
+export const DRAG_VISUAL_OFFSET_Y = -180; // Vertical offset to lift piece above finger/cursor (negative = upward)
 
 /**
  * Calculates the rectangle for a queue item positioned horizontally under the board.

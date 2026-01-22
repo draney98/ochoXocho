@@ -100,6 +100,13 @@ export const SOUND_CONFIG = {
         volume: 0.75, // Square is louder, reduce to match others
         file: '220180__gameaudio__click-pop.wav', // Audio file for pop sound
     },
+    explosion: {
+        frequency: 120, // Low frequency for explosion rumble
+        duration: 0.4, // Longer duration for dramatic effect
+        waveform: 'sawtooth' as const,
+        volume: 1.2, // Sawtooth is loud, but boost for impact
+        file: null, // No audio file yet - using synthesized sound
+    },
 } as const;
 
 /**

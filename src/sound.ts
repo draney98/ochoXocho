@@ -136,6 +136,28 @@ export class SoundManager {
         }
     }
 
+    playExplosion(): void {
+        if (SOUND_CONFIG.explosion.file) {
+            this.playAudioFile(SOUND_CONFIG.explosion.file, SOUND_CONFIG.explosion.volume, () => {
+                // Fallback to synthesized sound
+                this.playTone(
+                    SOUND_CONFIG.explosion.frequency,
+                    SOUND_CONFIG.explosion.duration,
+                    SOUND_CONFIG.explosion.waveform,
+                    SOUND_CONFIG.explosion.volume
+                );
+            });
+        } else {
+            // Synthesized explosion sound - low rumble with sawtooth wave
+            this.playTone(
+                SOUND_CONFIG.explosion.frequency,
+                SOUND_CONFIG.explosion.duration,
+                SOUND_CONFIG.explosion.waveform,
+                SOUND_CONFIG.explosion.volume
+            );
+        }
+    }
+
     private ensureContext(): void {
         if (this.audioContext) {
             // Always try to resume if suspended (fixes autoplay policy issues)
