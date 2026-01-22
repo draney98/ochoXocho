@@ -47,6 +47,11 @@ function saveSettings(settings: GameSettings): void {
 }
 
 /**
+ * Exports loadSettings and saveSettings for use in other modules
+ */
+export { loadSettings, saveSettings };
+
+/**
  * Calculates the number of lines needed to complete a level
  */
 function getLinesPerLevel(): number {
@@ -136,6 +141,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Initialize the game
     const game = new Game(canvas, settingsState);
     game.start();
+    
+    // Set up player name prompt callback
+    game.setPlayerNamePromptCallback(() => showPlayerNamePrompt());
 
     const updateHighScoreMode = setupHighScores(game, settingsState);
     const { updateModeSelectState } = setupSettingsControls(game, settingsState, updateHighScoreMode);
@@ -995,3 +1003,87 @@ function setupHighScores(game: Game, initialSettings: GameSettings): (mode: Game
     return updateMode;
 }
 
+/**
+ * Shows a modal prompt for the user to enter their initials
+ * @returns Promise that resolves to the entered initials, or empty string if cancelled
+ */
+function showPlayerNamePrompt(): Promise<string> {
+    return new Promise((resolve) => {
+        const backdrop = document.getElementById('player-name-backdrop');
+        const panel = document.getElementById('player-name-panel');
+        const input = document.getElementById('player-name-input') as HTMLInputElement | null;
+        const submitButton = document.getElementById('player-name-submit');
+        
+        if (!backdrop || !panel || !input || !submitButton) {
+            resolve('');
+            return;
+        }
+        
+        // Clear input and focus it
+        input.value = '';
+        input.focus();
+        
+        // Show the modal
+        backdrop.setAttribute('aria-hidden', 'false');
+        backdrop.classList.add('is-visible');
+        panel.setAttribute('aria-hidden', 'false');
+        panel.classList.add('is-visible');
+        
+        // Handle input - convert to uppercase and limit to 3 characters
+        const handleInput = (e: Event) => {
+            const target = e.target as HTMLInputElement;
+            target.value = target.value.toUpperCase().substring(0, 3);
+        };
+        
+        // Handle submit
+        const handleSubmit = () => {
+            const value = input.value.trim().toUpperCase();
+            if (value.length > 0) {
+                // Hide modal
+                backdrop.setAttribute('aria-hidden', 'true');
+                backdrop.classList.remove('is-visible');
+                panel.setAttribute('aria-hidden', 'true');
+                panel.classList.remove('is-visible');
+                
+                // Clean up event listeners
+                submitButton.removeEventListener('click', handleSubmit);
+                input.removeEventListener('keydown', handleKeyDown);
+                input.removeEventListener('input', handleInput);
+                backdrop.removeEventListener('click', handleBackdropClick);
+                
+                resolve(value);
+            }
+        };
+        
+        // Handle Enter key
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                handleSubmit();
+            }
+        };
+        
+        // Close on backdrop click
+        const handleBackdropClick = (e: MouseEvent) => {
+            if (e.target === backdrop) {
+                backdrop.setAttribute('aria-hidden', 'true');
+                backdrop.classList.remove('is-visible');
+                panel.setAttribute('aria-hidden', 'true');
+                panel.classList.remove('is-visible');
+                
+                // Clean up
+                backdrop.removeEventListener('click', handleBackdropClick);
+                submitButton.removeEventListener('click', handleSubmit);
+                input.removeEventListener('keydown', handleKeyDown);
+                input.removeEventListener('input', handleInput);
+                
+                resolve(''); // Return empty string if cancelled
+            }
+        };
+        
+        submitButton.addEventListener('click', handleSubmit);
+        input.addEventListener('keydown', handleKeyDown);
+        input.addEventListener('input', handleInput);
+        backdrop.addEventListener('click', handleBackdropClick);
+    });
+}

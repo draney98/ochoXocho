@@ -221,6 +221,19 @@
             </div>
         </div>
     </section>
+    <div id="player-name-backdrop" aria-hidden="true"></div>
+    <section id="player-name-panel" role="dialog" aria-labelledby="player-name-title" aria-modal="true" aria-hidden="true">
+        <header class="settings-header">
+            <h2 id="player-name-title">Enter Your Initials</h2>
+        </header>
+        <div class="settings-content">
+            <p style="margin-bottom: 16px; color: var(--panel-text-color);">Enter your 3-letter initials for the leaderboard:</p>
+            <div style="display: flex; gap: 12px; align-items: center; justify-content: center;">
+                <input type="text" id="player-name-input" placeholder="ABC" maxlength="3" pattern="[A-Za-z0-9]{1,3}" style="text-transform: uppercase; font-family: 'Courier New', monospace; font-weight: bold; letter-spacing: 0.2em; text-align: center; width: 120px; padding: 10px; font-size: 24px; border: 2px solid var(--accent-color); border-radius: 8px; background: var(--panel-bg); color: var(--panel-text-color);">
+                <button id="player-name-submit" style="padding: 10px 20px; font-size: 16px; font-weight: bold; border: 2px solid var(--accent-color); border-radius: 8px; background: var(--accent-color); color: var(--accent-color-contrast, #ffffff); cursor: pointer;">OK</button>
+            </div>
+        </div>
+    </section>
     <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

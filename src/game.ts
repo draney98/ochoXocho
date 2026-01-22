@@ -13,6 +13,7 @@ import { SoundManager } from './sound';
 import { recordScore } from './highScores';
 import { getDeviceId } from './deviceId';
 import { getLeaderboard, getScoreRank as getScoreRankAPI } from './api';
+import { loadSettings, saveSettings } from './main';
 import { GAMEPLAY_CONFIG, ANIMATION_CONFIG, GAME_OVER_CONFIG, DRAG_CONTROLLER_CONFIG } from './config';
 import { getUIColorForLevel, getButtonColors } from './colorConfig';
 import { findOptimalPlacementOrder } from './boardUtils';
@@ -137,6 +138,46 @@ export class Game {
         if (this.onAutoPlaceStateChange) {
             this.onAutoPlaceStateChange(isPlacing);
         }
+    }
+
+    /**
+     * Sets the callback function for prompting the user for player name
+     * @param callback - Function that returns a Promise resolving to the player name
+     */
+    setPlayerNamePromptCallback(callback: () => Promise<string>): void {
+        this.promptForPlayerNameCallback = callback;
+    }
+
+    /**
+     * Prompts the user for player name if callback is set
+     * @returns Promise resolving to the player name, or empty string if cancelled
+     */
+    private async promptForPlayerName(): Promise<string> {
+        if (this.promptForPlayerNameCallback) {
+            return await this.promptForPlayerNameCallback();
+        }
+        return '';
+    }
+
+    private promptForPlayerNameCallback?: () => Promise<string>;
+
+    /**
+     * Sets the callback function for prompting the user for player name
+     * @param callback - Function that returns a Promise resolving to the player name
+     */
+    setPlayerNamePromptCallback(callback: () => Promise<string>): void {
+        this.promptForPlayerNameCallback = callback;
+    }
+
+    /**
+     * Prompts the user for player name if callback is set
+     * @returns Promise resolving to the player name, or empty string if cancelled
+     */
+    private async promptForPlayerName(): Promise<string> {
+        if (this.promptForPlayerNameCallback) {
+            return await this.promptForPlayerNameCallback();
+        }
+        return '';
     }
 
     /**
@@ -1478,14 +1519,38 @@ export class Game {
         }, totalPopDuration);
 
         // Final cleanup after all animations
-        setTimeout(() => {
+        setTimeout(async () => {
+            // Check if player name is empty and prompt for initials
+            let playerName = (this.settings.playerName || '').trim();
+            // Check if player name is empty, only spaces, or default value
+            if (!playerName || playerName === '' || playerName === '   ') {
+                // Player name is empty, prompt for initials
+                playerName = await this.promptForPlayerName();
+                if (!playerName || playerName.trim() === '') {
+                    // User cancelled or entered nothing, use default
+                    playerName = '   ';
+                } else {
+                    // Update settings with new player name
+                    const updatedSettings = { ...this.settings, playerName: playerName.padEnd(3, ' ') };
+                    this.updateSettings(updatedSettings);
+                    // Save to localStorage
+                    try {
+                        const currentSettings = loadSettings();
+                        const savedSettings = { ...currentSettings, playerName: playerName.padEnd(3, ' ') };
+                        saveSettings(savedSettings);
+                    } catch (e) {
+                        console.warn('Failed to save player name:', e);
+                    }
+                }
+            }
+            
             // Record the final score for the current mode
             const deviceId = getDeviceId();
-            const playerName = (this.settings.playerName || '   ').substring(0, 3).toUpperCase().padEnd(3, ' ');
+            const formattedPlayerName = playerName.substring(0, 3).toUpperCase().padEnd(3, ' ');
             const finalScore = this.state.score;
             const mode = this.settings.mode;
             
-            recordScore(finalScore, mode, playerName, deviceId).then((rank) => {
+            recordScore(finalScore, mode, formattedPlayerName, deviceId).then((rank) => {
                 // Store rank if in top 10
                 if (rank !== null && rank <= 10) {
                     this.leaderboardRank = rank;

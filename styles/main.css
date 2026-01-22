@@ -499,7 +499,8 @@ body[data-theme="midnight"] #auto-place-button {
 /* Settings button styling is now combined with restart button above */
 
 #settings-backdrop,
-#leaderboard-backdrop {
+#leaderboard-backdrop,
+#player-name-backdrop {
     position: fixed;
     inset: 0;
     background: rgba(0, 0, 0, 0.35);
@@ -510,13 +511,15 @@ body[data-theme="midnight"] #auto-place-button {
 }
 
 #settings-backdrop.is-visible,
-#leaderboard-backdrop.is-visible {
+#leaderboard-backdrop.is-visible,
+#player-name-backdrop.is-visible {
     opacity: 1;
     pointer-events: auto;
 }
 
 #settings-panel,
-#leaderboard-panel {
+#leaderboard-panel,
+#player-name-panel {
     position: fixed;
     top: 50%;
     right: 20px;
@@ -535,7 +538,8 @@ body[data-theme="midnight"] #auto-place-button {
 }
 
 #settings-panel.is-visible,
-#leaderboard-panel.is-visible {
+#leaderboard-panel.is-visible,
+#player-name-panel.is-visible {
     transform: translate(0, -50%);
 }
 
