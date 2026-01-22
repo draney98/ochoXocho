@@ -81,24 +81,31 @@ async function saveScore(entry) {
 }
 
 /**
- * Gets the start of today (midnight UTC)
- * @returns {number} Timestamp of today's start
+ * Gets the start of today (midnight in user's timezone)
+ * @param {number} timezoneOffsetMinutes - Timezone offset in minutes from UTC (e.g., -300 for EST, 540 for JST)
+ * @returns {number} UTC timestamp of today's start in user's timezone
  */
-function getTodayStart() {
+function getTodayStart(timezoneOffsetMinutes = 0) {
     const now = new Date();
-    now.setUTCHours(0, 0, 0, 0);
-    return now.getTime();
+    // Get current UTC time
+    const utcNow = now.getTime();
+    // Convert to user's local time by adding the offset
+    const localTime = utcNow + timezoneOffsetMinutes * 60 * 1000;
+    // Find midnight in user's local time (in UTC milliseconds)
+    const localMidnight = Math.floor(localTime / (24 * 60 * 60 * 1000)) * (24 * 60 * 60 * 1000);
+    // Convert back to UTC timestamp
+    return localMidnight - timezoneOffsetMinutes * 60 * 1000;
 }
 
 /**
- * Gets the start of the last 7 days (rolling 7 days from now in UTC)
- * @returns {number} Timestamp of 7 days ago
+ * Gets the start of the last 7 days (rolling 7 days from now in user's timezone)
+ * @param {number} timezoneOffsetMinutes - Timezone offset in minutes from UTC (e.g., -300 for EST, 540 for JST)
+ * @returns {number} UTC timestamp of 7 days ago in user's timezone
  */
-function getWeekStart() {
-    const now = new Date();
-    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); // 7 days in milliseconds
-    sevenDaysAgo.setUTCHours(0, 0, 0, 0); // Set to midnight UTC
-    return sevenDaysAgo.getTime();
+function getWeekStart(timezoneOffsetMinutes = 0) {
+    const todayStart = getTodayStart(timezoneOffsetMinutes);
+    // Subtract 7 days (in milliseconds)
+    return todayStart - (7 * 24 * 60 * 60 * 1000);
 }
 
 /**
@@ -106,9 +113,10 @@ function getWeekStart() {
  * @param {string} mode - Game mode ('easy' or 'hard')
  * @param {string} period - Time period ('today', 'week', or 'ever')
  * @param {number} limit - Maximum number of scores to return
+ * @param {number} timezoneOffsetMinutes - Timezone offset in minutes from UTC (optional, defaults to 0/UTC)
  * @returns {Promise<Array>} Array of leaderboard entries
  */
-async function getLeaderboard(mode, period, limit) {
+async function getLeaderboard(mode, period, limit, timezoneOffsetMinutes = 0) {
     if (!isDatabaseAvailable()) {
         console.warn('Database not available, returning empty leaderboard');
         return [];
@@ -124,11 +132,11 @@ async function getLeaderboard(mode, period, limit) {
         const params = [mode];
 
         if (period === 'today') {
-            const todayStart = getTodayStart();
+            const todayStart = getTodayStart(timezoneOffsetMinutes);
             query += ` AND timestamp >= $2`;
             params.push(todayStart);
         } else if (period === 'week') {
-            const weekStart = getWeekStart();
+            const weekStart = getWeekStart(timezoneOffsetMinutes);
             query += ` AND timestamp >= $2`;
             params.push(weekStart);
         }
@@ -185,10 +193,93 @@ async function getScoreRank(mode, scoreId) {
     }
 }
 
+/**
+ * Gets the total count of scores for a mode and period
+ * @param {string} mode - Game mode ('easy' or 'hard')
+ * @param {string} period - Time period ('today', 'week', or 'ever')
+ * @param {number} timezoneOffsetMinutes - Timezone offset in minutes from UTC (optional, defaults to 0/UTC)
+ * @returns {Promise<number>} Total count of scores
+ */
+async function getScoreCount(mode, period, timezoneOffsetMinutes = 0) {
+    if (!isDatabaseAvailable()) {
+        return 0;
+    }
+
+    try {
+        const pool = getPool();
+        let query = `
+            SELECT COUNT(*) as total
+            FROM scores
+            WHERE mode = $1
+        `;
+        const params = [mode];
+
+        if (period === 'today') {
+            const todayStart = getTodayStart(timezoneOffsetMinutes);
+            query += ` AND timestamp >= $2`;
+            params.push(todayStart);
+        } else if (period === 'week') {
+            const weekStart = getWeekStart(timezoneOffsetMinutes);
+            query += ` AND timestamp >= $2`;
+            params.push(weekStart);
+        }
+        // period === 'ever' uses all scores (no additional filter)
+
+        const result = await pool.query(query, params);
+        return parseInt(result.rows[0].total, 10);
+    } catch (error) {
+        console.error('Error getting score count:', error.message);
+        return 0;
+    }
+}
+
+/**
+ * Gets the rank of a specific score value in the database
+ * @param {string} mode - Game mode ('easy' or 'hard')
+ * @param {number} score - The score value to rank
+ * @param {string} period - Time period ('today', 'week', or 'ever')
+ * @param {number} timezoneOffsetMinutes - Timezone offset in minutes from UTC (optional, defaults to 0/UTC)
+ * @returns {Promise<number>} 1-indexed rank of the score
+ */
+async function getScoreRankByValue(mode, score, period, timezoneOffsetMinutes = 0) {
+    if (!isDatabaseAvailable()) {
+        return 0;
+    }
+
+    try {
+        const pool = getPool();
+        let query = `
+            SELECT COUNT(*) + 1 as rank
+            FROM scores
+            WHERE mode = $1 AND score > $2
+        `;
+        const params = [mode, score];
+
+        if (period === 'today') {
+            const todayStart = getTodayStart(timezoneOffsetMinutes);
+            query += ` AND timestamp >= $3`;
+            params.push(todayStart);
+        } else if (period === 'week') {
+            const weekStart = getWeekStart(timezoneOffsetMinutes);
+            query += ` AND timestamp >= $3`;
+            params.push(weekStart);
+        }
+        // period === 'ever' uses all scores (no additional filter)
+
+        const result = await pool.query(query, params);
+        return parseInt(result.rows[0].rank, 10);
+    } catch (error) {
+        console.error('Error getting score rank by value:', error.message);
+        return 0;
+    }
+}
+
 module.exports = {
     loadScores,
     saveScore,
     getLeaderboard,
-    getScoreRank
+    getScoreRank,
+    getScoreCount,
+    getScoreRankByValue
 };
 

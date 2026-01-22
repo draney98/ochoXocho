@@ -10,7 +10,7 @@ const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
 
 const { initDatabase, isDatabaseAvailable } = require('./db');
-const { saveScore, getLeaderboard, getScoreRank } = require('./scoresDb');
+const { saveScore, getLeaderboard, getScoreRank, getScoreCount, getScoreRankByValue } = require('./scoresDb');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -83,6 +83,13 @@ app.get('/api/leaderboard', async (req, res) => {
         // Parse limit, default to 10, and ensure it's a valid positive integer
         const parsedLimit = parseInt(req.query.limit, 10);
         const limit = (isNaN(parsedLimit) || parsedLimit <= 0) ? 10 : Math.min(parsedLimit, 100);
+        
+        // Parse timezone offset in minutes (optional, defaults to 0/UTC)
+        // Frontend sends offset as minutes from UTC (e.g., -300 for EST, 480 for JST)
+        const parsedOffset = parseInt(req.query.timezoneOffset, 10);
+        const timezoneOffsetMinutes = isNaN(parsedOffset) ? 0 : parsedOffset;
+        // Clamp to reasonable range: -12 to +14 hours = -720 to +840 minutes
+        const clampedOffset = Math.max(-720, Math.min(840, timezoneOffsetMinutes));
 
         if (mode !== 'easy' && mode !== 'hard') {
             return res.status(400).json({ success: false, error: 'Invalid mode' });
@@ -92,7 +99,7 @@ app.get('/api/leaderboard', async (req, res) => {
             return res.status(400).json({ success: false, error: 'Invalid period' });
         }
 
-        const scores = await getLeaderboard(mode, period, limit);
+        const scores = await getLeaderboard(mode, period, limit, clampedOffset);
 
         // Ensure we never return more than the requested limit (defensive programming)
         const limitedScores = scores.slice(0, limit);
@@ -102,6 +109,51 @@ app.get('/api/leaderboard', async (req, res) => {
         });
     } catch (error) {
         console.error('Error fetching leaderboard:', error);
+        res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+});
+
+/**
+ * GET /api/leaderboard/rank
+ * Gets the rank and total count for a specific score
+ * Query params: mode (easy/hard), period (today/week/ever), score (number), timezoneOffset (optional)
+ */
+app.get('/api/leaderboard/rank', async (req, res) => {
+    try {
+        const mode = req.query.mode || 'easy';
+        const period = req.query.period || 'ever';
+        const parsedScore = parseInt(req.query.score, 10);
+        const score = isNaN(parsedScore) ? 0 : parsedScore;
+        
+        // Parse timezone offset in minutes (optional, defaults to 0/UTC)
+        const parsedOffset = parseInt(req.query.timezoneOffset, 10);
+        const timezoneOffsetMinutes = isNaN(parsedOffset) ? 0 : parsedOffset;
+        const clampedOffset = Math.max(-720, Math.min(840, timezoneOffsetMinutes));
+
+        if (mode !== 'easy' && mode !== 'hard') {
+            return res.status(400).json({ success: false, error: 'Invalid mode' });
+        }
+
+        if (period !== 'today' && period !== 'week' && period !== 'ever') {
+            return res.status(400).json({ success: false, error: 'Invalid period' });
+        }
+
+        if (score <= 0) {
+            return res.status(400).json({ success: false, error: 'Invalid score' });
+        }
+
+        const [rank, total] = await Promise.all([
+            getScoreRankByValue(mode, score, period, clampedOffset),
+            getScoreCount(mode, period, clampedOffset)
+        ]);
+
+        res.json({
+            success: true,
+            rank: rank,
+            total: total
+        });
+    } catch (error) {
+        console.error('Error getting score rank:', error);
         res.status(500).json({ success: false, error: 'Internal server error' });
     }
 });

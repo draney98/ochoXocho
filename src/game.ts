@@ -12,7 +12,7 @@ import { checkGameOver } from './gameOver';
 import { SoundManager } from './sound';
 import { recordScore } from './highScores';
 import { getDeviceId } from './deviceId';
-import { getLeaderboard } from './api';
+import { getLeaderboard, getScoreRank as getScoreRankAPI } from './api';
 import { GAMEPLAY_CONFIG, ANIMATION_CONFIG, GAME_OVER_CONFIG, DRAG_CONTROLLER_CONFIG } from './config';
 import { getUIColorForLevel, getButtonColors } from './colorConfig';
 import { findOptimalPlacementOrder } from './boardUtils';
@@ -1039,7 +1039,14 @@ export class Game {
 
     private updateScoreDisplay(): void {
         if (this.scoreElement) {
-            this.scoreElement.textContent = this.formatNumber(this.state.score);
+            let displayText = this.formatNumber(this.state.score);
+            
+            // Show combo multiplier if showPointValues is enabled
+            if (this.settings.showPointValues && this.comboMultiplier > 1.0) {
+                displayText += ` (${this.comboMultiplier.toFixed(3)}x)`;
+            }
+            
+            this.scoreElement.textContent = displayText;
             // Change color if this is a new high score
             if (this.isNewHighScore) {
                 this.scoreElement.style.color = '#FFD700'; // Gold color for new high score
@@ -1490,39 +1497,19 @@ export class Game {
                 this.leaderboardRank = null;
             });
             
-            // Fetch leaderboard ranks for today/week/ever
+            // Fetch leaderboard ranks for today/week/ever using the rank API
             Promise.all([
-                getLeaderboard(mode, 'today', 1000),
-                getLeaderboard(mode, 'week', 1000),
-                getLeaderboard(mode, 'ever', 1000)
-            ]).then(([todayEntries, weekEntries, everEntries]) => {
-                // Find player's rank in each period by comparing scores
-                // Leaderboard is sorted descending (highest score first)
-                const findRank = (entries: typeof todayEntries, score: number): { rank: number | null; total: number } => {
-                    const total = entries.length;
-                    // Count how many entries have a higher score than the player
-                    let higherCount = 0;
-                    for (const entry of entries) {
-                        if (entry.score > score) {
-                            higherCount++;
-                        }
-                    }
-                    // Rank is the number of players with higher scores + 1
-                    const rank = higherCount + 1;
-                    return { rank, total };
-                };
-                
-                const todayRank = findRank(todayEntries, finalScore);
-                const weekRank = findRank(weekEntries, finalScore);
-                const everRank = findRank(everEntries, finalScore);
-                
+                getScoreRankAPI(mode, 'today', finalScore),
+                getScoreRankAPI(mode, 'week', finalScore),
+                getScoreRankAPI(mode, 'ever', finalScore)
+            ]).then(([todayResult, weekResult, everResult]) => {
                 this.leaderboardRanks = {
-                    today: todayRank.rank,
-                    week: weekRank.rank,
-                    ever: everRank.rank,
-                    todayTotal: todayRank.total,
-                    weekTotal: weekRank.total,
-                    everTotal: everRank.total
+                    today: todayResult?.rank ?? null,
+                    week: weekResult?.rank ?? null,
+                    ever: everResult?.rank ?? null,
+                    todayTotal: todayResult?.total ?? 0,
+                    weekTotal: weekResult?.total ?? 0,
+                    everTotal: everResult?.total ?? 0
                 };
             }).catch((error) => {
                 console.warn('Failed to fetch leaderboard ranks:', error);

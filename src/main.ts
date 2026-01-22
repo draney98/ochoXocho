@@ -518,7 +518,7 @@ function setupLeaderboardPopup(initialSettings: GameSettings): void {
     
     /**
      * Formats a timestamp based on the leaderboard period
-     * Uses UTC (server time) for consistency with server-side filtering
+     * Uses local timezone for user-friendly display
      * - today: shows time (e.g., "8:00am")
      * - week: shows day of week (e.g., "Tue")
      * - ever: shows compact date (e.g., "1/12/25")
@@ -527,22 +527,22 @@ function setupLeaderboardPopup(initialSettings: GameSettings): void {
         const date = new Date(timestamp);
         
         if (period === 'today') {
-            // Show time for today's scores in UTC (server time) (e.g., "8:00am")
-            const hours = date.getUTCHours();
-            const minutes = date.getUTCMinutes();
+            // Show time for today's scores in local time (e.g., "8:00am")
+            const hours = date.getHours();
+            const minutes = date.getMinutes();
             const ampm = hours >= 12 ? 'pm' : 'am';
             const displayHours = hours % 12 || 12; // Convert to 12-hour format
             const displayMinutes = minutes.toString().padStart(2, '0');
             return `${displayHours}:${displayMinutes}${ampm}`;
         } else if (period === 'week') {
-            // Show day of week for this week's scores in UTC (e.g., "Tue")
+            // Show day of week for this week's scores in local time (e.g., "Tue")
             const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-            return days[date.getUTCDay()];
+            return days[date.getDay()];
         } else {
-            // Show compact date for all-time scores in UTC (e.g., "1/12/25")
-            const month = date.getUTCMonth() + 1;
-            const day = date.getUTCDate();
-            const year = date.getUTCFullYear() % 100; // Last 2 digits of year
+            // Show compact date for all-time scores in local time (e.g., "1/12/25")
+            const month = date.getMonth() + 1;
+            const day = date.getDate();
+            const year = date.getFullYear() % 100; // Last 2 digits of year
             return `${month}/${day}/${year}`;
         }
     }

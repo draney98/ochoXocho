@@ -2176,12 +2176,16 @@ export class Renderer {
             }));
             // Store the total shapes placed for point value calculation
             this.finalTotalShapesPlaced = totalShapesPlaced;
-            // Store score and lines cleared for share functionality
-            this.finalScore = score;
+            // Store lines cleared and level (these don't change after game over)
             this.finalLinesCleared = linesCleared;
             this.finalLevel = level;
             this.finalMode = mode;
             this.finalLeaderboardRank = leaderboardRank;
+        }
+        
+        // Always update finalScore when gameOver is true (score may change due to game over bonus)
+        if (gameOver) {
+            this.finalScore = score;
         }
 
         if (gameOver) {

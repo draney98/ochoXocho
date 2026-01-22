@@ -32,6 +32,15 @@ interface LeaderboardResponse {
 }
 
 /**
+ * Response from getting score rank
+ */
+interface ScoreRankResponse {
+    success: boolean;
+    rank: number;
+    total: number;
+}
+
+/**
  * Submits a score to the backend API
  * @param score - The score to submit
  * @param mode - The game mode ('easy' or 'hard')
@@ -104,7 +113,9 @@ export async function getLeaderboard(
     period: LeaderboardPeriod = 'ever',
     limit: number = 10
 ): Promise<LeaderboardEntry[]> {
-    const url = `${API_CONFIG.baseUrl}/api/leaderboard?mode=${mode}&period=${period}&limit=${limit}`;
+    // Get user's timezone offset in minutes (negative for timezones behind UTC, positive for ahead)
+    const timezoneOffsetMinutes = -new Date().getTimezoneOffset();
+    const url = `${API_CONFIG.baseUrl}/api/leaderboard?mode=${mode}&period=${period}&limit=${limit}&timezoneOffset=${timezoneOffsetMinutes}`;
     
     // Check devMode setting
     let devMode = DEFAULT_SETTINGS.devMode;
@@ -151,3 +162,61 @@ export async function getLeaderboard(
     }
 }
 
+/**
+ * Gets the rank and total count for a specific score
+ * @param mode - The game mode ('easy' or 'hard')
+ * @param period - Time period filter ('today', 'week', or 'ever')
+ * @param score - The score value to get rank for
+ * @returns Promise resolving to rank and total count
+ */
+export async function getScoreRank(
+    mode: GameMode,
+    period: LeaderboardPeriod = 'ever',
+    score: number
+): Promise<{ rank: number; total: number } | null> {
+    // Get user's timezone offset in minutes
+    const timezoneOffsetMinutes = -new Date().getTimezoneOffset();
+    const url = `${API_CONFIG.baseUrl}/api/leaderboard/rank?mode=${mode}&period=${period}&score=${score}&timezoneOffset=${timezoneOffsetMinutes}`;
+    
+    // Check devMode setting
+    let devMode = DEFAULT_SETTINGS.devMode;
+    try {
+        const stored = localStorage.getItem(STORAGE_KEYS.settings);
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            devMode = parsed.devMode ?? DEFAULT_SETTINGS.devMode;
+        }
+    } catch (e) {
+        // Ignore localStorage errors
+    }
+    
+    if (devMode) {
+        console.log(`[API] Getting score rank from: ${url}`);
+    }
+    
+    try {
+        const response = await fetch(url);
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            if (devMode) {
+                console.error(`[API] HTTP error! status: ${response.status}, body: ${errorText}`);
+            }
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data: ScoreRankResponse = await response.json();
+        if (devMode) {
+            console.log(`[API] Score rank response:`, data);
+        }
+        if (data.success) {
+            return { rank: data.rank, total: data.total };
+        }
+        return null;
+    } catch (error) {
+        if (devMode) {
+            console.error('[API] Failed to get score rank from backend:', error);
+        }
+        return null;
+    }
+}
