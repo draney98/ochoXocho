@@ -30,6 +30,8 @@ export class InputHandler {
     private queue: (Shape | null)[];
     private originalQueueIndex: number = -1; // Track where the shape was originally in the queue
     private settings: GameSettings;
+    private hoverPosition: Position | null = null; // Grid position of hovered block (null when not hovering or dragging)
+    private isGameOver: boolean = false; // Track game over state to prevent dragging
 
     constructor(
         canvas: HTMLCanvasElement,
@@ -208,7 +210,10 @@ export class InputHandler {
      */
     private handleMouseDown(event: MouseEvent): void {
         // Don't allow dragging if game is over
-        // (This will be checked via the game state, but we can add an early return)
+        if (this.isGameOver) {
+            return;
+        }
+        
         const { x: canvasX, y: canvasY } = this.getCanvasCoordinates(event);
 
         // Check if click is within any queue card under the board
@@ -229,6 +234,7 @@ export class InputHandler {
                         this.dragState.shapeIndex = i;
                         this.dragState.shape = this.queue[i];
                         this.originalQueueIndex = i; // Store original position
+                        this.hoverPosition = null; // Clear hover when dragging starts
                         // Remove shape from queue immediately when selected
                         this.onRemoveFromQueue(i);
                         break;
@@ -420,13 +426,50 @@ export class InputHandler {
     }
 
     /**
+     * Converts canvas coordinates to grid cell coordinates (for hover detection)
+     * @param canvasX - X coordinate in canvas space
+     * @param canvasY - Y coordinate in canvas space
+     * @returns Grid position {x, y} or null if outside board
+     */
+    private canvasToGridCell(canvasX: number, canvasY: number): Position | null {
+        // Adjust for board offset
+        const adjustedX = canvasX - BOARD_OFFSET_X;
+        const adjustedY = canvasY - BOARD_OFFSET_Y;
+        
+        // Check if within board bounds
+        if (adjustedX < 0 || adjustedX >= BOARD_PIXEL_SIZE ||
+            adjustedY < 0 || adjustedY >= BOARD_PIXEL_SIZE) {
+            return null;
+        }
+        
+        // Convert to grid coordinates
+        const gridX = Math.floor(adjustedX / CELL_SIZE);
+        const gridY = Math.floor(adjustedY / CELL_SIZE);
+        
+        // Validate grid bounds
+        if (gridX < 0 || gridX >= BOARD_CELL_COUNT ||
+            gridY < 0 || gridY >= BOARD_CELL_COUNT) {
+            return null;
+        }
+        
+        return { x: gridX, y: gridY };
+    }
+
+    /**
      * Handles mouse move event - updates drag position and validates placement
      * @param event - Mouse event
      */
     private handleMouseMove(event: MouseEvent): void {
-        if (!this.dragState.isDragging || !this.dragState.shape) return;
-
         const { x: canvasX, y: canvasY } = this.getCanvasCoordinates(event);
+        
+        // Handle hover when not dragging (only on desktop, not mobile)
+        if (!this.dragState.isDragging) {
+            const gridCell = this.canvasToGridCell(canvasX, canvasY);
+            this.hoverPosition = gridCell;
+            return;
+        }
+        
+        if (!this.dragState.shape) return;
 
         // Update anchor point to follow the cursor exactly (normalized canvas coordinates)
         this.dragState.anchorPoint = { x: canvasX, y: canvasY };
@@ -577,15 +620,20 @@ export class InputHandler {
             y: visualPieceCenter.y - shapeHeight / 2
         };
         
+        // Calculate grid position from visual piece TOP-LEFT first
+        // This allows us to check if placement is valid before checking queue area
+        let gridPos = this.calculateGridPosition(visualPieceTopLeft, this.dragState.shape);
+        
         // Check if VISUAL PIECE (not mouse) is over the queue area - if so, restore to queue
-        // The visual piece top-left Y position determines if it's over the board or queue
-        const visualPieceOverQueueArea = visualPieceTopLeft.y >= BOARD_OFFSET_Y + BOARD_PIXEL_SIZE;
+        // Use a small threshold to allow placement near the board edge (for bottom row placement)
+        // Only consider it "over queue area" if it's clearly in the queue (10px threshold)
+        const queueAreaThreshold = 10; // Allow 10px overlap to support bottom row placement
+        const visualPieceOverQueueArea = visualPieceTopLeft.y >= BOARD_OFFSET_Y + BOARD_PIXEL_SIZE + queueAreaThreshold;
         
         // Only allow placement on the playing surface (board area with valid empty cells)
+        // If we have a valid grid position, allow placement even if visual piece is slightly over queue area
         let shapePlaced = false;
-        if (!visualPieceOverQueueArea) {
-            // Calculate grid position from visual piece TOP-LEFT
-            let gridPos = this.calculateGridPosition(visualPieceTopLeft, this.dragState.shape);
+        if (!visualPieceOverQueueArea || gridPos !== null) {
             let isValid = false;
             
             // Validate visual piece position if it exists
@@ -645,6 +693,9 @@ export class InputHandler {
      * Handles mouse leave event - cancels drag operation
      */
     private handleMouseLeave(): void {
+        // Clear hover when mouse leaves canvas
+        this.hoverPosition = null;
+        
         // If shape wasn't placed, restore it to queue
         if (this.dragState.shape && this.originalQueueIndex >= 0) {
             this.onRestoreToQueue(this.originalQueueIndex, this.dragState.shape);
@@ -674,6 +725,11 @@ export class InputHandler {
     private handleTouchStart(event: TouchEvent): void {
         event.preventDefault(); // Prevent scrolling
         if (event.touches.length === 0) return;
+        
+        // Don't allow dragging if game is over
+        if (this.isGameOver) {
+            return;
+        }
         
         const { x: canvasX, y: canvasY } = this.getCanvasCoordinates(event);
 
@@ -909,15 +965,20 @@ export class InputHandler {
             console.log(`  shape offsets: minX=${minX}, minY=${minY}`);
         }
 
+        // Calculate grid position from visual piece TOP-LEFT first
+        // This allows us to check if placement is valid before checking queue area
+        let gridPos = this.calculateGridPosition(visualPieceTopLeft, this.dragState.shape);
+        
         // Check if VISUAL PIECE (not mouse) is over the queue area - if so, restore to queue
-        // The visual piece top-left Y position determines if it's over the board or queue
-        const visualPieceOverQueueArea = visualPieceTopLeft.y >= BOARD_OFFSET_Y + BOARD_PIXEL_SIZE;
+        // Use a small threshold to allow placement near the board edge (for bottom row placement)
+        // Only consider it "over queue area" if it's clearly in the queue (10px threshold)
+        const queueAreaThreshold = 10; // Allow 10px overlap to support bottom row placement
+        const visualPieceOverQueueArea = visualPieceTopLeft.y >= BOARD_OFFSET_Y + BOARD_PIXEL_SIZE + queueAreaThreshold;
         
         // Only allow placement on the playing surface (board area with valid empty cells)
+        // If we have a valid grid position, allow placement even if visual piece is slightly over queue area
         let shapePlaced = false;
-        if (!visualPieceOverQueueArea) {
-            // Calculate grid position from visual piece TOP-LEFT
-            let gridPos = this.calculateGridPosition(visualPieceTopLeft, this.dragState.shape);
+        if (!visualPieceOverQueueArea || gridPos !== null) {
             let isValid = false;
             
             if (this.settings.devMode) {
@@ -1049,6 +1110,32 @@ export class InputHandler {
      */
     getDragState(): DragState {
         return this.dragState;
+    }
+    
+    /**
+     * Gets the current hover position (grid cell being hovered, or null if not hovering)
+     * Only valid when not dragging and mouse is over a block on the board
+     * @returns Grid position {x, y} or null
+     */
+    getHoverPosition(): Position | null {
+        return this.hoverPosition;
+    }
+    
+    /**
+     * Updates the game over state to prevent dragging during game over
+     * @param gameOver - Whether the game is over
+     */
+    updateGameOverState(gameOver: boolean): void {
+        this.isGameOver = gameOver;
+        // If game over is triggered while dragging, cancel the drag
+        if (gameOver && this.dragState.isDragging) {
+            if (this.dragState.shape && this.originalQueueIndex >= 0) {
+                this.onRestoreToQueue(this.originalQueueIndex, this.dragState.shape);
+            }
+            this.dragState.isDragging = false;
+            this.dragState.shape = null;
+            this.originalQueueIndex = -1;
+        }
     }
     
     /**

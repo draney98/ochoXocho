@@ -12,7 +12,7 @@ export const CANVAS_WIDTH = 600;
 export const BOARD_OFFSET_X = (CANVAS_WIDTH - BOARD_PIXEL_SIZE) / 2; // Center the board horizontally (30px)
 export const BOARD_OFFSET_Y = 20; // Vertical offset to add space below progress bar
 
-export const QUEUE_AREA_HEIGHT = 220;
+export const QUEUE_AREA_HEIGHT = 200;
 export const CANVAS_HEIGHT = BOARD_OFFSET_Y + BOARD_PIXEL_SIZE + QUEUE_AREA_HEIGHT;
 
 export const QUEUE_AREA_PADDING = 10; // Reduced buffer

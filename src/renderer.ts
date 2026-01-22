@@ -429,7 +429,7 @@ export class Renderer {
      * @param animatingCells - Array of cells currently animating out
      * @param totalShapesPlaced - Total shapes placed (for calculating current point values)
      */
-    drawBoard(board: Board, placedBlocks: PlacedBlock[], animatingCells: AnimatingCell[] = [], totalShapesPlaced: number = 0): void {
+    drawBoard(board: Board, placedBlocks: PlacedBlock[], animatingCells: AnimatingCell[] = [], totalShapesPlaced: number = 0, hoverPosition: Position | null = null): void {
         // Draw placed blocks, but skip cells that are animating or have been cleared from the board
         for (const block of placedBlocks) {
             const cellsToDraw = block.shape.filter(cell => {
@@ -483,6 +483,75 @@ export class Renderer {
         // Draw animating cells with animation effect
         for (const cell of animatingCells) {
             this.drawAnimatingCell(cell);
+        }
+        
+        // Draw hover point value if showPointValues is false and hovering over a block
+        if (!this.settings.showPointValues && hoverPosition !== null) {
+            // Find which block contains the hovered cell
+            for (const block of placedBlocks) {
+                for (const cell of block.shape) {
+                    const absoluteX = block.position.x + cell.x;
+                    const absoluteY = block.position.y + cell.y;
+                    
+                    // Check if this cell matches the hover position
+                    if (absoluteX === hoverPosition.x && absoluteY === hoverPosition.y) {
+                        // Skip if cell is animating or cleared
+                        if (animatingCells.some(ac => ac.x === absoluteX && ac.y === absoluteY)) {
+                            continue;
+                        }
+                        if (board.isCellEmpty({ x: absoluteX, y: absoluteY })) {
+                            continue;
+                        }
+                        
+                        // Calculate current point value for this block
+                        const placementLevel = Math.floor(block.totalShapesPlacedAtPlacement / GAMEPLAY_CONFIG.shapesPerValueTier);
+                        const currentLevel = Math.floor(totalShapesPlaced / GAMEPLAY_CONFIG.shapesPerValueTier);
+                        const levelIncrements = currentLevel - placementLevel;
+                        const displayValue = block.pointValue + block.lineClearBonuses + (levelIncrements * GAMEPLAY_CONFIG.pointsPerTier);
+                        
+                        // Calculate canvas position for this cell
+                        const x = BOARD_OFFSET_X + absoluteX * CELL_SIZE;
+                        const y = BOARD_OFFSET_Y + absoluteY * CELL_SIZE;
+                        
+                        // Apply darkness to color
+                        let darkenedColor = this.darkenColor(block.color, block.darkness);
+                        
+                        // Apply pulsing effect if value > pulse threshold
+                        const shouldPulse = displayValue > GAMEPLAY_CONFIG.pulseThreshold;
+                        if (shouldPulse) {
+                            const pulseCycleMs = this.settings.mode === 'hard' 
+                                ? ANIMATION_CONFIG.pulseCycleMs / 2 
+                                : ANIMATION_CONFIG.pulseCycleMs;
+                            const pulseProgress = (Date.now() % pulseCycleMs) / pulseCycleMs;
+                            const pulseBrightness = 0.7 + (Math.sin(pulseProgress * Math.PI * 2) * 0.15 + 0.15);
+                            const pulsedDarkness = block.darkness + (1.0 - block.darkness) * (pulseBrightness - 0.7) / 0.3;
+                            darkenedColor = this.darkenColor(block.color, pulsedDarkness);
+                        }
+                        
+                        // Draw point value on hovered cell
+                        const blockX = x + 2;
+                        const blockY = y + 2;
+                        const blockSize = CELL_SIZE - 4;
+                        const centerX = Math.round(blockX + blockSize / 2);
+                        const centerY = Math.round(blockY + blockSize / 2);
+                        
+                        const textColor = this.getContrastTextColor(darkenedColor);
+                        this.ctx.fillStyle = textColor;
+                        const fontSize = Math.floor(CELL_SIZE * 0.65);
+                        this.ctx.font = `bold ${fontSize}px ${SYSTEM_FONT_STACK}`;
+                        this.ctx.textAlign = 'center';
+                        this.ctx.textBaseline = 'middle';
+                        this.ctx.fillText(
+                            displayValue.toString(),
+                            centerX,
+                            centerY
+                        );
+                        
+                        // Only draw for the first matching cell (in case of overlap)
+                        return;
+                    }
+                }
+            }
         }
     }
 
@@ -2024,7 +2093,8 @@ export class Renderer {
         comboAnimationProgress: number = 0,
         comboAnimationType: 'continue' | 'break' | null = null,
         comboAnimationMultiplier: number = 0,
-        comboCount: number = 0
+        comboCount: number = 0,
+        hoverPosition: Position | null = null
     ): void {
         // Update current level for highlight color calculation
         this.currentLevel = level;
@@ -2032,7 +2102,7 @@ export class Renderer {
         if (this.settings.showGrid) {
             this.drawGrid();
         }
-        this.drawBoard(board, placedBlocks, animatingCells, totalShapesPlaced);
+        this.drawBoard(board, placedBlocks, animatingCells, totalShapesPlaced, hoverPosition);
         
         // Draw preview line highlights if dragging and position would clear lines
         if (dragState.isDragging && dragState.isValidPosition && dragState.previewLinesCleared) {

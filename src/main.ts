@@ -882,6 +882,21 @@ function setupResponsiveUI(canvas: HTMLCanvasElement): void {
         const highScores = document.getElementById('high-scores');
         const buttonContainer = document.getElementById('button-container');
         
+        // Only update if canvas has a valid width (prevents setting width to 0)
+        // If invalid, clear inline styles to let CSS handle it
+        if (canvasWidth <= 0) {
+            if (topStats) {
+                topStats.style.width = '';
+            }
+            if (highScores) {
+                highScores.style.width = '';
+            }
+            if (buttonContainer) {
+                buttonContainer.style.width = '';
+            }
+            return;
+        }
+        
         if (topStats) {
             topStats.style.width = `${canvasWidth}px`;
         }

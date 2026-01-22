@@ -279,6 +279,7 @@ export class Game {
             this.comboAnimationType = null;
             this.comboAnimationMultiplier = 0;
         }
+        const hoverPosition = this.inputHandler.getHoverPosition();
         this.renderer.render(
             this.board,
             this.state.placedBlocks,
@@ -299,7 +300,8 @@ export class Game {
             comboAnimationProgress,
             this.comboAnimationType,
             this.comboAnimationMultiplier,
-            this.comboCount
+            this.comboCount,
+            hoverPosition
         );
     }
 
@@ -463,6 +465,7 @@ export class Game {
                 // Wait for next turn when new shapes will be generated
                 this.state.gameOver = false;
                 this.gameOverStartTime = null;
+                this.inputHandler.updateGameOverState(false);
             }
         }
 
@@ -1298,6 +1301,7 @@ export class Game {
                 // Wait for next turn when new shapes will be generated
                 this.state.gameOver = false;
                 this.gameOverStartTime = null;
+                this.inputHandler.updateGameOverState(false);
             }
         }
 
@@ -1456,9 +1460,10 @@ export class Game {
         this.gameOverPopComplete = false;
         this.gameOverStartTime = null; // Will be set after popping completes
         
-        // Clear the queue so player cannot drag pieces during game over
-        this.state.queue = [null, null, null];
+        // Keep the queue visible even during game over (pieces will still be shown but dragging will be prevented)
+        // The input handler and placeShapeDirectly will prevent actual placement during game over
         this.inputHandler.updateQueue(this.state.queue);
+        this.inputHandler.updateGameOverState(true);
         
         this.soundManager.playGameOver();
         // Start the bonus animation after a brief delay
@@ -1526,6 +1531,7 @@ export class Game {
             linesCleared: 0,
         };
         this.shapesPlacedThisTurn = 0;
+        this.inputHandler.updateGameOverState(false);
         this.animatingCells = [];
         this.animatingShapes = [];
         this.gameOverStartTime = null;
