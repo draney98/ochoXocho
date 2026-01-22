@@ -34,12 +34,13 @@ export class Renderer {
     private finalScore: number = 0; // Final score when game ended
     private finalLinesCleared: number = 0; // Final lines cleared when game ended
     private finalLevel: number = 1; // Final level when game ended
+    private finalMode: 'easy' | 'hard' = 'easy'; // Final mode when game ended
+    private finalLeaderboardRank: number | null = null; // Final leaderboard rank when game ended (if top 10)
     private currentLevel: number = 1;
     private blockIconImage: HTMLImageElement | null = null;
     private blockIconLoaded: boolean = false;
-    private copyLinkBounds: { x: number; y: number; width: number; height: number } | null = null; // Bounds for copy link click detection
-    private copyLinkText: string = 'Copy'; // Current text for copy link (emoji removed)
-    private smoothedDragPosition: { x: number; y: number } | null = null; // Smoothed position for interpolated snapping
+    private copyLinkBounds: { x: number; y: number; width: number; height: number } | null = null; // Bounds for share link click detection
+    private copyLinkText: string = 'Share'; // Current text for share link
     private devicePixelRatio: number = 1; // Device pixel ratio for high-DPI display support
 
     constructor(canvas: HTMLCanvasElement, settings: GameSettings) {
@@ -80,13 +81,13 @@ export class Renderer {
             const x = (e.clientX - rect.left) * (CANVAS_WIDTH / rect.width);
             const y = (e.clientY - rect.top) * (CANVAS_HEIGHT / rect.height);
             if (this.isPointInCopyLink(x, y)) {
-                this.copyEmojiBoard().then(success => {
+                this.shareEmojiBoard().then(success => {
                     if (success) {
-                        // Change text to "copied" for visual feedback
-                        this.copyLinkText = '✓ Copied';
-                        // Reset back to "Copy" after 2 seconds
+                        // Change text to "shared" for visual feedback
+                        this.copyLinkText = '✓ Shared';
+                        // Reset back to "Share" after 2 seconds
                         setTimeout(() => {
-                            this.copyLinkText = 'Copy';
+                            this.copyLinkText = 'Share';
                         }, 2000);
                     }
                 });
@@ -102,13 +103,13 @@ export class Renderer {
             const y = (touch.clientY - rect.top) * (CANVAS_HEIGHT / rect.height);
             if (this.isPointInCopyLink(x, y)) {
                 e.preventDefault();
-                this.copyEmojiBoard().then(success => {
+                this.shareEmojiBoard().then(success => {
                     if (success) {
-                        // Change text to "copied" for visual feedback
-                        this.copyLinkText = '✓ Copied';
-                        // Reset back to "Copy" after 2 seconds
+                        // Change text to "shared" for visual feedback
+                        this.copyLinkText = '✓ Shared';
+                        // Reset back to "Share" after 2 seconds
                         setTimeout(() => {
-                            this.copyLinkText = 'Copy';
+                            this.copyLinkText = 'Share';
                         }, 2000);
                     }
                 });
@@ -234,8 +235,10 @@ export class Renderer {
         this.finalScore = 0;
         this.finalLinesCleared = 0;
         this.finalLevel = 1;
+        this.finalMode = 'easy';
+        this.finalLeaderboardRank = null;
         this.copyLinkBounds = null;
-        this.copyLinkText = 'Copy'; // Reset copy link text
+        this.copyLinkText = 'Share'; // Reset share link text
     }
 
     /**
@@ -349,10 +352,16 @@ export class Renderer {
             emojiString += '\n';
         }
 
-        // Add score, lines, and level
+        // Add score, lines, level, and mode
         emojiString += `\nScore: ${this.finalScore.toLocaleString()}\n`;
         emojiString += `Lines: ${this.finalLinesCleared.toLocaleString()}\n`;
-        emojiString += `Level: ${this.finalLevel}`;
+        emojiString += `Level: ${this.finalLevel}\n`;
+        emojiString += `Mode: ${this.finalMode.charAt(0).toUpperCase() + this.finalMode.slice(1)}`;
+        
+        // Add rank if in top 10
+        if (this.finalLeaderboardRank !== null && this.finalLeaderboardRank <= 10) {
+            emojiString += `\n🏆 Rank #${this.finalLeaderboardRank} on Leaderboard! 🏆`;
+        }
 
         return emojiString;
     }
@@ -385,6 +394,35 @@ export class Renderer {
                 return false;
             }
         }
+    }
+
+    /**
+     * Shares the emoji board representation using Web Share API on mobile, or clipboard on desktop
+     */
+    async shareEmojiBoard(): Promise<boolean> {
+        const emojiString = this.generateEmojiBoard();
+        if (!emojiString) return false;
+
+        // Check if Web Share API is available (typically on mobile)
+        if (navigator.share) {
+            try {
+                await navigator.share({
+                    text: emojiString
+                });
+                return true;
+            } catch (err) {
+                // User cancelled or share failed, fall back to clipboard
+                if ((err as Error).name !== 'AbortError') {
+                    console.warn('Share failed, falling back to clipboard:', err);
+                } else {
+                    // User cancelled, don't treat as error
+                    return false;
+                }
+            }
+        }
+
+        // Fallback to clipboard on desktop or if share fails
+        return this.copyEmojiBoard();
     }
 
     /**
@@ -1145,27 +1183,16 @@ export class Renderer {
      * The shape is visually offset upward so it appears above the cursor/finger
      * to prevent occlusion on mobile devices. Placement logic remains unchanged.
      * @param dragState - Current drag state
+     * @param smoothedPosition - Pre-smoothed visual position from DragController (optional for backward compat)
      */
-    drawDragPreview(dragState: DragState): void {
+    drawDragPreview(dragState: DragState, smoothedPosition?: { x: number; y: number }): void {
         if (!dragState.isDragging || !dragState.shape || !dragState.anchorPoint) {
-            // Reset smoothed position when not dragging
-            this.smoothedDragPosition = null;
             return;
         }
 
         const shapeIndex = getShapeIndex(dragState.shape);
         const color = getShapeColor(shapeIndex);
 
-        // Apply visual offset to lift piece above finger/cursor (prevents occlusion on mobile)
-        // Use projectedBoardPosition if available (for touch with reach mapping), otherwise anchorPoint
-        const basePosition = dragState.projectedBoardPosition || dragState.anchorPoint;
-        
-        // Calculate floating position (follows cursor with offset)
-        const floatingPosition = {
-            x: basePosition.x,
-            y: basePosition.y + DRAG_VISUAL_OFFSET_Y
-        };
-        
         // Calculate shape dimensions for centering
         const minX = Math.min(...dragState.shape.map(b => b.x));
         const minY = Math.min(...dragState.shape.map(b => b.y));
@@ -1174,33 +1201,19 @@ export class Renderer {
         const shapeWidth = (maxX - minX + 1) * CELL_SIZE;
         const shapeHeight = (maxY - minY + 1) * CELL_SIZE;
         
-        // Determine target position based on whether we're over the board
-        let targetPosition: { x: number; y: number };
-        if (dragState.hasBoardPosition) {
-            // Calculate grid-snapped position from mousePosition (grid coordinates)
-            const gridPixelX = BOARD_OFFSET_X + dragState.mousePosition.x * CELL_SIZE + shapeWidth / 2;
-            const gridPixelY = BOARD_OFFSET_Y + dragState.mousePosition.y * CELL_SIZE + shapeHeight / 2;
-            targetPosition = { x: gridPixelX, y: gridPixelY };
+        // Use pre-smoothed position from DragController if provided
+        // Otherwise fall back to calculating position for backward compatibility
+        let effectivePosition: { x: number; y: number };
+        if (smoothedPosition) {
+            effectivePosition = smoothedPosition;
         } else {
-            // Not over board - target is floating position
-            targetPosition = floatingPosition;
+            // Fallback: apply visual offset and use directly (no smoothing)
+            const basePosition = dragState.projectedBoardPosition || dragState.anchorPoint;
+            effectivePosition = {
+                x: basePosition.x,
+                y: basePosition.y + DRAG_VISUAL_OFFSET_Y
+            };
         }
-        
-        // Interpolated snapping: smoothly lerp toward target position
-        // This creates a "magnetic" feel when approaching grid cells
-        // Use dragSnapSmoothing from settings (0.1=smooth, 1.0=instant)
-        const lerpFactor = this.settings.dragSnapSmoothing ?? 0.5;
-        
-        if (this.smoothedDragPosition === null) {
-            // First frame of drag - initialize to current position
-            this.smoothedDragPosition = { x: targetPosition.x, y: targetPosition.y };
-        } else {
-            // Lerp toward target
-            this.smoothedDragPosition.x += (targetPosition.x - this.smoothedDragPosition.x) * lerpFactor;
-            this.smoothedDragPosition.y += (targetPosition.y - this.smoothedDragPosition.y) * lerpFactor;
-        }
-        
-        const effectivePosition = this.smoothedDragPosition;
 
         // Draw the visual copy at effectivePosition
         // The shape is drawn in pixel space, centered on the effectivePosition
@@ -1739,7 +1752,7 @@ export class Renderer {
      * @param progress - Animation progress from 0 to 1
      * @param placedBlocks - Final board state to render as 4x4 grid
      */
-    drawGameOver(progress: number = 1, placedBlocks: PlacedBlock[] = [], leaderboardRank: number | null = null): void {
+    drawGameOver(progress: number = 1, placedBlocks: PlacedBlock[] = [], leaderboardRank: number | null = null, leaderboardRanks: { today: number | null; week: number | null; ever: number | null; todayTotal: number; weekTotal: number; everTotal: number } | null = null, mode: 'easy' | 'hard' = 'easy'): void {
         // Animated overlay - fade in from 0 to 0.8 opacity (cover the entire playing surface)
         const overlayAlpha = 0.8 * progress;
         this.ctx.fillStyle = `rgba(0, 0, 0, ${overlayAlpha})`;
@@ -1791,7 +1804,7 @@ export class Renderer {
             currentY += lines.length * lineHeight + 25; // Space after emoji board
         }
 
-        // Draw score, lines, and level - 30% larger (18px * 1.3 = 23.4px, round to 23px)
+        // Draw score, lines, level, and mode - 30% larger (18px * 1.3 = 23.4px, round to 23px)
         // Use normal weight for informational stats text (better readability at larger sizes)
         // Snap currentY to integer for crisp text
         currentY = Math.round(currentY);
@@ -1801,27 +1814,49 @@ export class Renderer {
         this.ctx.fillStyle = '#fff';
         this.ctx.textAlign = 'center';
         this.ctx.textBaseline = 'top';
-        const statsText = `Score: ${this.finalScore.toLocaleString()}, Lines: ${this.finalLinesCleared}, Level: ${this.finalLevel}`;
+        const modeText = mode.charAt(0).toUpperCase() + mode.slice(1);
+        const statsText = `Score: ${this.finalScore.toLocaleString()}, Lines: ${this.finalLinesCleared}, Level: ${this.finalLevel}, Mode: ${modeText}`;
         this.ctx.fillText(statsText, centerX, currentY);
         this.ctx.restore();
         
         currentY += 40; // Space after stats
         
-        // Draw leaderboard rank (if in top 10) - before copy button
-        const hasLeaderboardRank = leaderboardRank !== null && leaderboardRank <= 10;
-        if (hasLeaderboardRank) {
+        // Draw leaderboard ranks - before share button
+        if (leaderboardRanks) {
             // Snap currentY to integer for crisp text
             currentY = Math.round(currentY);
             this.ctx.save();
             this.ctx.globalAlpha = textAlpha;
             this.ctx.font = `23px ${baseFont}`; // Same size as stats
-            this.ctx.fillStyle = '#FFD700';
             this.ctx.textAlign = 'center';
             this.ctx.textBaseline = 'top';
-            const rankText = `🏆 Rank #${leaderboardRank} on Leaderboard! 🏆`;
-            this.ctx.fillText(rankText, centerX, currentY);
+            
+            // Title
+            this.ctx.fillStyle = '#fff';
+            this.ctx.fillText('Leaderboard Rank:', centerX, currentY);
+            currentY += 30;
+            
+            // Today, Week, Ever ranks
+            const periods = [
+                { key: 'today' as const, label: 'Today', rank: leaderboardRanks.today, total: leaderboardRanks.todayTotal },
+                { key: 'week' as const, label: 'Week', rank: leaderboardRanks.week, total: leaderboardRanks.weekTotal },
+                { key: 'ever' as const, label: 'Ever', rank: leaderboardRanks.ever, total: leaderboardRanks.everTotal }
+            ];
+            
+            for (const period of periods) {
+                if (period.rank !== null) {
+                    const isTop10 = period.rank <= 10;
+                    const rankText = `${period.label}: ${period.rank} of ${period.total} players`;
+                    
+                    // Use gold for top 10, white otherwise
+                    this.ctx.fillStyle = isTop10 ? '#FFD700' : '#fff';
+                    this.ctx.fillText(rankText, centerX, currentY);
+                    currentY += 30;
+                }
+            }
+            
             this.ctx.restore();
-            currentY += 40; // Space after rank
+            currentY += 10; // Extra space after leaderboard
         }
 
         // Draw copy button at the bottom of the screen (styled like other buttons)
@@ -1857,13 +1892,20 @@ export class Renderer {
             this.ctx.fill();
             
             // Draw emoji and text
+            // Determine text color for best visibility (black or white)
+            const r = parseInt(accentColor.substring(1, 3), 16);
+            const g = parseInt(accentColor.substring(3, 5), 16);
+            const b = parseInt(accentColor.substring(5, 7), 16);
+            const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+            const buttonTextColor = brightness > 128 ? '#000000' : '#ffffff';
+            
             this.ctx.font = `bold 16px ${baseFont}`;
-            this.ctx.fillStyle = textColor;
+            this.ctx.fillStyle = buttonTextColor;
             this.ctx.textAlign = 'center';
             this.ctx.textBaseline = 'middle';
             const buttonCenterX = Math.round(buttonX + buttonWidth / 2);
             const buttonCenterY = Math.round(buttonY + buttonHeight / 2);
-            const buttonText = this.copyLinkText === 'Copy' ? '📋 Copy' : this.copyLinkText;
+            const buttonText = this.copyLinkText === 'Share' ? '📤 Share' : this.copyLinkText;
             this.ctx.fillText(buttonText, buttonCenterX, buttonCenterY);
             
             // Store bounds for click detection
@@ -2072,6 +2114,7 @@ export class Renderer {
      * @param totalShapesPlaced - Total shapes placed (for calculating current point values)
      * @param levelUpProgress - Animation progress for level up text (0 to 1, 0 = not showing)
      * @param level - Current game level (for calculating contrasting highlight color)
+     * @param smoothedDragPosition - Pre-smoothed drag position from DragController (optional)
      */
     render(
         board: Board,
@@ -2087,6 +2130,8 @@ export class Renderer {
         score: number = 0,
         linesCleared: number = 0,
         leaderboardRank: number | null = null,
+        leaderboardRanks: { today: number | null; week: number | null; ever: number | null; todayTotal: number; weekTotal: number; everTotal: number } | null = null,
+        mode: 'easy' | 'hard' = 'easy',
         animatingShapes: AnimatingShape[] = [],
         pointsAnimationProgress: number = 0,
         pointsAnimationValue: number = 0,
@@ -2094,7 +2139,8 @@ export class Renderer {
         comboAnimationType: 'continue' | 'break' | null = null,
         comboAnimationMultiplier: number = 0,
         comboCount: number = 0,
-        hoverPosition: Position | null = null
+        hoverPosition: Position | null = null,
+        smoothedDragPosition?: { x: number; y: number }
     ): void {
         // Update current level for highlight color calculation
         this.currentLevel = level;
@@ -2116,7 +2162,7 @@ export class Renderer {
         
         this.drawQueue(queue);
         if (this.settings.showGhostPreview) {
-            this.drawDragPreview(dragState);
+            this.drawDragPreview(dragState, smoothedDragPosition);
         }
 
         // Store final board state when game over just starts (before pop animations begin)
@@ -2130,14 +2176,16 @@ export class Renderer {
             }));
             // Store the total shapes placed for point value calculation
             this.finalTotalShapesPlaced = totalShapesPlaced;
-            // Store score and lines cleared for copy functionality
+            // Store score and lines cleared for share functionality
             this.finalScore = score;
             this.finalLinesCleared = linesCleared;
             this.finalLevel = level;
+            this.finalMode = mode;
+            this.finalLeaderboardRank = leaderboardRank;
         }
 
         if (gameOver) {
-            this.drawGameOver(gameOverProgress, placedBlocks, leaderboardRank ?? null);
+            this.drawGameOver(gameOverProgress, placedBlocks, leaderboardRank ?? null, leaderboardRanks ?? null, mode);
         }
         
         if (levelUpProgress > 0 && levelUpProgress < 1) {
@@ -2306,7 +2354,6 @@ export class Renderer {
         
         // Determine text and color based on type
         let comboText: string;
-        let comboTextLine2: string | null = null; // Second line for "COMBO BROKEN"
         let textColor: string;
         let shadowColor: string;
         
@@ -2315,8 +2362,8 @@ export class Renderer {
             textColor = '#4ade80'; // Green for continue
             shadowColor = '#16a34a';
         } else {
-            comboText = `COMBO`;
-            comboTextLine2 = `BROKEN`;
+            // Use newline to wrap "COMBO" and "BROKEN" on separate lines
+            comboText = `COMBO\nBROKEN`;
             textColor = '#fbbf24'; // Amber for break
             shadowColor = '#f59e0b';
         }
@@ -2344,66 +2391,23 @@ export class Renderer {
         this.ctx.shadowOffsetX = 0;
         this.ctx.shadowOffsetY = 0;
         
-        // Calculate line spacing for two-line text
-        const lineSpacing = scaledFontSize * 0.4; // 40% of font size between lines (increased for better separation)
-        const firstLineY = comboTextLine2 ? centerY - lineSpacing / 2 : centerY;
-        const secondLineY = comboTextLine2 ? centerY + lineSpacing / 2 : centerY;
+        // Split text by newline and draw each line
+        const lines = comboText.split('\n');
+        const lineSpacing = scaledFontSize * 1.2; // Line height (120% of font size)
+        const totalHeight = (lines.length - 1) * lineSpacing;
+        const startY = centerY - totalHeight / 2;
         
-        // For "COMBO BROKEN", delay the second line so it appears after "COMBO" is fully visible
-        // This prevents overlap during the scale animation
-        let secondLineAlpha = alpha;
-        let secondLineScale = scale;
-        if (comboTextLine2) {
-            // Delay "BROKEN" to appear only after "COMBO" has completely finished its scale animation
-            // "COMBO" scale animation completes at progress 0.3, so wait until 0.4 to start showing "BROKEN"
-            // This ensures "COMBO" is fully stable and visible before "BROKEN" starts appearing
-            if (progress <= 0.4) {
-                secondLineAlpha = 0; // Hide "BROKEN" completely until "COMBO" is fully stable
-                secondLineScale = 0.3;
-            } else {
-                // "BROKEN" fades in after "COMBO" is stable and visible
-                const secondLineProgress = (progress - 0.4) / 0.6; // Remap progress from 0.4-1.0 to 0-1.0
-                if (secondLineProgress <= 0.25) {
-                    // Fade in "BROKEN" smoothly (first 25% of remaining time)
-                    secondLineAlpha = (secondLineProgress / 0.25) * alpha;
-                    secondLineScale = 0.3 + (secondLineProgress / 0.25) * (scale - 0.3);
-                } else {
-                    // "BROKEN" follows same fade out as "COMBO" after it's fully visible
-                    secondLineAlpha = alpha;
-                    secondLineScale = scale;
-                }
-            }
-        }
-        
-        // Draw text outline (stroke) for first line
-        this.ctx.strokeStyle = '#000';
-        this.ctx.lineWidth = 3;
-        this.ctx.strokeText(comboText, centerX, firstLineY);
-        
-        // Draw main text with shadow for first line
-        this.ctx.fillText(comboText, centerX, firstLineY);
-        
-        // Draw second line if it exists (with delayed animation)
-        if (comboTextLine2 && secondLineAlpha > 0) {
-            this.ctx.save();
-            this.ctx.globalAlpha = secondLineAlpha;
-            const secondLineFontSize = Math.round(baseFontSize * secondLineScale);
-            this.ctx.font = `bold ${secondLineFontSize}px ${SYSTEM_FONT_STACK}`;
+        // Draw each line with the same animation (no delays)
+        for (let i = 0; i < lines.length; i++) {
+            const lineY = startY + (i * lineSpacing);
             
-            // Recalculate glow for second line
-            const secondLineGlowRadius = secondLineFontSize * 0.6;
-            this.ctx.filter = `blur(10px)`;
-            this.ctx.globalAlpha = secondLineAlpha * 0.4;
-            this.ctx.fillStyle = shadowColor;
-            this.ctx.beginPath();
-            this.ctx.arc(centerX, secondLineY, secondLineGlowRadius * 1.5, 0, Math.PI * 2);
-            this.ctx.fill();
-            this.ctx.filter = 'none';
+            // Draw text outline (stroke) for this line
+            this.ctx.strokeStyle = '#000';
+            this.ctx.lineWidth = 3;
+            this.ctx.strokeText(lines[i], centerX, lineY);
             
-            this.ctx.globalAlpha = secondLineAlpha;
-            this.ctx.strokeText(comboTextLine2, centerX, secondLineY);
-            this.ctx.fillText(comboTextLine2, centerX, secondLineY);
-            this.ctx.restore();
+            // Draw main text with shadow for this line
+            this.ctx.fillText(lines[i], centerX, lineY);
         }
         
         this.ctx.shadowBlur = 0;

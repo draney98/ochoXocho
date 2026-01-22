@@ -160,3 +160,15 @@ export const RESPONSIVE_CANVAS_LIMITS = {
     verticalPadding: 50, // Minimal padding to maximize canvas space
     horizontalPadding: 10, // Reduced for mobile
 } as const;
+
+/**
+ * Drag controller configuration
+ * Physics-based drag smoothing with spring dynamics and snap blending
+ */
+export const DRAG_CONTROLLER_CONFIG = {
+    responsiveTimeMs: 30,      // How quickly piece follows finger (lower = more responsive)
+    snapRadiusCells: 0.4,      // Distance in cells for snap influence
+    snapStrengthAtRest: 0.5,   // Snap strength when finger is still (reduced for less jumpiness)
+    settleDurationMs: 100,     // Release settle animation duration
+    velocityDampening: 0.01,   // Velocity dampening for snap reduction (higher = more dampening when moving)
+} as const;

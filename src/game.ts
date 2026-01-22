@@ -13,10 +13,11 @@ import { SoundManager } from './sound';
 import { recordScore } from './highScores';
 import { getDeviceId } from './deviceId';
 import { getLeaderboard } from './api';
-import { GAMEPLAY_CONFIG, ANIMATION_CONFIG, GAME_OVER_CONFIG } from './config';
+import { GAMEPLAY_CONFIG, ANIMATION_CONFIG, GAME_OVER_CONFIG, DRAG_CONTROLLER_CONFIG } from './config';
 import { getUIColorForLevel, getButtonColors } from './colorConfig';
 import { findOptimalPlacementOrder } from './boardUtils';
-import { getQueueItemRect, BOARD_CELL_COUNT } from './constants';
+import { getQueueItemRect, BOARD_CELL_COUNT, DRAG_VISUAL_OFFSET_Y, CELL_SIZE, BOARD_OFFSET_X, BOARD_OFFSET_Y } from './constants';
+import { DragController } from './dragController';
 
 /**
  * Game class orchestrates all game systems and manages the game loop
@@ -44,6 +45,14 @@ export class Game {
     private gameOverPopComplete: boolean = false;
     private levelUpStartTime: number | null = null;
     private leaderboardRank: number | null = null; // Rank on leaderboard (if top 10)
+    private leaderboardRanks: { today: number | null; week: number | null; ever: number | null; todayTotal: number; weekTotal: number; everTotal: number } = {
+        today: null,
+        week: null,
+        ever: null,
+        todayTotal: 0,
+        weekTotal: 0,
+        everTotal: 0
+    }; // Ranks and total players for each period
     private readonly LEVEL_UP_ANIMATION_DURATION = ANIMATION_CONFIG.levelUpMs;
     private pointsAnimationStartTime: number | null = null;
     private pointsAnimationValue: number = 0;
@@ -58,6 +67,8 @@ export class Game {
     private settings: GameSettings;
     private soundManager: SoundManager;
     private isNewHighScore: boolean = false; // Track if current score is a new high score
+    private dragController: DragController; // Physics-based drag smoothing
+    private smoothedDragPosition: { x: number; y: number } | null = null; // Cached smoothed position for rendering
     // Animation index is based on level, not cycling
 
     constructor(canvas: HTMLCanvasElement, initialSettings: GameSettings) {
@@ -100,6 +111,8 @@ export class Game {
         this.levelProgressElement = null; // No longer using single progress bar element
         this.emojiBoardElement = null; // Emoji board is now only shown on game over screen
         this.soundManager = new SoundManager(initialSettings.soundEnabled);
+        // Initialize DragController with config
+        this.dragController = new DragController(DRAG_CONTROLLER_CONFIG);
         // Initialize color scheme for starting level
         updateColorScheme(this.state.level);
         this.updateScoreDisplay();
@@ -217,6 +230,9 @@ export class Game {
             return progress < 1; // Keep animating shapes
         });
         
+        // Update DragController - physics-based drag smoothing
+        this.updateDragController();
+        
         // Don't update game logic if game is over (freeze the board)
         if (this.state.gameOver) {
             // Still update game over animation
@@ -233,6 +249,54 @@ export class Game {
         // Reset game over animation start time if not game over
         if (!this.state.gameOver) {
             this.gameOverStartTime = null;
+        }
+    }
+
+    /**
+     * Updates the DragController with current drag state
+     * Handles drag start/end and calculates smoothed position for rendering
+     */
+    private updateDragController(): void {
+        const dragState = this.inputHandler.getDragState();
+        
+        if (dragState.isDragging && dragState.shape && dragState.anchorPoint) {
+            // Calculate shape dimensions for centering
+            const minX = Math.min(...dragState.shape.map(b => b.x));
+            const minY = Math.min(...dragState.shape.map(b => b.y));
+            const maxX = Math.max(...dragState.shape.map(b => b.x));
+            const maxY = Math.max(...dragState.shape.map(b => b.y));
+            const shapeWidth = (maxX - minX + 1) * CELL_SIZE;
+            const shapeHeight = (maxY - minY + 1) * CELL_SIZE;
+            
+            // Calculate raw target position (floating position with visual offset)
+            const basePosition = dragState.projectedBoardPosition || dragState.anchorPoint;
+            const rawTarget = {
+                x: basePosition.x,
+                y: basePosition.y + DRAG_VISUAL_OFFSET_Y
+            };
+            
+            // Start drag if not already active
+            if (!this.dragController.isActive()) {
+                this.dragController.beginDrag(rawTarget);
+            }
+            
+            // Calculate snap target: grid-snapped position of shape's visual center
+            // This is where the shape's CENTER would be when placed at mousePosition
+            let snapTarget: { x: number; y: number } | null = null;
+            if (dragState.hasBoardPosition) {
+                const gridPixelX = BOARD_OFFSET_X + dragState.mousePosition.x * CELL_SIZE + shapeWidth / 2;
+                const gridPixelY = BOARD_OFFSET_Y + dragState.mousePosition.y * CELL_SIZE + shapeHeight / 2;
+                snapTarget = { x: gridPixelX, y: gridPixelY };
+            }
+            
+            // Update drag controller - passes raw target and snap target
+            this.smoothedDragPosition = this.dragController.update(rawTarget, snapTarget);
+        } else {
+            // Drag ended - clear smoothed position and end drag
+            if (this.dragController.isActive()) {
+                this.dragController.endDrag();
+            }
+            this.smoothedDragPosition = null;
         }
     }
 
@@ -294,6 +358,8 @@ export class Game {
             this.state.score,
             this.state.linesCleared,
             this.leaderboardRank,
+            this.leaderboardRanks,
+            this.settings.mode,
             this.animatingShapes,
             pointsAnimationProgress,
             this.pointsAnimationValue,
@@ -301,7 +367,8 @@ export class Game {
             this.comboAnimationType,
             this.comboAnimationMultiplier,
             this.comboCount,
-            hoverPosition
+            hoverPosition,
+            this.smoothedDragPosition ?? undefined
         );
     }
 
@@ -581,19 +648,13 @@ export class Game {
         if (linesCleared === 0) {
             if (this.comboMultiplier > 1.0 && this.placementsSinceLastClear >= 3) {
                 // Combo broke on 3rd placement without line clear
-                // Apply multiplier to all blocks currently on the screen
-                console.log(`[COMBO] Combo broke on ${this.placementsSinceLastClear}th placement! Applying multiplier ${this.comboMultiplier.toFixed(3)}x to all blocks, then resetting to 1.000x`);
+                console.log(`[COMBO] Combo broke on ${this.placementsSinceLastClear}th placement! Resetting multiplier to 1.000x`);
                 
                 // Trigger combo break animation
                 this.comboAnimationStartTime = Date.now();
                 this.comboAnimationType = 'break';
                 this.comboAnimationMultiplier = this.comboMultiplier;
                 console.log(`[COMBO] Showing "COMBO BROKEN" message`);
-                
-                // Apply multiplier to all blocks currently on the screen
-                this.state.placedBlocks.forEach(block => {
-                    block.pointValue = Math.round(block.pointValue * this.comboMultiplier);
-                });
                 
                 // Reset multiplier, placement counter, and combo count
                 this.comboMultiplier = 1.0;
@@ -884,6 +945,13 @@ export class Game {
                     this.comboMultiplier += linesCleared * 0.025;
                     this.comboCount++; // Increment combo count
                     console.log(`[COMBO] Combo continues! Count: x${this.comboCount}, Multiplier: ${previousMultiplier.toFixed(3)}x → ${this.comboMultiplier.toFixed(3)}x (${linesCleared} line${linesCleared > 1 ? 's' : ''} cleared)`);
+                    
+                    // Apply multiplier increment to all blocks currently on the screen
+                    // Multiply by the ratio of new to old multiplier to avoid compounding
+                    const multiplierIncrement = this.comboMultiplier / previousMultiplier;
+                    this.state.placedBlocks.forEach(block => {
+                        block.pointValue = Math.round(block.pointValue * multiplierIncrement);
+                    });
                     
                     // Trigger combo continue animation (only when continuing, not starting)
                     this.comboAnimationStartTime = Date.now();
@@ -1407,7 +1475,10 @@ export class Game {
             // Record the final score for the current mode
             const deviceId = getDeviceId();
             const playerName = (this.settings.playerName || '   ').substring(0, 3).toUpperCase().padEnd(3, ' ');
-            recordScore(this.state.score, this.settings.mode, playerName, deviceId).then((rank) => {
+            const finalScore = this.state.score;
+            const mode = this.settings.mode;
+            
+            recordScore(finalScore, mode, playerName, deviceId).then((rank) => {
                 // Store rank if in top 10
                 if (rank !== null && rank <= 10) {
                     this.leaderboardRank = rank;
@@ -1418,6 +1489,53 @@ export class Game {
                 console.warn('Failed to record score:', error);
                 this.leaderboardRank = null;
             });
+            
+            // Fetch leaderboard ranks for today/week/ever
+            Promise.all([
+                getLeaderboard(mode, 'today', 1000),
+                getLeaderboard(mode, 'week', 1000),
+                getLeaderboard(mode, 'ever', 1000)
+            ]).then(([todayEntries, weekEntries, everEntries]) => {
+                // Find player's rank in each period by comparing scores
+                // Leaderboard is sorted descending (highest score first)
+                const findRank = (entries: typeof todayEntries, score: number): { rank: number | null; total: number } => {
+                    const total = entries.length;
+                    // Count how many entries have a higher score than the player
+                    let higherCount = 0;
+                    for (const entry of entries) {
+                        if (entry.score > score) {
+                            higherCount++;
+                        }
+                    }
+                    // Rank is the number of players with higher scores + 1
+                    const rank = higherCount + 1;
+                    return { rank, total };
+                };
+                
+                const todayRank = findRank(todayEntries, finalScore);
+                const weekRank = findRank(weekEntries, finalScore);
+                const everRank = findRank(everEntries, finalScore);
+                
+                this.leaderboardRanks = {
+                    today: todayRank.rank,
+                    week: weekRank.rank,
+                    ever: everRank.rank,
+                    todayTotal: todayRank.total,
+                    weekTotal: weekRank.total,
+                    everTotal: everRank.total
+                };
+            }).catch((error) => {
+                console.warn('Failed to fetch leaderboard ranks:', error);
+                this.leaderboardRanks = {
+                    today: null,
+                    week: null,
+                    ever: null,
+                    todayTotal: 0,
+                    weekTotal: 0,
+                    everTotal: 0
+                };
+            });
+            
             this.board.reset();
             this.state.placedBlocks = [];
             this.animatingCells = [];
