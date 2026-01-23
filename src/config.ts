@@ -127,6 +127,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
     controlZoneMaxScale: 4, // Maximum scaling at bottom of control zone (max 8)
     controlZoneMinScale: 2, // Minimum scaling at top of control zone (max 4)
     dragSnapSmoothing: 0.5, // Smoothing factor for drag snapping (0.1=smooth, 1.0=instant)
+    showGameOverDialog: true, // Show dialog before game over screen
 };
 
 /**

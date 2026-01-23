@@ -17,7 +17,7 @@ import { loadSettings, saveSettings } from './main';
 import { GAMEPLAY_CONFIG, ANIMATION_CONFIG, GAME_OVER_CONFIG, DRAG_CONTROLLER_CONFIG } from './config';
 import { getUIColorForLevel, getButtonColors } from './colorConfig';
 import { findOptimalPlacementOrder } from './boardUtils';
-import { getQueueItemRect, BOARD_CELL_COUNT, DRAG_VISUAL_OFFSET_Y, CELL_SIZE, BOARD_OFFSET_X, BOARD_OFFSET_Y } from './constants';
+import { getQueueItemRect, BOARD_CELL_COUNT, DRAG_VISUAL_OFFSET_Y, CELL_SIZE, BOARD_OFFSET_X, BOARD_OFFSET_Y, CANVAS_WIDTH, BOARD_AREA_HEIGHT } from './constants';
 import { DragController } from './dragController';
 
 /**
@@ -290,9 +290,21 @@ export class Game {
             
             // Calculate raw target position (floating position with visual offset)
             const basePosition = dragState.projectedBoardPosition || dragState.anchorPoint;
-            const rawTarget = {
+            let rawTarget = {
                 x: basePosition.x,
                 y: basePosition.y + DRAG_VISUAL_OFFSET_Y
+            };
+            
+            // Clamp visual piece center to keep it within the board area (playing surface)
+            // This prevents the piece from visually going off-screen, but doesn't return it to queue
+            const minVisualX = shapeWidth / 2;
+            const maxVisualX = CANVAS_WIDTH - shapeWidth / 2;
+            const minVisualY = shapeHeight / 2;
+            const maxVisualY = BOARD_AREA_HEIGHT - shapeHeight / 2;
+            
+            rawTarget = {
+                x: Math.max(minVisualX, Math.min(maxVisualX, rawTarget.x)),
+                y: Math.max(minVisualY, Math.min(maxVisualY, rawTarget.y))
             };
             
             // Start drag if not already active
@@ -309,7 +321,7 @@ export class Game {
                 snapTarget = { x: gridPixelX, y: gridPixelY };
             }
             
-            // Update drag controller - passes raw target and snap target
+            // Update drag controller - passes clamped raw target and snap target
             this.smoothedDragPosition = this.dragController.update(rawTarget, snapTarget);
         } else {
             // Drag ended - clear smoothed position and end drag
@@ -631,7 +643,12 @@ export class Game {
                 const key = `${absoluteX},${absoluteY}`;
                 const removedByExplosion = cellsToRemove?.has(key) ?? false;
                 
-                // Keep cell if it's NOT in any cleared row AND NOT in any cleared column AND NOT removed by explosion
+                // If block is explosion-only, ignore line clears - only remove by explosion
+                if (block.explosionOnly) {
+                    return !removedByExplosion;
+                }
+                
+                // Normal blocks: remove if in cleared row/column OR removed by explosion
                 return !inClearedRow && !inClearedColumn && !removedByExplosion;
             });
             
@@ -685,6 +702,106 @@ export class Game {
     }
 
     /**
+     * Gets rows that are full and can be cleared (excludes rows with explosion-only blocks)
+     * @returns Array of row indices that are full and clearable
+     */
+    private getClearableFullRows(): number[] {
+        const BOARD_SIZE = BOARD_CELL_COUNT;
+        const fullRows: number[] = [];
+        
+        // Build a map of cell positions to explosion-only status
+        const cellExplosionOnlyMap = new Map<string, boolean>();
+        for (const block of this.state.placedBlocks) {
+            const isExplosionOnly = block.explosionOnly ?? false;
+            for (const cell of block.shape) {
+                const absoluteX = block.position.x + cell.x;
+                const absoluteY = block.position.y + cell.y;
+                if (absoluteX >= 0 && absoluteX < BOARD_SIZE && absoluteY >= 0 && absoluteY < BOARD_SIZE) {
+                    const key = `${absoluteX},${absoluteY}`;
+                    cellExplosionOnlyMap.set(key, isExplosionOnly);
+                }
+            }
+        }
+        
+        for (let row = 0; row < BOARD_SIZE; row++) {
+            let isFull = true;
+            let hasExplosionOnly = false;
+            
+            for (let x = 0; x < BOARD_SIZE; x++) {
+                // Check if cell is filled
+                if (this.board.isCellEmpty({ x, y: row })) {
+                    isFull = false;
+                    break;
+                }
+                
+                // Check if cell is explosion-only
+                const key = `${x},${row}`;
+                if (cellExplosionOnlyMap.get(key)) {
+                    hasExplosionOnly = true;
+                    break;
+                }
+            }
+            
+            // Row is clearable only if full AND has no explosion-only blocks
+            if (isFull && !hasExplosionOnly) {
+                fullRows.push(row);
+            }
+        }
+        
+        return fullRows;
+    }
+
+    /**
+     * Gets columns that are full and can be cleared (excludes columns with explosion-only blocks)
+     * @returns Array of column indices that are full and clearable
+     */
+    private getClearableFullColumns(): number[] {
+        const BOARD_SIZE = BOARD_CELL_COUNT;
+        const fullColumns: number[] = [];
+        
+        // Build a map of cell positions to explosion-only status
+        const cellExplosionOnlyMap = new Map<string, boolean>();
+        for (const block of this.state.placedBlocks) {
+            const isExplosionOnly = block.explosionOnly ?? false;
+            for (const cell of block.shape) {
+                const absoluteX = block.position.x + cell.x;
+                const absoluteY = block.position.y + cell.y;
+                if (absoluteX >= 0 && absoluteX < BOARD_SIZE && absoluteY >= 0 && absoluteY < BOARD_SIZE) {
+                    const key = `${absoluteX},${absoluteY}`;
+                    cellExplosionOnlyMap.set(key, isExplosionOnly);
+                }
+            }
+        }
+        
+        for (let col = 0; col < BOARD_SIZE; col++) {
+            let isFull = true;
+            let hasExplosionOnly = false;
+            
+            for (let y = 0; y < BOARD_SIZE; y++) {
+                // Check if cell is filled
+                if (this.board.isCellEmpty({ x: col, y })) {
+                    isFull = false;
+                    break;
+                }
+                
+                // Check if cell is explosion-only
+                const key = `${col},${y}`;
+                if (cellExplosionOnlyMap.get(key)) {
+                    hasExplosionOnly = true;
+                    break;
+                }
+            }
+            
+            // Column is clearable only if full AND has no explosion-only blocks
+            if (isFull && !hasExplosionOnly) {
+                fullColumns.push(col);
+            }
+        }
+        
+        return fullColumns;
+    }
+
+    /**
      * Checks for full rows and columns, clears them, and awards points.
      * Handles explosion chain reactions, combo multipliers, and mode-specific behavior.
      * 
@@ -696,7 +813,8 @@ export class Game {
      * Explosion System:
      * - Blocks with point value > 60 explode when cleared, removing adjacent cells in chain reactions
      * - In easy mode: explosion-removed blocks count toward score
-     * - In hard mode: exploding blocks are replaced by un-explodable gray monominos
+     * - In hard mode: exploding blocks are replaced by explosion-only gray monominos
+     *   that can only be cleared by explosions, not by normal line clears
      * 
      * Does NOT clear if game is over - board should remain visible.
      * 
@@ -708,8 +826,9 @@ export class Game {
             return;
         }
         
-        const fullRows = this.board.getFullRows();
-        const fullColumns = this.board.getFullColumns();
+        // Use custom methods that exclude rows/columns with explosion-only blocks
+        const fullRows = this.getClearableFullRows();
+        const fullColumns = this.getClearableFullColumns();
         const linesCleared = fullRows.length + fullColumns.length;
 
         // Check if combo broke (3rd placement WITHOUT a line clear)
@@ -738,20 +857,20 @@ export class Game {
         const shouldAnimate = this.settings.enableAnimations;
 
         // Build a map of cell positions to blocks for explosion chain reaction
-        const cellToBlockMap = new Map<string, { block: PlacedBlock; cell: Position; pointValue: number; isUnexplodable: boolean }>();
+        const cellToBlockMap = new Map<string, { block: PlacedBlock; cell: Position; pointValue: number; explosionOnly: boolean }>();
         for (const block of this.state.placedBlocks) {
             // Calculate current point value for this block
             const placementLevel = Math.floor(block.totalShapesPlacedAtPlacement / GAMEPLAY_CONFIG.shapesPerValueTier);
             const currentLevel = Math.floor(this.state.totalShapesPlaced / GAMEPLAY_CONFIG.shapesPerValueTier);
             const levelIncrements = currentLevel - placementLevel;
             const currentPointValue = block.pointValue + block.lineClearBonuses + (levelIncrements * GAMEPLAY_CONFIG.pointsPerTier);
-            const isUnexplodable = block.isUnexplodable ?? false;
+            const explosionOnly = block.explosionOnly ?? false;
             
             for (const cell of block.shape) {
                 const absoluteX = block.position.x + cell.x;
                 const absoluteY = block.position.y + cell.y;
                 const key = `${absoluteX},${absoluteY}`;
-                cellToBlockMap.set(key, { block, cell, pointValue: currentPointValue, isUnexplodable });
+                cellToBlockMap.set(key, { block, cell, pointValue: currentPointValue, explosionOnly });
             }
         }
 
@@ -800,8 +919,8 @@ export class Game {
             const cellData = cellToBlockMap.get(key);
             if (!cellData) return; // Cell doesn't exist
             
-            // Check if this cell should explode (must not be un-explodable and must exceed threshold)
-            if (!cellData.isUnexplodable && cellData.pointValue > GAMEPLAY_CONFIG.explosionThreshold) {
+            // Check if this cell should explode (must not be explosion-only and must exceed threshold)
+            if (!cellData.explosionOnly && cellData.pointValue > GAMEPLAY_CONFIG.explosionThreshold) {
                 // Mark this cell for removal
                 cellsToRemove.add(key);
                 
@@ -812,9 +931,9 @@ export class Game {
                     // Mark adjacent cell for removal
                     cellsToRemove.add(adjKey);
                     
-                    // Recursively check if adjacent cell also explodes (must not be un-explodable)
+                    // Recursively check if adjacent cell also explodes (must not be explosion-only)
                     const adjCellData = cellToBlockMap.get(adjKey);
-                    if (adjCellData && !adjCellData.isUnexplodable && adjCellData.pointValue > GAMEPLAY_CONFIG.explosionThreshold) {
+                    if (adjCellData && !adjCellData.explosionOnly && adjCellData.pointValue > GAMEPLAY_CONFIG.explosionThreshold) {
                         processExplosion(adj.x, adj.y);
                     }
                 }
@@ -835,9 +954,9 @@ export class Game {
                 const inClearedColumn = fullColumns.includes(absoluteX);
                 
                 // If this cell is in a cleared row/column and should explode, trigger chain reaction
-                // Skip un-explodable blocks
-                const isUnexplodable = block.isUnexplodable ?? false;
-                if ((inClearedRow || inClearedColumn) && !isUnexplodable && currentPointValue > GAMEPLAY_CONFIG.explosionThreshold) {
+                // Skip explosion-only blocks
+                const explosionOnly = block.explosionOnly ?? false;
+                if ((inClearedRow || inClearedColumn) && !explosionOnly && currentPointValue > GAMEPLAY_CONFIG.explosionThreshold) {
                     // Play explosion sound when first explosion is triggered (only once per explosion sequence)
                     if (!explosionSoundPlayed) {
                         this.soundManager.playExplosion();
@@ -911,7 +1030,7 @@ export class Game {
 
         const boardCleared = this.willBoardBeCleared(fullRows, fullColumns);
         
-        // Track explosion-removed cells for scoring (easy mode) and creating un-explodable blocks (hard mode)
+        // Track explosion-removed cells for scoring (easy mode) and creating explosion-only blocks (hard mode)
         const explosionRemovedCells = new Set<string>();
         
         // Handle explosion-removed cells based on mode
@@ -926,7 +1045,7 @@ export class Game {
                     explosionRemovedCells.add(key);
                     
                     if (this.settings.mode === 'hard') {
-                        // In hard mode, create an un-explodable block (pointValue 0) in place of the exploding block
+                        // In hard mode, create an explosion-only block (pointValue 0) in place of the exploding block
                         // Find the original block that was at this position
                         for (const block of this.state.placedBlocks) {
                             for (const cell of block.shape) {
@@ -940,21 +1059,22 @@ export class Game {
                                     const currentPointValue = block.pointValue + block.lineClearBonuses + (levelIncrements * GAMEPLAY_CONFIG.pointsPerTier);
                                     
                                     if (currentPointValue > GAMEPLAY_CONFIG.explosionThreshold) {
-                                        // Create a new un-explodable block (monomino with pointValue 0)
-                                        const unExplodableBlock: PlacedBlock = {
+                                        // Create a new explosion-only block (monomino with pointValue 0)
+                                        // These blocks can only be cleared by explosions, not by normal line clears
+                                        const explosionOnlyBlock: PlacedBlock = {
                                             shape: [{ x: 0, y: 0 }], // Monomino
                                             position: { x, y },
-                                            color: '#808080', // Gray color for un-explodable blocks
+                                            color: '#808080', // Gray color for explosion-only blocks
                                             pointValue: 0, // Cannot explode (pointValue 0)
                                             lineClearBonuses: 0,
                                             totalShapesPlacedAtPlacement: this.state.totalShapesPlaced,
-                                            shapeIndex: -1, // Special index for un-explodable blocks
+                                            shapeIndex: -1, // Special index for explosion-only blocks
                                             darkness: 1.0,
-                                            isUnexplodable: true, // Mark as un-explodable
+                                            explosionOnly: true, // Can only be cleared by explosions
                                         };
-                                        this.state.placedBlocks.push(unExplodableBlock);
+                                        this.state.placedBlocks.push(explosionOnlyBlock);
                                         // Place it on the board
-                                        this.board.placeShape(unExplodableBlock.shape, unExplodableBlock.position);
+                                        this.board.placeShape(explosionOnlyBlock.shape, explosionOnlyBlock.position);
                                         break;
                                     }
                                 }
@@ -1469,6 +1589,11 @@ export class Game {
         }> = [];
 
         for (const block of this.state.placedBlocks) {
+            // Skip explosion-only blocks - they don't contribute to score
+            if (block.explosionOnly) {
+                continue;
+            }
+            
             // Calculate point value for game over bonus: base value + line clear bonuses + increments since placement
             const placementLevel = Math.floor(block.totalShapesPlacedAtPlacement / GAMEPLAY_CONFIG.shapesPerValueTier);
             const currentLevel = Math.floor(this.state.totalShapesPlaced / GAMEPLAY_CONFIG.shapesPerValueTier);
@@ -1628,12 +1753,66 @@ export class Game {
 
     /**
      * Transitions the game into the game-over state with audio/visual feedback.
+     * If showGameOverDialog is enabled, shows a dialog first before proceeding.
      */
     private triggerGameOver(): void {
         if (this.state.gameOver) {
             return;
         }
 
+        // If dialog is enabled, show it first
+        if (this.settings.showGameOverDialog) {
+            this.showGameOverDialog();
+        } else {
+            // Proceed directly with game over
+            this.proceedWithGameOver();
+        }
+    }
+
+    /**
+     * Shows the game over dialog and waits for user to press OK
+     */
+    private showGameOverDialog(): void {
+        const dialog = document.getElementById('game-over-dialog');
+        const backdrop = document.getElementById('game-over-dialog-backdrop');
+        
+        if (dialog && backdrop) {
+            dialog.setAttribute('aria-hidden', 'false');
+            backdrop.setAttribute('aria-hidden', 'false');
+            dialog.style.display = 'block';
+            backdrop.style.display = 'block';
+            
+            // Focus the OK button for accessibility
+            const okButton = document.getElementById('game-over-dialog-ok');
+            if (okButton) {
+                okButton.focus();
+            }
+        }
+    }
+
+    /**
+     * Hides the game over dialog
+     */
+    private hideGameOverDialog(): void {
+        const dialog = document.getElementById('game-over-dialog');
+        const backdrop = document.getElementById('game-over-dialog-backdrop');
+        
+        if (dialog && backdrop) {
+            dialog.setAttribute('aria-hidden', 'true');
+            backdrop.setAttribute('aria-hidden', 'true');
+            dialog.style.display = 'none';
+            backdrop.style.display = 'none';
+        }
+    }
+
+    /**
+     * Proceeds with the actual game over sequence (after dialog is dismissed)
+     * Public method so it can be called from main.ts when OK button is clicked
+     */
+    public proceedWithGameOver(): void {
+        // Hide the dialog first
+        this.hideGameOverDialog();
+        
         this.state.gameOver = true;
         this.gameOverPopComplete = false;
         this.gameOverStartTime = null; // Will be set after popping completes

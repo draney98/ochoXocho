@@ -475,6 +475,7 @@ export class InputHandler {
         if (!this.dragState.shape) return;
 
         // Update anchor point to follow the cursor exactly (normalized canvas coordinates)
+        // Don't clamp anchor - allow it to go anywhere
         this.dragState.anchorPoint = { x: canvasX, y: canvasY };
         
         // For mouse, projected position is same as cursor (no reach mapping)
@@ -482,12 +483,12 @@ export class InputHandler {
         this.dragState.projectedBoardPosition = projectedPos;
         
         // Calculate visual piece CENTER position (above the cursor)
-        const visualPieceCenter = {
+        let visualPieceCenter = {
             x: projectedPos.x,
             y: projectedPos.y + DRAG_VISUAL_OFFSET_Y
         };
         
-        // Compute TOP-LEFT corner of the visual piece (matching renderer's centering)
+        // Compute shape dimensions
         const minX = Math.min(...this.dragState.shape.map(b => b.x));
         const minY = Math.min(...this.dragState.shape.map(b => b.y));
         const maxX = Math.max(...this.dragState.shape.map(b => b.x));
@@ -495,6 +496,19 @@ export class InputHandler {
         const shapeWidth = (maxX - minX + 1) * CELL_SIZE;
         const shapeHeight = (maxY - minY + 1) * CELL_SIZE;
         
+        // Clamp visual piece center to keep it within the board area (playing surface)
+        // This prevents the piece from visually going off-screen, but doesn't return it to queue
+        const minVisualX = shapeWidth / 2;
+        const maxVisualX = CANVAS_WIDTH - shapeWidth / 2;
+        const minVisualY = shapeHeight / 2;
+        const maxVisualY = BOARD_AREA_HEIGHT - shapeHeight / 2;
+        
+        visualPieceCenter = {
+            x: Math.max(minVisualX, Math.min(maxVisualX, visualPieceCenter.x)),
+            y: Math.max(minVisualY, Math.min(maxVisualY, visualPieceCenter.y))
+        };
+        
+        // Compute TOP-LEFT corner of the visual piece (matching renderer's centering)
         const visualPieceTopLeft = {
             x: visualPieceCenter.x - shapeWidth / 2,
             y: visualPieceCenter.y - shapeHeight / 2
@@ -608,6 +622,8 @@ export class InputHandler {
 
         // Update anchor to final position (normalized canvas coordinates)
         const { x: canvasX, y: canvasY } = this.getCanvasCoordinates(event);
+        
+        // Don't clamp anchor - allow it to go anywhere
         this.dragState.anchorPoint = { x: canvasX, y: canvasY };
 
         // For mouse, projected position is same as cursor (no reach mapping)
@@ -615,18 +631,30 @@ export class InputHandler {
         this.dragState.projectedBoardPosition = projectedPos;
         
         // Calculate visual piece CENTER position (above the cursor)
-        const visualPieceCenter = {
+        let visualPieceCenter = {
             x: projectedPos.x,
             y: projectedPos.y + DRAG_VISUAL_OFFSET_Y
         };
         
-        // Compute TOP-LEFT corner of the visual piece (matching renderer's centering)
+        // Compute shape dimensions
         const minX = Math.min(...this.dragState.shape.map(b => b.x));
         const minY = Math.min(...this.dragState.shape.map(b => b.y));
         const maxX = Math.max(...this.dragState.shape.map(b => b.x));
         const maxY = Math.max(...this.dragState.shape.map(b => b.y));
         const shapeWidth = (maxX - minX + 1) * CELL_SIZE;
         const shapeHeight = (maxY - minY + 1) * CELL_SIZE;
+        
+        // Clamp visual piece center to keep it within the board area (playing surface)
+        // This prevents the piece from visually going off-screen, but doesn't return it to queue
+        const minVisualX = shapeWidth / 2;
+        const maxVisualX = CANVAS_WIDTH - shapeWidth / 2;
+        const minVisualY = shapeHeight / 2;
+        const maxVisualY = BOARD_AREA_HEIGHT - shapeHeight / 2;
+        
+        visualPieceCenter = {
+            x: Math.max(minVisualX, Math.min(maxVisualX, visualPieceCenter.x)),
+            y: Math.max(minVisualY, Math.min(maxVisualY, visualPieceCenter.y))
+        };
         
         const visualPieceTopLeft = {
             x: visualPieceCenter.x - shapeWidth / 2,
@@ -637,11 +665,21 @@ export class InputHandler {
         // This allows us to check if placement is valid before checking queue area
         let gridPos = this.calculateGridPosition(visualPieceTopLeft, this.dragState.shape);
         
+        // Check if dropped outside the playing surface (board area)
+        // Return to queue if visual piece center is outside board area
+        const droppedOutsideBoard = visualPieceCenter.y > BOARD_AREA_HEIGHT || 
+                                     visualPieceCenter.x < 0 || 
+                                     visualPieceCenter.x > CANVAS_WIDTH;
+        
         // Check if VISUAL PIECE (not mouse) is over the queue area - if so, restore to queue
         // Use a small threshold to allow placement near the board edge (for bottom row placement)
         // Only consider it "over queue area" if it's clearly in the queue (10px threshold)
         const queueAreaThreshold = 10; // Allow 10px overlap to support bottom row placement
         const visualPieceOverQueueArea = visualPieceTopLeft.y >= BOARD_AREA_HEIGHT + queueAreaThreshold;
+        
+        // Check if there's an outline (ghost preview) - if not, return to queue
+        // Outline is shown when hasBoardPosition is true AND isValidPosition is true
+        const hasOutline = this.dragState.hasBoardPosition && this.dragState.isValidPosition;
         
         // Only allow placement on the playing surface (board area with valid empty cells)
         // If we have a valid grid position, allow placement even if visual piece is slightly over queue area
@@ -663,15 +701,19 @@ export class InputHandler {
                     isValid = canPlaceShape(this.board, this.dragState.shape, gridPos);
                 }
             }
-                
-            if (gridPos && isValid) {
+            
+            // Only place if we have an outline (hasBoardPosition and isValidPosition)
+            // This ensures the user can see where the piece will be placed
+            if (gridPos && isValid && hasOutline) {
                 // Pass -1 as shapeIndex since shape was already removed from queue
                 this.onPlaceShape(-1, gridPos);
                 shapePlaced = true;
             } else {
                 if (this.settings.devMode) {
                     console.log(`  ✗ Placement REJECTED`);
-                    if (gridPos) {
+                    if (!hasOutline) {
+                        console.log(`    no outline visible (hasBoardPosition=${this.dragState.hasBoardPosition}, isValidPosition=${this.dragState.isValidPosition})`);
+                    } else if (gridPos) {
                         console.log(`    canPlaceShape returned false`);
                     } else {
                         console.log(`    no valid grid position found`);
@@ -791,6 +833,7 @@ export class InputHandler {
         const { x: canvasX, y: canvasY } = this.getCanvasCoordinates(event);
 
         // Update anchor point to follow the finger exactly (no offset)
+        // Don't clamp anchor - allow it to go anywhere
         this.dragState.anchorPoint = { x: canvasX, y: canvasY };
         
         // Calculate projected board position using reach mapping
@@ -802,19 +845,30 @@ export class InputHandler {
         
         // Calculate visual piece CENTER position (above the finger)
         // This is where the CENTER of the piece appears (same as renderer)
-        const visualPieceCenter = {
+        let visualPieceCenter = {
             x: projectedPos.x,
             y: projectedPos.y + DRAG_VISUAL_OFFSET_Y
         };
         
-        // The renderer centers the piece by translating by -shapeWidth/2, -shapeHeight/2
-        // We need to compute the TOP-LEFT corner of the visual piece for grid calculation
+        // Compute shape dimensions
         const minX = Math.min(...this.dragState.shape.map(b => b.x));
         const minY = Math.min(...this.dragState.shape.map(b => b.y));
         const maxX = Math.max(...this.dragState.shape.map(b => b.x));
         const maxY = Math.max(...this.dragState.shape.map(b => b.y));
         const shapeWidth = (maxX - minX + 1) * CELL_SIZE;
         const shapeHeight = (maxY - minY + 1) * CELL_SIZE;
+        
+        // Clamp visual piece center to keep it within the board area (playing surface)
+        // This prevents the piece from visually going off-screen, but doesn't return it to queue
+        const minVisualX = shapeWidth / 2;
+        const maxVisualX = CANVAS_WIDTH - shapeWidth / 2;
+        const minVisualY = shapeHeight / 2;
+        const maxVisualY = BOARD_AREA_HEIGHT - shapeHeight / 2;
+        
+        visualPieceCenter = {
+            x: Math.max(minVisualX, Math.min(maxVisualX, visualPieceCenter.x)),
+            y: Math.max(minVisualY, Math.min(maxVisualY, visualPieceCenter.y))
+        };
         
         // Top-left corner of the visual piece (matching renderer's centering)
         const visualPieceTopLeft = {
@@ -950,6 +1004,8 @@ export class InputHandler {
 
         // Update anchor to final position (normalized canvas coordinates)
         const { x: canvasX, y: canvasY } = this.getCanvasCoordinates(event);
+        
+        // Don't clamp anchor - allow it to go anywhere
         this.dragState.anchorPoint = { x: canvasX, y: canvasY };
 
         // Calculate final projected position using reach mapping
@@ -958,20 +1014,32 @@ export class InputHandler {
             this.dragState.controlOrigin
         );
         this.dragState.projectedBoardPosition = projectedPos;
-
+        
         // Calculate visual piece CENTER position (above the finger)
-        const visualPieceCenter = {
+        let visualPieceCenter = {
             x: projectedPos.x,
             y: projectedPos.y + DRAG_VISUAL_OFFSET_Y
         };
         
-        // Compute TOP-LEFT corner of the visual piece (matching renderer's centering)
+        // Compute shape dimensions
         const minX = Math.min(...this.dragState.shape.map(b => b.x));
         const minY = Math.min(...this.dragState.shape.map(b => b.y));
         const maxX = Math.max(...this.dragState.shape.map(b => b.x));
         const maxY = Math.max(...this.dragState.shape.map(b => b.y));
         const shapeWidth = (maxX - minX + 1) * CELL_SIZE;
         const shapeHeight = (maxY - minY + 1) * CELL_SIZE;
+        
+        // Clamp visual piece center to keep it within the board area (playing surface)
+        // This prevents the piece from visually going off-screen, but doesn't return it to queue
+        const minVisualX = shapeWidth / 2;
+        const maxVisualX = CANVAS_WIDTH - shapeWidth / 2;
+        const minVisualY = shapeHeight / 2;
+        const maxVisualY = BOARD_AREA_HEIGHT - shapeHeight / 2;
+        
+        visualPieceCenter = {
+            x: Math.max(minVisualX, Math.min(maxVisualX, visualPieceCenter.x)),
+            y: Math.max(minVisualY, Math.min(maxVisualY, visualPieceCenter.y))
+        };
         
         const visualPieceTopLeft = {
             x: visualPieceCenter.x - shapeWidth / 2,
@@ -992,16 +1060,31 @@ export class InputHandler {
         // This allows us to check if placement is valid before checking queue area
         let gridPos = this.calculateGridPosition(visualPieceTopLeft, this.dragState.shape);
         
+        // Check if dropped outside the playing surface (board area)
+        // Return to queue if visual piece center is outside board area
+        const droppedOutsideBoard = visualPieceCenter.y > BOARD_AREA_HEIGHT || 
+                                     visualPieceCenter.x < 0 || 
+                                     visualPieceCenter.x > CANVAS_WIDTH;
+        
         // Check if VISUAL PIECE (not mouse) is over the queue area - if so, restore to queue
         // Use a small threshold to allow placement near the board edge (for bottom row placement)
         // Only consider it "over queue area" if it's clearly in the queue (10px threshold)
         const queueAreaThreshold = 10; // Allow 10px overlap to support bottom row placement
         const visualPieceOverQueueArea = visualPieceTopLeft.y >= BOARD_AREA_HEIGHT + queueAreaThreshold;
         
+        // Check if there's an outline (ghost preview) - if not, return to queue
+        // Outline is shown when hasBoardPosition is true AND isValidPosition is true
+        const hasOutline = this.dragState.hasBoardPosition && this.dragState.isValidPosition;
+        
         // Only allow placement on the playing surface (board area with valid empty cells)
-        // If we have a valid grid position, allow placement even if visual piece is slightly over queue area
+        // Return to queue if dropped outside the playing surface
         let shapePlaced = false;
-        if (!visualPieceOverQueueArea || gridPos !== null) {
+        if (droppedOutsideBoard) {
+            // Dropped outside playing surface - return to queue
+            if (this.settings.devMode) {
+                console.log(`  ✗ Placement REJECTED: dropped outside playing surface`);
+            }
+        } else if (!visualPieceOverQueueArea || gridPos !== null) {
             let isValid = false;
             
             if (this.settings.devMode) {
@@ -1029,17 +1112,20 @@ export class InputHandler {
                     isValid = canPlaceShape(this.board, this.dragState.shape, gridPos);
                 }
             }
-                
+            
+            // Only place if we have an outline (hasBoardPosition and isValidPosition)
+            // This ensures the user can see where the piece will be placed
             if (this.settings.devMode) {
                 if (gridPos) {
                     console.log(`  final gridPos: (${gridPos.x}, ${gridPos.y})`);
                     console.log(`  canPlaceShape result: ${isValid}`);
+                    console.log(`  hasOutline: ${hasOutline} (hasBoardPosition=${this.dragState.hasBoardPosition}, isValidPosition=${this.dragState.isValidPosition})`);
                 } else {
                     console.log(`  final gridPos: null (no valid placement found)`);
                 }
             }
                 
-            if (gridPos && isValid) {
+            if (gridPos && isValid && hasOutline) {
                     // Remove shape from queue now (was kept visible during drag)
                     if (this.originalQueueIndex >= 0) {
                         this.onRemoveFromQueue(this.originalQueueIndex);
@@ -1056,20 +1142,24 @@ export class InputHandler {
                     // Haptic feedback on valid placement
                     this.triggerHapticFeedback(20);
                 } else {
-                    if (this.settings.devMode && gridPos) {
-                        console.log(`  ✗ Placement REJECTED: canPlaceShape returned false`);
-                        // Log why it was rejected
-                        for (const block of this.dragState.shape) {
-                            const absX = gridPos.x + block.x;
-                            const absY = gridPos.y + block.y;
-                            if (absX < 0 || absX >= BOARD_CELL_COUNT || absY < 0 || absY >= BOARD_CELL_COUNT) {
-                                console.log(`    Block (${block.x},${block.y}) -> grid(${absX},${absY}): out of bounds`);
-                            } else if (!this.board.isCellEmpty({ x: absX, y: absY })) {
-                                console.log(`    Block (${block.x},${block.y}) -> grid(${absX},${absY}): occupied cell`);
+                    if (this.settings.devMode) {
+                        if (!hasOutline) {
+                            console.log(`  ✗ Placement REJECTED: no outline visible (hasBoardPosition=${this.dragState.hasBoardPosition}, isValidPosition=${this.dragState.isValidPosition})`);
+                        } else if (gridPos) {
+                            console.log(`  ✗ Placement REJECTED: canPlaceShape returned false`);
+                            // Log why it was rejected
+                            for (const block of this.dragState.shape) {
+                                const absX = gridPos.x + block.x;
+                                const absY = gridPos.y + block.y;
+                                if (absX < 0 || absX >= BOARD_CELL_COUNT || absY < 0 || absY >= BOARD_CELL_COUNT) {
+                                    console.log(`    Block (${block.x},${block.y}) -> grid(${absX},${absY}): out of bounds`);
+                                } else if (!this.board.isCellEmpty({ x: absX, y: absY })) {
+                                    console.log(`    Block (${block.x},${block.y}) -> grid(${absX},${absY}): occupied cell`);
+                                }
                             }
+                        } else {
+                            console.log(`  ✗ Placement REJECTED: no valid grid position found`);
                         }
-                    } else if (this.settings.devMode) {
-                        console.log(`  ✗ Placement REJECTED: no valid grid position found`);
                     }
                 }
         }

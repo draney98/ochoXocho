@@ -597,6 +597,77 @@ body[data-theme="midnight"] #auto-place-button {
     pointer-events: auto;
 }
 
+/* Game over dialog - appears over score area at top */
+#game-over-dialog-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.3);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--transition-normal);
+    z-index: 20;
+    display: none;
+}
+
+#game-over-dialog-backdrop[aria-hidden="false"] {
+    opacity: 1;
+    pointer-events: auto;
+    display: block;
+}
+
+#game-over-dialog {
+    position: fixed;
+    top: var(--space-6);
+    left: 50%;
+    transform: translate(-50%, 0) scale(0.9);
+    width: 280px;
+    max-width: calc(100% - var(--space-8));
+    background: var(--panel-bg);
+    border-radius: var(--radius-lg);
+    padding: var(--space-6);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    transition: transform var(--transition-normal), opacity var(--transition-normal);
+    z-index: 21;
+    color: var(--panel-text-color);
+    opacity: 0;
+    pointer-events: none;
+    text-align: center;
+    display: none;
+}
+
+#game-over-dialog[aria-hidden="false"] {
+    transform: translate(-50%, 0) scale(1);
+    opacity: 1;
+    pointer-events: auto;
+    display: block;
+}
+
+.game-over-dialog-content h2 {
+    font-size: var(--font-xl);
+    font-weight: bold;
+    color: var(--panel-text-color);
+    margin: 0 0 var(--space-4) 0;
+}
+
+#game-over-dialog-ok {
+    transition: background-color var(--transition-normal), transform var(--transition-fast);
+}
+
+#game-over-dialog-ok:hover {
+    background: var(--button-hover);
+    transform: translateY(-1px);
+}
+
+#game-over-dialog-ok:active {
+    background: var(--button-active);
+    transform: translateY(0);
+}
+
+#game-over-dialog-ok:focus-visible {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 2px;
+}
+
 .settings-header {
     display: flex;
     align-items: center;

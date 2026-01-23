@@ -144,6 +144,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // Set up player name prompt callback
     game.setPlayerNamePromptCallback(() => showPlayerNamePrompt());
+    // Wire up game over dialog OK button
+    const gameOverDialogOk = document.getElementById('game-over-dialog-ok');
+    if (gameOverDialogOk) {
+        gameOverDialogOk.addEventListener('click', () => {
+            game.proceedWithGameOver();
+        });
+    }
 
     const updateHighScoreMode = setupHighScores(game, settingsState);
     const { updateModeSelectState } = setupSettingsControls(game, settingsState, updateHighScoreMode);
@@ -200,6 +207,7 @@ function setupSettingsControls(game: Game, initialSettings: GameSettings, update
     const modeSelect = document.getElementById('setting-mode') as HTMLSelectElement | null;
     const pointValuesInput = document.getElementById('setting-show-point-values') as HTMLInputElement | null;
     const autoplaceInput = document.getElementById('setting-autoplace-enabled') as HTMLInputElement | null;
+    const showGameOverDialogInput = document.getElementById('setting-show-game-over-dialog') as HTMLInputElement | null;
     const playerNameInput = document.getElementById('setting-player-name') as HTMLInputElement | null;
     const devModeInput = document.getElementById('setting-dev-mode') as HTMLInputElement | null;
     const controlZoneHeightInput = document.getElementById('setting-control-zone-height') as HTMLInputElement | null;
@@ -310,6 +318,7 @@ function setupSettingsControls(game: Game, initialSettings: GameSettings, update
             controlZoneMaxScale: controlZoneMaxScaleInput ? Math.round(parseFloat(controlZoneMaxScaleInput.value)) : (initialSettings.controlZoneMaxScale ?? 4),
             controlZoneMinScale: controlZoneMinScaleInput ? Math.round(parseFloat(controlZoneMinScaleInput.value)) : (initialSettings.controlZoneMinScale ?? 2),
             dragSnapSmoothing: dragSnapSmoothingInput ? parseFloat(dragSnapSmoothingInput.value) : (initialSettings.dragSnapSmoothing ?? 0.5),
+            showGameOverDialog: showGameOverDialogInput?.checked ?? true,
         };
         game.updateSettings(updatedSettings);
         saveSettings(updatedSettings); // Save to localStorage

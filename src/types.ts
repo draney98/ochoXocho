@@ -29,7 +29,7 @@ export interface PlacedBlock {
     totalShapesPlacedAtPlacement: number;  // Total shapes placed when this block was placed (ensures point values never decrease)
     shapeIndex: number;  // Index of the shape in the shape pool (preserved even when shape cells are removed)
     darkness: number;    // Darkness multiplier (1.0 = full brightness, decreases by 0.1 each clear)
-    isUnexplodable?: boolean;  // In hard mode, blocks created from explosions cannot explode (pointValue stays at 0)
+    explosionOnly?: boolean;  // Can only be cleared by explosions, not by normal line clears. Also cannot explode (pointValue stays at 0)
 }
 
 /**
@@ -128,6 +128,7 @@ export interface GameSettings {
     controlZoneMaxScale: number; // Maximum scaling at bottom of control zone (1-8, default 4)
     controlZoneMinScale: number; // Minimum scaling at top of control zone (1-4, default 2)
     dragSnapSmoothing: number; // Smoothing factor for drag snapping (0.1=smooth, 1.0=instant, default 0.5)
+    showGameOverDialog: boolean; // Show dialog before game over screen (default true)
 }
 
 /**

@@ -37,8 +37,13 @@ export function calculateScore(
     const clearedColsSet = new Set(fullColumns);
     let total = 0;
 
-    // Sum up point values of all blocks in cleared lines/columns
+    // Sum up point values of all blocks in cleared lines/columns (exclude explosion-only blocks)
     for (const block of placedBlocks) {
+        // Skip explosion-only blocks - they don't contribute to score
+        if (block.explosionOnly) {
+            continue;
+        }
+        
         // Calculate current point value (base + line clear bonuses + level increments)
         const placementLevel = Math.floor(block.totalShapesPlacedAtPlacement / GAMEPLAY_CONFIG.shapesPerValueTier);
         const currentLevel = Math.floor(totalShapesPlaced / GAMEPLAY_CONFIG.shapesPerValueTier);
@@ -87,6 +92,10 @@ export function calculateScore(
             const cellData = cellToBlockMap.get(key);
             if (cellData) {
                 const block = cellData.block;
+                // Skip explosion-only blocks - they don't contribute to score
+                if (block.explosionOnly) {
+                    continue;
+                }
                 const placementLevel = Math.floor(block.totalShapesPlacedAtPlacement / GAMEPLAY_CONFIG.shapesPerValueTier);
                 const currentLevel = Math.floor(totalShapesPlaced / GAMEPLAY_CONFIG.shapesPerValueTier);
                 const levelIncrements = currentLevel - placementLevel;

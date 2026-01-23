@@ -498,8 +498,9 @@ export class Renderer {
                 // Apply darkness to color
                 let darkenedColor = this.darkenColor(block.color, block.darkness);
                 
-                // Apply pulsing effect if value > pulse threshold
-                const shouldPulse = displayValue > GAMEPLAY_CONFIG.pulseThreshold;
+                // Apply pulsing effect if value > pulse threshold (skip for explosion-only blocks)
+                const isExplosionOnly = block.explosionOnly ?? false;
+                const shouldPulse = !isExplosionOnly && displayValue > GAMEPLAY_CONFIG.pulseThreshold;
                 if (shouldPulse) {
                     // In hard mode, pulsing takes half the time
                     const pulseCycleMs = this.settings.mode === 'hard' 
@@ -515,7 +516,8 @@ export class Renderer {
                 }
                 
                 // Draw only the non-animating cells with incremented point values
-                this.drawShape(cellsToDraw, block.position, darkenedColor, false, displayValue);
+                // Pass explosionOnly flag so X can be drawn instead of point value
+                this.drawShape(cellsToDraw, block.position, darkenedColor, false, isExplosionOnly ? undefined : displayValue, isExplosionOnly);
             }
         }
         
@@ -555,8 +557,11 @@ export class Renderer {
                         // Apply darkness to color
                         let darkenedColor = this.darkenColor(block.color, block.darkness);
                         
-                        // Apply pulsing effect if value > pulse threshold
-                        const shouldPulse = displayValue > GAMEPLAY_CONFIG.pulseThreshold;
+                        // Check if this is an explosion-only block
+                        const isExplosionOnly = block.explosionOnly ?? false;
+                        
+                        // Apply pulsing effect if value > pulse threshold (skip for explosion-only blocks)
+                        const shouldPulse = !isExplosionOnly && displayValue > GAMEPLAY_CONFIG.pulseThreshold;
                         if (shouldPulse) {
                             const pulseCycleMs = this.settings.mode === 'hard' 
                                 ? ANIMATION_CONFIG.pulseCycleMs / 2 
@@ -567,24 +572,31 @@ export class Renderer {
                             darkenedColor = this.darkenColor(block.color, pulsedDarkness);
                         }
                         
-                        // Draw point value on hovered cell
+                        // Draw X for explosion-only blocks, or point value for normal blocks
                         const blockX = x + 2;
                         const blockY = y + 2;
                         const blockSize = CELL_SIZE - 4;
-                        const centerX = Math.round(blockX + blockSize / 2);
-                        const centerY = Math.round(blockY + blockSize / 2);
                         
-                        const textColor = this.getContrastTextColor(darkenedColor);
-                        this.ctx.fillStyle = textColor;
-                        const fontSize = Math.floor(CELL_SIZE * 0.65);
-                        this.ctx.font = `bold ${fontSize}px ${SYSTEM_FONT_STACK}`;
-                        this.ctx.textAlign = 'center';
-                        this.ctx.textBaseline = 'middle';
-                        this.ctx.fillText(
-                            displayValue.toString(),
-                            centerX,
-                            centerY
-                        );
+                        if (isExplosionOnly) {
+                            // Draw X on explosion-only blocks
+                            this.drawX(blockX, blockY, blockSize, darkenedColor);
+                        } else {
+                            // Draw point value on hovered cell
+                            const centerX = Math.round(blockX + blockSize / 2);
+                            const centerY = Math.round(blockY + blockSize / 2);
+                            
+                            const textColor = this.getContrastTextColor(darkenedColor);
+                            this.ctx.fillStyle = textColor;
+                            const fontSize = Math.floor(CELL_SIZE * 0.65);
+                            this.ctx.font = `bold ${fontSize}px ${SYSTEM_FONT_STACK}`;
+                            this.ctx.textAlign = 'center';
+                            this.ctx.textBaseline = 'middle';
+                            this.ctx.fillText(
+                                displayValue.toString(),
+                                centerX,
+                                centerY
+                            );
+                        }
                         
                         // Only draw for the first matching cell (in case of overlap)
                         return;
@@ -645,14 +657,51 @@ export class Renderer {
     }
 
     /**
+     * Draws an X mark on a block (for explosion-only blocks)
+     * @param blockX - X position of the block
+     * @param blockY - Y position of the block
+     * @param blockSize - Size of the block
+     * @param color - Background color of the block (for contrast calculation)
+     */
+    private drawX(blockX: number, blockY: number, blockSize: number, color: string): void {
+        this.ctx.save();
+        
+        // Calculate center and size of X
+        const centerX = Math.round(blockX + blockSize / 2);
+        const centerY = Math.round(blockY + blockSize / 2);
+        const xSize = blockSize * 0.5; // X size is 50% of block size
+        const lineWidth = Math.max(2, Math.floor(blockSize * 0.1)); // Line width scales with block size
+        
+        // Get contrasting color for X
+        const xColor = this.getContrastTextColor(color);
+        this.ctx.strokeStyle = xColor;
+        this.ctx.lineWidth = lineWidth;
+        this.ctx.lineCap = 'round';
+        this.ctx.lineJoin = 'round';
+        
+        // Draw X as two diagonal lines
+        this.ctx.beginPath();
+        // Top-left to bottom-right
+        this.ctx.moveTo(centerX - xSize / 2, centerY - xSize / 2);
+        this.ctx.lineTo(centerX + xSize / 2, centerY + xSize / 2);
+        // Top-right to bottom-left
+        this.ctx.moveTo(centerX + xSize / 2, centerY - xSize / 2);
+        this.ctx.lineTo(centerX - xSize / 2, centerY + xSize / 2);
+        this.ctx.stroke();
+        
+        this.ctx.restore();
+    }
+
+    /**
      * Draws a shape at a given position
      * @param shape - The shape to draw
      * @param position - Grid position where to draw
      * @param color - Color to use for the shape
      * @param isGhost - Whether to draw as a ghost (semi-transparent)
      * @param pointValue - Optional point value to display on each cell
+     * @param isExplosionOnly - Whether this is an explosion-only block (draws X instead of point value)
      */
-    drawShape(shape: Shape, position: Position, color: string, isGhost: boolean = false, pointValue?: number): void {
+    drawShape(shape: Shape, position: Position, color: string, isGhost: boolean = false, pointValue?: number, isExplosionOnly: boolean = false): void {
         if (isGhost) {
             // Ghost preview: draw with outline style for better visibility
             this.ctx.globalAlpha = 0.3; // More transparent than before
@@ -690,8 +739,11 @@ export class Renderer {
 
                 this.drawBlock(blockX, blockY, blockSize, color);
 
-                // Draw point value if provided and setting is enabled
-                if (pointValue !== undefined && this.settings.showPointValues) {
+                // Draw X for explosion-only blocks, or point value if provided and setting is enabled
+                if (isExplosionOnly) {
+                    // Draw X on explosion-only blocks
+                    this.drawX(blockX, blockY, blockSize, color);
+                } else if (pointValue !== undefined && this.settings.showPointValues) {
                     // Calculate center of the filled block (accounting for 2px padding)
                     const blockX = x + 2;
                     const blockY = y + 2;
