@@ -228,10 +228,7 @@ export class Game {
         this.animatingCells = this.animatingCells.filter(cell => {
             const elapsed = currentTime - cell.startTime;
             // Use different duration for explosions vs regular clears
-            // In hard mode, explosions take half the time
-            const baseExplosionMs = this.settings.mode === 'hard' 
-                ? ANIMATION_CONFIG.explosionMs / 2 
-                : ANIMATION_CONFIG.explosionMs;
+            const baseExplosionMs = ANIMATION_CONFIG.explosionMs;
             const duration = cell.type === 'explosion' 
                 ? baseExplosionMs 
                 : this.ANIMATION_DURATION;
@@ -1084,10 +1081,7 @@ export class Game {
         // Remove cells from shapes after animation completes
         if (shouldAnimate && this.animatingCells.length > 0) {
             // Wait for the longest animation to complete (explosions take longer than regular clears)
-            // In hard mode, explosions take half the time
-            const baseExplosionMs = this.settings.mode === 'hard' 
-                ? ANIMATION_CONFIG.explosionMs / 2 
-                : ANIMATION_CONFIG.explosionMs;
+            const baseExplosionMs = ANIMATION_CONFIG.explosionMs;
             const maxAnimationDuration = Math.max(this.ANIMATION_DURATION, baseExplosionMs);
             setTimeout(() => {
                 this.removeCellsFromShapes(fullRows, fullColumns, cellsToRemove);
