@@ -16,6 +16,7 @@ import {
     QUEUE_ITEM_HEIGHT,
     BOARD_OFFSET_X,
     BOARD_OFFSET_Y,
+    BOARD_AREA_HEIGHT,
     DRAG_VISUAL_OFFSET_Y,
     getQueueItemRect,
 } from './constants';
@@ -1012,11 +1013,28 @@ export class Renderer {
     }
 
     /**
+     * Draws a border line between the board and queue area
+     */
+    private drawBoardQueueBorder(): void {
+        const borderY = BOARD_AREA_HEIGHT;
+        const borderColor = this.getCSSVariable('--queue-shape-border') || '#333333';
+        
+        this.ctx.save();
+        this.ctx.strokeStyle = borderColor;
+        this.ctx.lineWidth = 2;
+        this.ctx.beginPath();
+        this.ctx.moveTo(0, borderY);
+        this.ctx.lineTo(CANVAS_WIDTH, borderY);
+        this.ctx.stroke();
+        this.ctx.restore();
+    }
+
+    /**
      * Draws the queue of upcoming shapes beneath the board
      * @param queue - Array of shapes in the queue
      */
     drawQueue(queue: (Shape | null)[]): void {
-        const queueAreaTop = BOARD_OFFSET_Y + BOARD_PIXEL_SIZE;
+        const queueAreaTop = BOARD_AREA_HEIGHT;
 
         // Get theme colors for queue area (re-read on each render to catch theme changes)
         const queueStripBg = this.getCSSVariable('--queue-strip-bg') || '#f5f5f5';
@@ -1238,6 +1256,79 @@ export class Renderer {
         
         this.ctx.globalAlpha = 1.0;
         this.ctx.restore();
+        
+        // Draw outline around destination cells when hovering over a valid drop location
+        // Only outline the outer perimeter of the shape (not internal lines)
+        if (dragState.hasBoardPosition && dragState.isValidPosition && dragState.mousePosition) {
+            this.ctx.save();
+            
+            // Determine outline color based on theme (white for dark themes, black for light themes)
+            const isDarkTheme = this.settings.theme === 'midnight';
+            const outlineColor = isDarkTheme ? '#ffffff' : '#000000';
+            this.ctx.strokeStyle = outlineColor;
+            this.ctx.lineWidth = 3;
+            this.ctx.globalAlpha = 0.9;
+            
+            // Create a set of all cell positions in the shape
+            const shapeCells = new Set<string>();
+            for (const block of dragState.shape) {
+                const gridX = dragState.mousePosition.x + block.x;
+                const gridY = dragState.mousePosition.y + block.y;
+                if (gridX >= 0 && gridX < BOARD_CELL_COUNT && gridY >= 0 && gridY < BOARD_CELL_COUNT) {
+                    shapeCells.add(`${gridX},${gridY}`);
+                }
+            }
+            
+            // Draw only the outer edges of the shape
+            // For each cell, check its 4 neighbors and draw edges that face empty cells or board boundaries
+            for (const block of dragState.shape) {
+                const gridX = dragState.mousePosition.x + block.x;
+                const gridY = dragState.mousePosition.y + block.y;
+                
+                // Only draw if within board bounds
+                if (gridX >= 0 && gridX < BOARD_CELL_COUNT && gridY >= 0 && gridY < BOARD_CELL_COUNT) {
+                    const cellX = BOARD_OFFSET_X + gridX * CELL_SIZE;
+                    const cellY = BOARD_OFFSET_Y + gridY * CELL_SIZE;
+                    
+                    // Check each of the 4 edges (top, right, bottom, left)
+                    // An edge is outer if the neighbor is not in the shape (or is outside board bounds)
+                    // Top edge
+                    const topNeighbor = `${gridX},${gridY - 1}`;
+                    if (!shapeCells.has(topNeighbor)) {
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(cellX, cellY);
+                        this.ctx.lineTo(cellX + CELL_SIZE, cellY);
+                        this.ctx.stroke();
+                    }
+                    // Right edge
+                    const rightNeighbor = `${gridX + 1},${gridY}`;
+                    if (!shapeCells.has(rightNeighbor)) {
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(cellX + CELL_SIZE, cellY);
+                        this.ctx.lineTo(cellX + CELL_SIZE, cellY + CELL_SIZE);
+                        this.ctx.stroke();
+                    }
+                    // Bottom edge
+                    const bottomNeighbor = `${gridX},${gridY + 1}`;
+                    if (!shapeCells.has(bottomNeighbor)) {
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(cellX + CELL_SIZE, cellY + CELL_SIZE);
+                        this.ctx.lineTo(cellX, cellY + CELL_SIZE);
+                        this.ctx.stroke();
+                    }
+                    // Left edge
+                    const leftNeighbor = `${gridX - 1},${gridY}`;
+                    if (!shapeCells.has(leftNeighbor)) {
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(cellX, cellY + CELL_SIZE);
+                        this.ctx.lineTo(cellX, cellY);
+                        this.ctx.stroke();
+                    }
+                }
+            }
+            
+            this.ctx.restore();
+        }
     }
 
     /**
@@ -1753,17 +1844,48 @@ export class Renderer {
      * @param placedBlocks - Final board state to render as 4x4 grid
      */
     drawGameOver(progress: number = 1, placedBlocks: PlacedBlock[] = [], leaderboardRank: number | null = null, leaderboardRanks: { today: number | null; week: number | null; ever: number | null; todayTotal: number; weekTotal: number; everTotal: number } | null = null, mode: 'easy' | 'hard' = 'easy'): void {
-        // Animated overlay - fade in from 0 to 0.8 opacity (cover the entire playing surface)
+        // Animated overlay - fade in from 0 to 0.8 opacity (cover the entire playing surface and queue area)
         const overlayAlpha = 0.8 * progress;
         this.ctx.fillStyle = `rgba(0, 0, 0, ${overlayAlpha})`;
-        this.ctx.fillRect(BOARD_OFFSET_X, BOARD_OFFSET_Y, BOARD_PIXEL_SIZE, BOARD_PIXEL_SIZE);
+        // Cover both board and queue area
+        const totalGameAreaHeight = BOARD_PIXEL_SIZE + QUEUE_AREA_HEIGHT;
+        this.ctx.fillRect(BOARD_OFFSET_X, BOARD_OFFSET_Y, BOARD_PIXEL_SIZE, totalGameAreaHeight);
 
         const textAlpha = progress;
         // Snap centerX to integer pixel for crisp text rendering
         const centerX = Math.round(BOARD_OFFSET_X + BOARD_PIXEL_SIZE / 2);
         // Use unified system font stack from fontConfig
         const baseFont = SYSTEM_FONT_STACK;
-        let currentY = Math.round(BOARD_OFFSET_Y + 30); // Start position (integer)
+        
+        // Calculate total content height for vertical centering
+        const gameOverTextHeight = 54;
+        const gameOverSpacing = 28;
+        let emojiBoardHeight = 0;
+        if (progress > 0 && this.finalBoardState && this.finalBoardState.length > 0) {
+            const emojiText = this.generateEmojiBoard();
+            const lines = emojiText.split('\n').filter(line => line.trim() !== '' && !line.includes('Score:') && !line.includes('Lines:') && !line.includes('Level:') && !line.includes('Mode:') && !line.includes('Rank') && !line.includes('Leaderboard'));
+            emojiBoardHeight = lines.length * 28 + 25; // Line height * number of lines + spacing
+        }
+        const scoreHeight = 23 + 20; // Score line height + spacing
+        const linesLevelHeight = 23 + 20; // Lines/Level line height + spacing
+        const modeHeight = 23 + 20; // Mode line height + spacing
+        let rankingsHeight = 0;
+        if (leaderboardRanks) {
+            // Calculate height for rankings (3 lines max, each 23px + 20px spacing)
+            const periods = [
+                { rank: leaderboardRanks.today, total: leaderboardRanks.todayTotal },
+                { rank: leaderboardRanks.week, total: leaderboardRanks.weekTotal },
+                { rank: leaderboardRanks.ever, total: leaderboardRanks.everTotal }
+            ];
+            const visibleRankings = periods.filter(p => p.rank !== null && p.total > 0).length;
+            rankingsHeight = visibleRankings * (23 + 20) + 5; // Each ranking line + spacing + extra space
+        }
+        const buttonHeight = 44 + 15; // Button height + spacing
+        const totalContentHeight = gameOverTextHeight + gameOverSpacing + emojiBoardHeight + scoreHeight + linesLevelHeight + modeHeight + rankingsHeight + buttonHeight;
+        
+        // Calculate starting Y position to center content vertically
+        const contentStartY = Math.round(BOARD_OFFSET_Y + (totalGameAreaHeight - totalContentHeight) / 2);
+        let currentY = contentStartY;
 
         // Draw "GAME OVER" text - 100% larger than 27px (27px * 2 = 54px) and bold
         this.ctx.save();
@@ -1775,38 +1897,31 @@ export class Renderer {
         this.ctx.fillText('GAME OVER', centerX, currentY);
         this.ctx.restore();
         
-        currentY += 54 + 28; // Space after "GAME OVER" (text height + blank line height)
+        currentY += gameOverTextHeight + gameOverSpacing;
 
         // Draw the emoji board representation if we have final board state
-        // Emoji colors already match the last level completed (via generateEmojiBoard using finalLevel)
         if (progress > 0 && this.finalBoardState && this.finalBoardState.length > 0) {
             // Generate emoji board text (just the grid, no stats)
             const emojiText = this.generateEmojiBoard();
-            const lines = emojiText.split('\n').filter(line => line.trim() !== '' && !line.includes('Score:') && !line.includes('Lines:') && !line.includes('Level:'));
+            const lines = emojiText.split('\n').filter(line => line.trim() !== '' && !line.includes('Score:') && !line.includes('Lines:') && !line.includes('Level:') && !line.includes('Mode:') && !line.includes('Rank') && !line.includes('Leaderboard'));
             
             this.ctx.save();
             this.ctx.globalAlpha = progress;
-            // Emoji grid 30% larger (18px * 1.3 = 23.4px, round to 23px)
-            // Use normal weight for informational text at larger sizes (better readability)
             this.ctx.font = `23px ${baseFont}`;
             this.ctx.fillStyle = '#fff';
             this.ctx.textAlign = 'center';
             this.ctx.textBaseline = 'top';
             
-            // Simple drawing - no scaling, no clipping, just draw the lines
-            // Snap each line position to integer pixels for crisp text
-            const lineHeight = 28; // Increased for larger font
+            const lineHeight = 28;
             lines.forEach((line, index) => {
                 this.ctx.fillText(line, centerX, Math.round(currentY + index * lineHeight));
             });
             
             this.ctx.restore();
-            currentY += lines.length * lineHeight + 25; // Space after emoji board
+            currentY += lines.length * lineHeight + 25;
         }
 
-        // Draw score, lines, level, and mode - 30% larger (18px * 1.3 = 23.4px, round to 23px)
-        // Use normal weight for informational stats text (better readability at larger sizes)
-        // Snap currentY to integer for crisp text
+        // Draw stats - Score, Lines/Level, Mode, and Rankings on separate lines
         currentY = Math.round(currentY);
         this.ctx.save();
         this.ctx.globalAlpha = textAlpha;
@@ -1814,29 +1929,22 @@ export class Renderer {
         this.ctx.fillStyle = '#fff';
         this.ctx.textAlign = 'center';
         this.ctx.textBaseline = 'top';
+        
+        // Score line
+        this.ctx.fillText(`Score: ${this.finalScore.toLocaleString()}`, centerX, currentY);
+        currentY += 23 + 20;
+        
+        // Lines / Level line
+        this.ctx.fillText(`Lines: ${this.finalLinesCleared} / Level ${this.finalLevel}`, centerX, currentY);
+        currentY += 23 + 20;
+        
+        // Mode line
         const modeText = mode.charAt(0).toUpperCase() + mode.slice(1);
-        const statsText = `Score: ${this.finalScore.toLocaleString()}, Lines: ${this.finalLinesCleared}, Level: ${this.finalLevel}, Mode: ${modeText}`;
-        this.ctx.fillText(statsText, centerX, currentY);
-        this.ctx.restore();
+        this.ctx.fillText(`Mode: ${modeText}`, centerX, currentY);
+        currentY += 23 + 20;
         
-        currentY += 40; // Space after stats
-        
-        // Draw leaderboard ranks - before share button
+        // Draw rankings if available
         if (leaderboardRanks) {
-            // Snap currentY to integer for crisp text
-            currentY = Math.round(currentY);
-            this.ctx.save();
-            this.ctx.globalAlpha = textAlpha;
-            this.ctx.font = `23px ${baseFont}`; // Same size as stats
-            this.ctx.textAlign = 'center';
-            this.ctx.textBaseline = 'top';
-            
-            // Title
-            this.ctx.fillStyle = '#fff';
-            this.ctx.fillText('Leaderboard Rank:', centerX, currentY);
-            currentY += 30;
-            
-            // Today, Week, Ever ranks
             const periods = [
                 { key: 'today' as const, label: 'Today', rank: leaderboardRanks.today, total: leaderboardRanks.todayTotal },
                 { key: 'week' as const, label: 'Week', rank: leaderboardRanks.week, total: leaderboardRanks.weekTotal },
@@ -1844,22 +1952,22 @@ export class Renderer {
             ];
             
             for (const period of periods) {
-                if (period.rank !== null) {
+                if (period.rank !== null && period.total > 0) {
                     const isTop10 = period.rank <= 10;
-                    const rankText = `${period.label}: ${period.rank} of ${period.total} players`;
+                    const rankText = `${period.label}: ${period.rank} of ${period.total}`;
                     
                     // Use gold for top 10, white otherwise
                     this.ctx.fillStyle = isTop10 ? '#FFD700' : '#fff';
                     this.ctx.fillText(rankText, centerX, currentY);
-                    currentY += 30;
+                    currentY += 23 + 20;
                 }
             }
-            
-            this.ctx.restore();
-            currentY += 10; // Extra space after leaderboard
         }
+        
+        currentY += 5; // Extra space before button
+        this.ctx.restore();
 
-        // Draw copy button at the bottom of the screen (styled like other buttons)
+        // Draw Share button
         if (progress > 0 && this.finalBoardState && this.finalBoardState.length > 0) {
             this.ctx.save();
             this.ctx.globalAlpha = progress;
@@ -1868,7 +1976,7 @@ export class Renderer {
             const buttonWidth = 140;
             const buttonHeight = 44;
             const buttonX = Math.round(centerX - buttonWidth / 2);
-            const buttonY = Math.round(BOARD_OFFSET_Y + BOARD_PIXEL_SIZE - buttonHeight - 15);
+            const buttonY = Math.round(currentY);
             const borderRadius = 8;
             
             // Get theme colors
@@ -1905,7 +2013,7 @@ export class Renderer {
             this.ctx.textBaseline = 'middle';
             const buttonCenterX = Math.round(buttonX + buttonWidth / 2);
             const buttonCenterY = Math.round(buttonY + buttonHeight / 2);
-            const buttonText = this.copyLinkText === 'Share' ? '📤 Share' : this.copyLinkText;
+            const buttonText = 'Share';
             this.ctx.fillText(buttonText, buttonCenterX, buttonCenterY);
             
             // Store bounds for click detection
@@ -2161,6 +2269,10 @@ export class Renderer {
         }
         
         this.drawQueue(queue);
+        
+        // Draw border between board and queue area
+        this.drawBoardQueueBorder();
+        
         if (this.settings.showGhostPreview) {
             this.drawDragPreview(dragState, smoothedDragPosition);
         }
@@ -2250,7 +2362,8 @@ export class Renderer {
         
         // Center on entire canvas, not just board
         const centerX = Math.round(CANVAS_WIDTH / 2);
-        const centerY = Math.round((BOARD_OFFSET_Y + BOARD_PIXEL_SIZE / 2));
+        // Center Y is the middle of the board (which is centered in the board area)
+        const centerY = Math.round(BOARD_OFFSET_Y + BOARD_PIXEL_SIZE / 2);
         
         // Calculate font size based on scale and drama level - MUCH larger
         const baseFontSize = 96; // Doubled from 48

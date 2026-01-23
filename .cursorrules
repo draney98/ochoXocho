@@ -80,11 +80,19 @@ The drag system uses an `effectivePosition` concept where:
 ### Helper Method
 Use `calculateGridPositionFromEffectivePosition()` in `input.ts` to convert effectivePosition to grid coordinates. Do not duplicate this logic.
 
+### Drag Preview Outline
+When dragging a piece over a valid drop location on the board, an outline is drawn around the outer perimeter of the shape:
+- Only outer edges are drawn (not internal lines between adjacent cells)
+- Outline color is theme-aware: white for dark themes (midnight), black for light themes (classic, sunset)
+- Implemented in `drawDragPreview()` in `renderer.ts` by checking neighbors and drawing only edges facing empty cells
+
 ## Constants and Configuration
 
 ### Layout Constants
 - All board/canvas sizing in `constants.ts`
-- Use `CELL_SIZE`, `BOARD_PIXEL_SIZE`, `CANVAS_WIDTH`, `CANVAS_HEIGHT` from constants
+- Use `CELL_SIZE`, `BOARD_PIXEL_SIZE`, `CANVAS_WIDTH`, `CANVAS_HEIGHT`, `BOARD_AREA_HEIGHT`, `QUEUE_AREA_HEIGHT`, `BOARD_OFFSET_Y` from constants
+- `BOARD_AREA_HEIGHT` includes padding above and below the board for centering
+- `BOARD_OFFSET_Y` is the top padding that centers the board vertically within `BOARD_AREA_HEIGHT`
 - Never hardcode pixel values; use constants
 
 ### Game Configuration
@@ -190,6 +198,8 @@ Use `calculateGridPositionFromEffectivePosition()` in `input.ts` to convert effe
 ### Responsive Design
 - Canvas scaling handled in `main.ts` via `setupResponsiveCanvas()`
 - UI elements scale with canvas width
+- High scores row: all items use same font size (`var(--font-lg)`) and weight (`500`), centered text alignment, equal flex distribution (`flex: 1 1 auto`) for proper centering
+- Player name prompt modal: mobile-specific CSS ensures proper layout when keyboard appears, input and button stack vertically on small screens
 - Test on various screen sizes
 
 ## Feature Development Guidelines
@@ -276,6 +286,27 @@ When accessing private properties that TypeScript can't verify, use the `unknown
 ```
 This is safer than `(this as any)` and makes the intent clearer.
 
+## Game Over Screen
+
+### Layout and Content
+- Game over screen displays vertically centered content in this order:
+  1. "GAME OVER" (bold, 54px)
+  2. Emoji board (if available, filtered to exclude stats text)
+  3. Score: xxxx (on its own line)
+  4. Lines: xxxx / Level xxxx (on its own line)
+  5. Mode: easy/hard (on its own line)
+  6. Today: x of y, Week: x of y, Ever: x of y (rankings, gold if top 10)
+  7. Share button (text only, no emoji)
+- Rankings are fetched via `getScoreRankAPI()` for accurate position and total player counts
+- Top 10 rankings displayed in gold (#FFD700), others in white
+- Screen covers entire game area (board + queue) with overlay
+
+### Player Name Prompt
+- Modal appears after game over screen is visible (`gameOverProgress > 0.1`)
+- Only shows if player name is empty and game has been played
+- Mobile-optimized: input and button stack vertically, positioned to account for keyboard
+- Uses `setTimeout` to focus input after modal is visible to prevent keyboard layout issues
+
 ## Version and Release
 
 - Update `CHANGELOG.md` for user-facing changes
@@ -284,5 +315,7 @@ This is safer than `(this as any)` and makes the intent clearer.
 - Build artifacts go to `dist/` directory
 - Test build before committing: `npm run build`
 - Run tests before committing: `npm test`
+- Version is automatically read from `package.json` at build time via Vite's `define` option
+- Pre-commit hook automatically increments patch version before each commit
 
 

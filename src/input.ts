@@ -13,6 +13,7 @@ import {
     CANVAS_HEIGHT,
     BOARD_OFFSET_X,
     BOARD_OFFSET_Y,
+    BOARD_AREA_HEIGHT,
     DRAG_VISUAL_OFFSET_Y,
     getQueueItemRect,
 } from './constants';
@@ -235,6 +236,8 @@ export class InputHandler {
                         this.dragState.shape = this.queue[i];
                         this.originalQueueIndex = i; // Store original position
                         this.hoverPosition = null; // Clear hover when dragging starts
+                        // Set initial anchor point to prevent shape loss on quick click-release
+                        this.dragState.anchorPoint = { x: canvasX, y: canvasY };
                         // Remove shape from queue immediately when selected
                         this.onRemoveFromQueue(i);
                         break;
@@ -591,7 +594,17 @@ export class InputHandler {
      * @param event - Mouse event
      */
     private handleMouseUp(event: MouseEvent): void {
-        if (!this.dragState.isDragging || !this.dragState.shape || !this.dragState.anchorPoint) return;
+        // Safety check: if not properly dragging, restore shape if we have one
+        if (!this.dragState.isDragging || !this.dragState.shape || !this.dragState.anchorPoint) {
+            // Restore shape to queue if we somehow have a shape but invalid state
+            if (this.dragState.shape && this.originalQueueIndex >= 0) {
+                this.onRestoreToQueue(this.originalQueueIndex, this.dragState.shape);
+                this.originalQueueIndex = -1;
+                this.dragState.shape = null;
+                this.dragState.isDragging = false;
+            }
+            return;
+        }
 
         // Update anchor to final position (normalized canvas coordinates)
         const { x: canvasX, y: canvasY } = this.getCanvasCoordinates(event);
@@ -628,7 +641,7 @@ export class InputHandler {
         // Use a small threshold to allow placement near the board edge (for bottom row placement)
         // Only consider it "over queue area" if it's clearly in the queue (10px threshold)
         const queueAreaThreshold = 10; // Allow 10px overlap to support bottom row placement
-        const visualPieceOverQueueArea = visualPieceTopLeft.y >= BOARD_OFFSET_Y + BOARD_PIXEL_SIZE + queueAreaThreshold;
+        const visualPieceOverQueueArea = visualPieceTopLeft.y >= BOARD_AREA_HEIGHT + queueAreaThreshold;
         
         // Only allow placement on the playing surface (board area with valid empty cells)
         // If we have a valid grid position, allow placement even if visual piece is slightly over queue area
@@ -736,7 +749,7 @@ export class InputHandler {
         // Check if touch is within any queue card under the board
         // Use fixed queue size (3) for hit detection so areas don't move
         const QUEUE_SIZE = 3;
-        if (canvasY >= BOARD_OFFSET_Y + BOARD_PIXEL_SIZE && canvasY <= CANVAS_HEIGHT) {
+        if (canvasY >= BOARD_AREA_HEIGHT && canvasY <= CANVAS_HEIGHT) {
             for (let i = 0; i < QUEUE_SIZE; i++) {
                 const rect = getQueueItemRect(i, QUEUE_SIZE);
                 if (
@@ -923,7 +936,17 @@ export class InputHandler {
      */
     private handleTouchEnd(event: TouchEvent): void {
         event.preventDefault();
-        if (!this.dragState.isDragging || !this.dragState.shape || !this.dragState.controlOrigin) return;
+        // Safety check: if not properly dragging, restore shape if we have one
+        if (!this.dragState.isDragging || !this.dragState.shape || !this.dragState.controlOrigin) {
+            // Restore shape to queue if we somehow have a shape but invalid state
+            if (this.dragState.shape && this.originalQueueIndex >= 0) {
+                this.onRestoreToQueue(this.originalQueueIndex, this.dragState.shape);
+                this.originalQueueIndex = -1;
+                this.dragState.shape = null;
+                this.dragState.isDragging = false;
+            }
+            return;
+        }
 
         // Update anchor to final position (normalized canvas coordinates)
         const { x: canvasX, y: canvasY } = this.getCanvasCoordinates(event);
@@ -973,7 +996,7 @@ export class InputHandler {
         // Use a small threshold to allow placement near the board edge (for bottom row placement)
         // Only consider it "over queue area" if it's clearly in the queue (10px threshold)
         const queueAreaThreshold = 10; // Allow 10px overlap to support bottom row placement
-        const visualPieceOverQueueArea = visualPieceTopLeft.y >= BOARD_OFFSET_Y + BOARD_PIXEL_SIZE + queueAreaThreshold;
+        const visualPieceOverQueueArea = visualPieceTopLeft.y >= BOARD_AREA_HEIGHT + queueAreaThreshold;
         
         // Only allow placement on the playing surface (board area with valid empty cells)
         // If we have a valid grid position, allow placement even if visual piece is slightly over queue area
