@@ -86,24 +86,13 @@ const ALL_SHAPES: Shape[] = [...MONOMINO, ...DOMINO, ...TROMINOES, ...TETROMINOE
 const SHAPES_WITHOUT_MONOMINO: Shape[] = [...DOMINO, ...TROMINOES, ...TETROMINOES, ...NONOMINOES];
 
 /**
- * Point values for each shape (0 for single block, 1-8 for others, randomly assigned at module load)
+ * Point values for each shape - each block gets points equal to the number of blocks in the shape
  * Maps shape index to point value per cell
  * Note: Index 0 (single block) always scores 0 points
  */
 const SHAPE_POINT_VALUES: number[] = (() => {
-    // Single block (index 0) always scores 0, others get 1-8
-    const values = Array.from({ length: ALL_SHAPES.length }, (_, i) => i === 0 ? 0 : i);
-    // Shuffle the array to randomize point assignments (but keep index 0 as 0)
-    for (let i = values.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [values[i], values[j]] = [values[j], values[i]];
-    }
-    // Ensure index 0 is always 0 (single block)
-    const zeroIndex = values.indexOf(0);
-    if (zeroIndex !== 0) {
-        [values[0], values[zeroIndex]] = [values[zeroIndex], values[0]];
-    }
-    return values;
+    // Each shape gets point value equal to its size (number of blocks)
+    return ALL_SHAPES.map(shape => shape.length);
 })();
 
 /**
@@ -678,6 +667,7 @@ export function getShapePointValue(shapeIndex: number, level: number = 0): numbe
     if (shapeIndex < 0 || shapeIndex >= SHAPE_POINT_VALUES.length) {
         return 1; // Default to 1 if shape not found
     }
+    // Base value is the number of blocks in the shape (each block gets points equal to shape size)
     const baseValue = SHAPE_POINT_VALUES[shapeIndex];
     // Level is already Math.floor(totalShapesPlaced / shapesPerValueTier), so multiply by pointsPerTier to get the bonus
     // Every tier of shapes placed = +pointsPerTier points

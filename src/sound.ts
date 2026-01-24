@@ -140,22 +140,152 @@ export class SoundManager {
         if (SOUND_CONFIG.explosion.file) {
             this.playAudioFile(SOUND_CONFIG.explosion.file, SOUND_CONFIG.explosion.volume, () => {
                 // Fallback to synthesized sound
+                this.playExplosionSound();
+            });
+        } else {
+            // Synthesized explosion sound - dramatic multi-frequency burst
+            this.playExplosionSound();
+        }
+    }
+
+    playDisappointment(): void {
+        if (SOUND_CONFIG.disappointment.file) {
+            this.playAudioFile(SOUND_CONFIG.disappointment.file, SOUND_CONFIG.disappointment.volume, () => {
+                // Fallback to synthesized sound
                 this.playTone(
-                    SOUND_CONFIG.explosion.frequency,
-                    SOUND_CONFIG.explosion.duration,
-                    SOUND_CONFIG.explosion.waveform,
-                    SOUND_CONFIG.explosion.volume
+                    SOUND_CONFIG.disappointment.frequency,
+                    SOUND_CONFIG.disappointment.duration,
+                    SOUND_CONFIG.disappointment.waveform,
+                    SOUND_CONFIG.disappointment.volume
                 );
             });
         } else {
-            // Synthesized explosion sound - low rumble with sawtooth wave
-            this.playTone(
-                SOUND_CONFIG.explosion.frequency,
-                SOUND_CONFIG.explosion.duration,
-                SOUND_CONFIG.explosion.waveform,
-                SOUND_CONFIG.explosion.volume
-            );
+            // Synthesized disappointment sound - descending sad tone
+            this.playDisappointmentSound();
         }
+    }
+
+    /**
+     * Plays a disappointment sound - descending sad tone
+     */
+    private playDisappointmentSound(): void {
+        if (!this.enabled) {
+            return;
+        }
+
+        this.ensureContext();
+        if (!this.audioContext || !this.masterGain) {
+            return;
+        }
+
+        if (this.audioContext.state === 'suspended') {
+            this.audioContext.resume().catch(() => void 0);
+        }
+
+        const now = this.audioContext.currentTime;
+        const duration = SOUND_CONFIG.disappointment.duration;
+
+        // Create a descending sad tone
+        const osc = this.audioContext.createOscillator();
+        const gain = this.audioContext.createGain();
+        
+        osc.type = SOUND_CONFIG.disappointment.waveform;
+        // Start at base frequency and descend
+        osc.frequency.setValueAtTime(SOUND_CONFIG.disappointment.frequency, now);
+        osc.frequency.exponentialRampToValueAtTime(SOUND_CONFIG.disappointment.frequency * 0.5, now + duration);
+        
+        gain.gain.setValueAtTime(SOUND_CONFIG.disappointment.volume, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+        
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+        
+        osc.start(now);
+        osc.stop(now + duration);
+    }
+
+    /**
+     * Plays a dramatic synthesized explosion sound using multiple frequencies
+     */
+    private playExplosionSound(): void {
+        if (!this.enabled) {
+            return;
+        }
+
+        this.ensureContext();
+        if (!this.audioContext || !this.masterGain) {
+            return;
+        }
+
+        if (this.audioContext.state === 'suspended') {
+            this.audioContext.resume().catch(() => void 0);
+        }
+
+        const now = this.audioContext.currentTime;
+        const duration = SOUND_CONFIG.explosion.duration;
+
+        // Create a powerful, energetic explosion with multiple layers:
+        // 1. Deep bass rumble (foundation)
+        const bassOsc = this.audioContext.createOscillator();
+        const bassGain = this.audioContext.createGain();
+        bassOsc.type = 'sawtooth';
+        bassOsc.frequency.value = 40; // Very deep bass
+        bassGain.gain.setValueAtTime(SOUND_CONFIG.explosion.volume * 1.0, now);
+        bassGain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+        bassOsc.connect(bassGain);
+        bassGain.connect(this.masterGain);
+
+        // 2. Low-mid rumble (body)
+        const lowOsc = this.audioContext.createOscillator();
+        const lowGain = this.audioContext.createGain();
+        lowOsc.type = 'sawtooth';
+        lowOsc.frequency.value = 80; // Low rumble
+        lowGain.gain.setValueAtTime(SOUND_CONFIG.explosion.volume * 0.9, now);
+        lowGain.gain.exponentialRampToValueAtTime(0.001, now + duration * 0.8);
+        lowOsc.connect(lowGain);
+        lowGain.connect(this.masterGain);
+
+        // 3. Mid-range crack (impact)
+        const midOsc = this.audioContext.createOscillator();
+        const midGain = this.audioContext.createGain();
+        midOsc.type = 'square';
+        midOsc.frequency.value = 250; // Mid-range crack
+        midGain.gain.setValueAtTime(SOUND_CONFIG.explosion.volume * 0.8, now);
+        midGain.gain.exponentialRampToValueAtTime(0.001, now + duration * 0.5);
+        midOsc.connect(midGain);
+        midGain.connect(this.masterGain);
+
+        // 4. High-frequency burst (sharp crack)
+        const highOsc = this.audioContext.createOscillator();
+        const highGain = this.audioContext.createGain();
+        highOsc.type = 'square';
+        highOsc.frequency.value = 1200; // High-frequency burst
+        highGain.gain.setValueAtTime(SOUND_CONFIG.explosion.volume * 0.6, now);
+        highGain.gain.exponentialRampToValueAtTime(0.001, now + duration * 0.25);
+        highOsc.connect(highGain);
+        highGain.connect(this.masterGain);
+
+        // 5. Very high frequency sizzle (energy release)
+        const sizzleOsc = this.audioContext.createOscillator();
+        const sizzleGain = this.audioContext.createGain();
+        sizzleOsc.type = 'square';
+        sizzleOsc.frequency.value = 2000; // Very high sizzle
+        sizzleGain.gain.setValueAtTime(SOUND_CONFIG.explosion.volume * 0.3, now);
+        sizzleGain.gain.exponentialRampToValueAtTime(0.001, now + duration * 0.15);
+        sizzleOsc.connect(sizzleGain);
+        sizzleGain.connect(this.masterGain);
+
+        // Start all oscillators with slight stagger for more dynamic feel
+        bassOsc.start(now);
+        bassOsc.stop(now + duration);
+        lowOsc.start(now);
+        lowOsc.stop(now + duration * 0.8);
+        midOsc.start(now);
+        midOsc.stop(now + duration * 0.5);
+        highOsc.start(now);
+        highOsc.stop(now + duration * 0.25);
+        sizzleOsc.start(now);
+        sizzleOsc.stop(now + duration * 0.15);
     }
 
     private ensureContext(): void {

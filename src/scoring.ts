@@ -14,7 +14,6 @@ import { GAMEPLAY_CONFIG } from './config';
  * @param fullRows - Array of row indices that are completely filled
  * @param fullColumns - Array of column indices that are completely filled
  * @param placedBlocks - All blocks currently on the board
- * @param boardCleared - Whether the entire board was cleared (unused but kept for API compatibility)
  * @param totalShapesPlaced - Total number of shapes placed this game (for point value calculation)
  * @param explosionRemovedCells - Optional set of cell keys (format: "x,y") removed by explosions
  * @param mode - Game mode: 'easy' counts explosion points, 'hard' does not
@@ -24,7 +23,6 @@ export function calculateScore(
     fullRows: number[],
     fullColumns: number[],
     placedBlocks: PlacedBlock[],
-    boardCleared: boolean,
     totalShapesPlaced: number,
     explosionRemovedCells?: Set<string>,
     mode?: 'easy' | 'hard'

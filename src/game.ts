@@ -14,7 +14,7 @@ import { recordScore } from './highScores';
 import { getDeviceId } from './deviceId';
 import { getLeaderboard, getScoreRank as getScoreRankAPI } from './api';
 import { loadSettings, saveSettings } from './main';
-import { GAMEPLAY_CONFIG, ANIMATION_CONFIG, GAME_OVER_CONFIG, DRAG_CONTROLLER_CONFIG } from './config';
+import { GAMEPLAY_CONFIG, ANIMATION_CONFIG, GAME_OVER_CONFIG, DRAG_CONTROLLER_CONFIG, getExplosionThreshold, getPulseThreshold } from './config';
 import { getUIColorForLevel, getButtonColors } from './colorConfig';
 import { findOptimalPlacementOrder } from './boardUtils';
 import { getQueueItemRect, BOARD_CELL_COUNT, DRAG_VISUAL_OFFSET_Y, CELL_SIZE, BOARD_OFFSET_X, BOARD_OFFSET_Y, CANVAS_WIDTH, BOARD_AREA_HEIGHT } from './constants';
@@ -46,7 +46,6 @@ export class Game {
     private gameOverPopComplete: boolean = false;
     private playerNamePromptShown: boolean = false; // Track if we've shown the player name prompt
     private levelUpStartTime: number | null = null;
-    private leaderboardRank: number | null = null; // Rank on leaderboard (if top 10)
     private leaderboardRanks: { today: number | null; week: number | null; ever: number | null; todayTotal: number; weekTotal: number; everTotal: number } = {
         today: null,
         week: null,
@@ -438,7 +437,6 @@ export class Game {
             this.state.level,
             this.state.score,
             this.state.linesCleared,
-            this.leaderboardRank,
             this.leaderboardRanks,
             this.settings.mode,
             this.animatingShapes,
@@ -625,9 +623,23 @@ export class Game {
      * @param fullRows - Array of cleared row indices
      * @param fullColumns - Array of cleared column indices
      */
-    private removeCellsFromShapes(fullRows: number[], fullColumns: number[], cellsToRemove?: Set<string>): void {
+    private removeCellsFromShapes(fullRows: number[], fullColumns: number[], cellsToRemove?: Set<string>, cellFilledMap?: Map<string, boolean>): void {
         const beforeCount = this.state.placedBlocks.length;
         const beforeTotalCells = this.state.placedBlocks.reduce((sum, b) => sum + b.shape.length, 0);
+        
+        // Build cellFilledMap if not provided (for checking intersections)
+        let filledMap = cellFilledMap;
+        if (!filledMap) {
+            filledMap = new Map<string, boolean>();
+            for (const block of this.state.placedBlocks) {
+                for (const cell of block.shape) {
+                    const absoluteX = block.position.x + cell.x;
+                    const absoluteY = block.position.y + cell.y;
+                    const key = `${absoluteX},${absoluteY}`;
+                    filledMap.set(key, true);
+                }
+            }
+        }
         
         this.state.placedBlocks = this.state.placedBlocks.map(block => {
             // Filter out cells that are in cleared rows or columns, or in the cellsToRemove set
@@ -643,9 +655,33 @@ export class Game {
                 const key = `${absoluteX},${absoluteY}`;
                 const removedByExplosion = cellsToRemove?.has(key) ?? false;
                 
-                // If block is explosion-only, ignore line clears - only remove by explosion
+                // If block is explosion-only, it can be removed by explosion OR if in both a full row AND column
+                // (even if those rows/columns aren't "clearable" due to other unexplodable blocks)
                 if (block.explosionOnly) {
-                    return !removedByExplosion;
+                    // Check if this cell is at the intersection of two full lines
+                    // Build a quick check: is the row full? is the column full?
+                    let rowIsFull = true;
+                    let colIsFull = true;
+                    for (let x = 0; x < BOARD_CELL_COUNT; x++) {
+                        const rowKey = `${x},${absoluteY}`;
+                        if (!filledMap.get(rowKey)) {
+                            rowIsFull = false;
+                            break;
+                        }
+                    }
+                    for (let y = 0; y < BOARD_CELL_COUNT; y++) {
+                        const colKey = `${absoluteX},${y}`;
+                        if (!filledMap.get(colKey)) {
+                            colIsFull = false;
+                            break;
+                        }
+                    }
+                    const atIntersection = rowIsFull && colIsFull;
+                    const shouldRemove = removedByExplosion || (inClearedRow && inClearedColumn) || atIntersection;
+                    if (this.settings.devMode && (inClearedRow || inClearedColumn || atIntersection)) {
+                        console.log(`[LINE CLEAR DEBUG] Explosion-only block at (${absoluteX}, ${absoluteY}): inClearedRow=${inClearedRow}, inClearedColumn=${inClearedColumn}, rowIsFull=${rowIsFull}, colIsFull=${colIsFull}, atIntersection=${atIntersection}, removedByExplosion=${removedByExplosion}, shouldRemove=${shouldRemove}`);
+                    }
+                    return !shouldRemove; // Return true to keep, false to remove
                 }
                 
                 // Normal blocks: remove if in cleared row/column OR removed by explosion
@@ -679,7 +715,7 @@ export class Game {
      * @param fullColumns - Array of cleared column indices
      */
     private cleanupAfterAnimation(fullRows: number[], fullColumns: number[]): void {
-        this.removeCellsFromShapes(fullRows, fullColumns);
+        this.removeCellsFromShapes(fullRows, fullColumns, undefined, undefined);
     }
 
     /**
@@ -702,14 +738,16 @@ export class Game {
     }
 
     /**
-     * Gets rows that are full and can be cleared (excludes rows with explosion-only blocks)
+     * Gets rows that are full and can be cleared
+     * Rows with explosion-only blocks are clearable if all explosion-only blocks are at intersections where both row and column are full
      * @returns Array of row indices that are full and clearable
      */
     private getClearableFullRows(): number[] {
         const BOARD_SIZE = BOARD_CELL_COUNT;
         const fullRows: number[] = [];
         
-        // Build a map of cell positions to explosion-only status
+        // Build a map of cell positions from placedBlocks (source of truth, not board grid)
+        const cellFilledMap = new Map<string, boolean>();
         const cellExplosionOnlyMap = new Map<string, boolean>();
         for (const block of this.state.placedBlocks) {
             const isExplosionOnly = block.explosionOnly ?? false;
@@ -718,32 +756,84 @@ export class Game {
                 const absoluteY = block.position.y + cell.y;
                 if (absoluteX >= 0 && absoluteX < BOARD_SIZE && absoluteY >= 0 && absoluteY < BOARD_SIZE) {
                     const key = `${absoluteX},${absoluteY}`;
+                    cellFilledMap.set(key, true);
                     cellExplosionOnlyMap.set(key, isExplosionOnly);
                 }
             }
         }
         
+        // First, identify which rows and columns are full (based on placedBlocks, not board grid)
+        const fullRowSet = new Set<number>();
+        const fullColumnSet = new Set<number>();
+        
         for (let row = 0; row < BOARD_SIZE; row++) {
             let isFull = true;
-            let hasExplosionOnly = false;
-            
             for (let x = 0; x < BOARD_SIZE; x++) {
-                // Check if cell is filled
-                if (this.board.isCellEmpty({ x, y: row })) {
+                const key = `${x},${row}`;
+                if (!cellFilledMap.get(key)) {
                     isFull = false;
                     break;
                 }
-                
-                // Check if cell is explosion-only
+            }
+            if (isFull) {
+                fullRowSet.add(row);
+            }
+        }
+        
+        for (let col = 0; col < BOARD_SIZE; col++) {
+            let isFull = true;
+            for (let y = 0; y < BOARD_SIZE; y++) {
+                const key = `${col},${y}`;
+                if (!cellFilledMap.get(key)) {
+                    isFull = false;
+                    break;
+                }
+            }
+            if (isFull) {
+                fullColumnSet.add(col);
+            }
+        }
+        
+        // Check each full row to see if it's clearable
+        for (const row of fullRowSet) {
+            // Double-check that the row is actually full (safety check)
+            let actuallyFull = true;
+            for (let x = 0; x < BOARD_SIZE; x++) {
                 const key = `${x},${row}`;
-                if (cellExplosionOnlyMap.get(key)) {
-                    hasExplosionOnly = true;
+                if (!cellFilledMap.get(key)) {
+                    actuallyFull = false;
+                    if (this.settings.devMode) {
+                        console.error(`[LINE CLEAR ERROR] Row ${row} in fullRowSet but cell (${x}, ${row}) is NOT in cellFilledMap!`);
+                    }
                     break;
                 }
             }
             
-            // Row is clearable only if full AND has no explosion-only blocks
-            if (isFull && !hasExplosionOnly) {
+            if (!actuallyFull) {
+                // Skip this row - it's not actually full
+                if (this.settings.devMode) {
+                    console.error(`[LINE CLEAR ERROR] Row ${row} was marked as full but verification failed! Skipping.`);
+                }
+                continue;
+            }
+            
+            let hasExplosionOnly = false;
+            let allExplosionOnlyAtIntersection = true;
+            
+            for (let x = 0; x < BOARD_SIZE; x++) {
+                const key = `${x},${row}`;
+                if (cellExplosionOnlyMap.get(key)) {
+                    hasExplosionOnly = true;
+                    // Check if this explosion-only block is at an intersection where both row and column are full
+                    if (!fullColumnSet.has(x)) {
+                        allExplosionOnlyAtIntersection = false;
+                        break;
+                    }
+                }
+            }
+            
+            // Row is clearable if it has no explosion-only blocks, OR all explosion-only blocks are at intersections
+            if (!hasExplosionOnly || allExplosionOnlyAtIntersection) {
                 fullRows.push(row);
             }
         }
@@ -752,15 +842,18 @@ export class Game {
     }
 
     /**
-     * Gets columns that are full and can be cleared (excludes columns with explosion-only blocks)
+     * Gets columns that are full and can be cleared
+     * Columns with explosion-only blocks are clearable if all explosion-only blocks are at intersections where both row and column are full
      * @returns Array of column indices that are full and clearable
      */
     private getClearableFullColumns(): number[] {
         const BOARD_SIZE = BOARD_CELL_COUNT;
         const fullColumns: number[] = [];
         
-        // Build a map of cell positions to explosion-only status
+        // Build a map of cell positions from placedBlocks (source of truth, not board grid)
+        const cellFilledMap = new Map<string, boolean>();
         const cellExplosionOnlyMap = new Map<string, boolean>();
+        const cellToBlockCount = new Map<string, number>(); // Track how many blocks claim each cell
         for (const block of this.state.placedBlocks) {
             const isExplosionOnly = block.explosionOnly ?? false;
             for (const cell of block.shape) {
@@ -768,32 +861,124 @@ export class Game {
                 const absoluteY = block.position.y + cell.y;
                 if (absoluteX >= 0 && absoluteX < BOARD_SIZE && absoluteY >= 0 && absoluteY < BOARD_SIZE) {
                     const key = `${absoluteX},${absoluteY}`;
+                    cellFilledMap.set(key, true);
                     cellExplosionOnlyMap.set(key, isExplosionOnly);
+                    // Track if multiple blocks claim the same cell (shouldn't happen, but debug it)
+                    const count = cellToBlockCount.get(key) || 0;
+                    cellToBlockCount.set(key, count + 1);
+                    if (count > 0 && this.settings.devMode) {
+                        console.warn(`[LINE CLEAR DEBUG] Cell (${absoluteX}, ${absoluteY}) is claimed by ${count + 1} blocks! Block at (${block.position.x}, ${block.position.y})`);
+                    }
                 }
+            }
+        }
+        
+        // First, identify which rows and columns are full (based on placedBlocks, not board grid)
+        const fullRowSet = new Set<number>();
+        const fullColumnSet = new Set<number>();
+        
+        for (let row = 0; row < BOARD_SIZE; row++) {
+            let isFull = true;
+            const missingCells: string[] = [];
+            for (let x = 0; x < BOARD_SIZE; x++) {
+                const key = `${x},${row}`;
+                if (!cellFilledMap.get(key)) {
+                    isFull = false;
+                    missingCells.push(key);
+                }
+            }
+            if (isFull) {
+                fullRowSet.add(row);
+            } else if (this.settings.devMode && missingCells.length < 3) {
+                // Log if row is almost full (missing < 3 cells) for debugging
+                console.log(`[LINE CLEAR DEBUG] Row ${row} is NOT full. Missing cells: ${missingCells.join(', ')}`);
             }
         }
         
         for (let col = 0; col < BOARD_SIZE; col++) {
             let isFull = true;
-            let hasExplosionOnly = false;
-            
+            const missingCells: string[] = [];
+            const filledCells: string[] = [];
             for (let y = 0; y < BOARD_SIZE; y++) {
-                // Check if cell is filled
-                if (this.board.isCellEmpty({ x: col, y })) {
-                    isFull = false;
-                    break;
-                }
-                
-                // Check if cell is explosion-only
                 const key = `${col},${y}`;
-                if (cellExplosionOnlyMap.get(key)) {
-                    hasExplosionOnly = true;
+                if (!cellFilledMap.get(key)) {
+                    isFull = false;
+                    missingCells.push(key);
+                } else {
+                    filledCells.push(key);
+                }
+            }
+            if (isFull) {
+                fullColumnSet.add(col);
+                if (this.settings.devMode) {
+                    console.log(`[LINE CLEAR DEBUG] Column ${col} detected as FULL. Total blocks: ${this.state.placedBlocks.length}, Total filled cells in map: ${cellFilledMap.size}, Filled cells in column: ${filledCells.join(', ')}`);
+                    // Log all blocks that contribute to this column
+                    const contributingBlocks = this.state.placedBlocks.filter(block => {
+                        return block.shape.some(cell => {
+                            const absoluteX = block.position.x + cell.x;
+                            return absoluteX === col;
+                        });
+                    });
+                    console.log(`[LINE CLEAR DEBUG] Blocks contributing to column ${col}:`, contributingBlocks.map(b => `(${b.position.x},${b.position.y}) shape=${b.shape.length} cells`));
+                    // Check for overlapping cells in this column
+                    const overlappingCells: string[] = [];
+                    for (let y = 0; y < BOARD_SIZE; y++) {
+                        const key = `${col},${y}`;
+                        const count = cellToBlockCount.get(key) || 0;
+                        if (count > 1) {
+                            overlappingCells.push(`${key} (${count} blocks)`);
+                        }
+                    }
+                    if (overlappingCells.length > 0) {
+                        console.warn(`[LINE CLEAR DEBUG] Column ${col} has overlapping cells: ${overlappingCells.join(', ')}`);
+                    }
+                }
+            } else if (this.settings.devMode && missingCells.length < 3) {
+                // Log if column is almost full (missing < 3 cells) for debugging
+                console.log(`[LINE CLEAR DEBUG] Column ${col} is NOT full. Missing cells: ${missingCells.join(', ')}, Filled: ${filledCells.length}/8`);
+            }
+        }
+        
+        // Check each full column to see if it's clearable
+        for (const col of fullColumnSet) {
+            // Double-check that the column is actually full (safety check)
+            let actuallyFull = true;
+            for (let y = 0; y < BOARD_SIZE; y++) {
+                const key = `${col},${y}`;
+                if (!cellFilledMap.get(key)) {
+                    actuallyFull = false;
+                    if (this.settings.devMode) {
+                        console.error(`[LINE CLEAR ERROR] Column ${col} in fullColumnSet but cell (${col}, ${y}) is NOT in cellFilledMap!`);
+                    }
                     break;
                 }
             }
             
-            // Column is clearable only if full AND has no explosion-only blocks
-            if (isFull && !hasExplosionOnly) {
+            if (!actuallyFull) {
+                // Skip this column - it's not actually full
+                if (this.settings.devMode) {
+                    console.error(`[LINE CLEAR ERROR] Column ${col} was marked as full but verification failed! Skipping.`);
+                }
+                continue;
+            }
+            
+            let hasExplosionOnly = false;
+            let allExplosionOnlyAtIntersection = true;
+            
+            for (let y = 0; y < BOARD_SIZE; y++) {
+                const key = `${col},${y}`;
+                if (cellExplosionOnlyMap.get(key)) {
+                    hasExplosionOnly = true;
+                    // Check if this explosion-only block is at an intersection where both row and column are full
+                    if (!fullRowSet.has(y)) {
+                        allExplosionOnlyAtIntersection = false;
+                        break;
+                    }
+                }
+            }
+            
+            // Column is clearable if it has no explosion-only blocks, OR all explosion-only blocks are at intersections
+            if (!hasExplosionOnly || allExplosionOnlyAtIntersection) {
                 fullColumns.push(col);
             }
         }
@@ -826,9 +1011,58 @@ export class Game {
             return;
         }
         
+        // Get mode-specific explosion threshold
+        const explosionThreshold = getExplosionThreshold(this.settings.mode);
+        
         // Use custom methods that exclude rows/columns with explosion-only blocks
         const fullRows = this.getClearableFullRows();
         const fullColumns = this.getClearableFullColumns();
+        
+        if (this.settings.devMode && (fullRows.length > 0 || fullColumns.length > 0)) {
+            console.log(`[LINE CLEAR] About to clear - Rows: [${fullRows.join(', ')}], Columns: [${fullColumns.join(', ')}], Total blocks: ${this.state.placedBlocks.length}`);
+            // Build cellFilledMap for verification (same source of truth as detection)
+            const verificationMap = new Map<string, boolean>();
+            for (const block of this.state.placedBlocks) {
+                for (const cell of block.shape) {
+                    const absoluteX = block.position.x + cell.x;
+                    const absoluteY = block.position.y + cell.y;
+                    if (absoluteX >= 0 && absoluteX < BOARD_CELL_COUNT && absoluteY >= 0 && absoluteY < BOARD_CELL_COUNT) {
+                        const key = `${absoluteX},${absoluteY}`;
+                        verificationMap.set(key, true);
+                    }
+                }
+            }
+            // Verify columns are actually full using the same source of truth
+            for (const col of fullColumns) {
+                let actuallyFull = true;
+                const missingCells: string[] = [];
+                for (let y = 0; y < BOARD_CELL_COUNT; y++) {
+                    const key = `${col},${y}`;
+                    if (!verificationMap.get(key)) {
+                        actuallyFull = false;
+                        missingCells.push(key);
+                    }
+                }
+                if (!actuallyFull) {
+                    console.error(`[LINE CLEAR ERROR] Column ${col} marked as clearable but is NOT full! Missing cells: ${missingCells.join(', ')}`);
+                }
+            }
+            // Verify rows are actually full
+            for (const row of fullRows) {
+                let actuallyFull = true;
+                const missingCells: string[] = [];
+                for (let x = 0; x < BOARD_CELL_COUNT; x++) {
+                    const key = `${x},${row}`;
+                    if (!verificationMap.get(key)) {
+                        actuallyFull = false;
+                        missingCells.push(key);
+                    }
+                }
+                if (!actuallyFull) {
+                    console.error(`[LINE CLEAR ERROR] Row ${row} marked as clearable but is NOT full! Missing cells: ${missingCells.join(', ')}`);
+                }
+            }
+        }
         const linesCleared = fullRows.length + fullColumns.length;
 
         // Check if combo broke (3rd placement WITHOUT a line clear)
@@ -877,16 +1111,61 @@ export class Game {
         // Track cells that will be removed (from line clears and explosions)
         const cellsToRemove = new Set<string>();
         
+        // Build cellFilledMap from cellToBlockMap (which we already built above)
+        const cellFilledMap = new Map<string, boolean>();
+        for (const key of cellToBlockMap.keys()) {
+            cellFilledMap.set(key, true);
+        }
+        
+        // Check which rows and columns are full (for intersection clearing of unexplodable blocks)
+        const BOARD_SIZE = BOARD_CELL_COUNT;
+        const fullRowSet = new Set<number>();
+        const fullColumnSet = new Set<number>();
+        for (let row = 0; row < BOARD_SIZE; row++) {
+            let isFull = true;
+            for (let x = 0; x < BOARD_SIZE; x++) {
+                const key = `${x},${row}`;
+                if (!cellFilledMap.get(key)) {
+                    isFull = false;
+                    break;
+                }
+            }
+            if (isFull) {
+                fullRowSet.add(row);
+            }
+        }
+        for (let col = 0; col < BOARD_SIZE; col++) {
+            let isFull = true;
+            for (let y = 0; y < BOARD_SIZE; y++) {
+                const key = `${col},${y}`;
+                if (!cellFilledMap.get(key)) {
+                    isFull = false;
+                    break;
+                }
+            }
+            if (isFull) {
+                fullColumnSet.add(col);
+            }
+        }
+        
         // First, add all cells in cleared rows/columns
+        // Note: For explosion-only blocks, they will only be removed if in BOTH a full row AND column
+        // (handled in removeCellsFromShapes), but we add them here for consistency
         for (const block of this.state.placedBlocks) {
             for (const cell of block.shape) {
                 const absoluteX = block.position.x + cell.x;
                 const absoluteY = block.position.y + cell.y;
                 const inClearedRow = fullRows.includes(absoluteY);
                 const inClearedColumn = fullColumns.includes(absoluteX);
+                // Also check if this is an intersection of two full lines (even if not "clearable")
+                const inFullRow = fullRowSet.has(absoluteY);
+                const inFullColumn = fullColumnSet.has(absoluteX);
                 if (inClearedRow || inClearedColumn) {
                     const key = `${absoluteX},${absoluteY}`;
                     cellsToRemove.add(key);
+                    if (this.settings.devMode && block.explosionOnly) {
+                        console.log(`[LINE CLEAR DEBUG] Explosion-only block at (${absoluteX}, ${absoluteY}) in cleared row=${inClearedRow} col=${inClearedColumn}, full row=${inFullRow} col=${inFullColumn} - will be removed if in BOTH full row AND column`);
+                    }
                 }
             }
         }
@@ -909,7 +1188,6 @@ export class Game {
 
         // Find all exploding cells and trigger chain reactions
         const processedExplosions = new Set<string>();
-        let explosionSoundPlayed = false; // Track if we've played the explosion sound for this sequence
         
         const processExplosion = (x: number, y: number): void => {
             const key = `${x},${y}`;
@@ -920,7 +1198,7 @@ export class Game {
             if (!cellData) return; // Cell doesn't exist
             
             // Check if this cell should explode (must not be explosion-only and must exceed threshold)
-            if (!cellData.explosionOnly && cellData.pointValue > GAMEPLAY_CONFIG.explosionThreshold) {
+            if (!cellData.explosionOnly && cellData.pointValue > explosionThreshold) {
                 // Mark this cell for removal
                 cellsToRemove.add(key);
                 
@@ -933,7 +1211,7 @@ export class Game {
                     
                     // Recursively check if adjacent cell also explodes (must not be explosion-only)
                     const adjCellData = cellToBlockMap.get(adjKey);
-                    if (adjCellData && !adjCellData.explosionOnly && adjCellData.pointValue > GAMEPLAY_CONFIG.explosionThreshold) {
+                    if (adjCellData && !adjCellData.explosionOnly && adjCellData.pointValue > explosionThreshold) {
                         processExplosion(adj.x, adj.y);
                     }
                 }
@@ -956,12 +1234,9 @@ export class Game {
                 // If this cell is in a cleared row/column and should explode, trigger chain reaction
                 // Skip explosion-only blocks
                 const explosionOnly = block.explosionOnly ?? false;
-                if ((inClearedRow || inClearedColumn) && !explosionOnly && currentPointValue > GAMEPLAY_CONFIG.explosionThreshold) {
-                    // Play explosion sound when first explosion is triggered (only once per explosion sequence)
-                    if (!explosionSoundPlayed) {
-                        this.soundManager.playExplosion();
-                        explosionSoundPlayed = true;
-                    }
+                if ((inClearedRow || inClearedColumn) && !explosionOnly && currentPointValue > explosionThreshold) {
+                    // Play explosion sound for each explosion (can overlap)
+                    this.soundManager.playExplosion();
                     processExplosion(absoluteX, absoluteY);
                 }
             }
@@ -1000,7 +1275,7 @@ export class Game {
                         const animationIndex = (this.state.level - 1) % 17;
                         
                         // Determine animation type: explosion if point value > threshold, otherwise clear
-                        const animationType = currentPointValue > GAMEPLAY_CONFIG.explosionThreshold ? 'explosion' : 'clear';
+                        const animationType = currentPointValue > explosionThreshold ? 'explosion' : 'clear';
                         
                         // Add to animating cells with animation index and staggered start time
                         this.animatingCells.push({
@@ -1044,46 +1319,67 @@ export class Game {
                     // This cell was removed by explosion
                     explosionRemovedCells.add(key);
                     
+                    let shouldCreateExplosionOnlyBlock = false;
+                    
                     if (this.settings.mode === 'hard') {
                         // In hard mode, create an explosion-only block (pointValue 0) in place of the exploding block
                         // Find the original block that was at this position
+                        let foundBlock = false;
                         for (const block of this.state.placedBlocks) {
                             for (const cell of block.shape) {
                                 const absoluteX = block.position.x + cell.x;
                                 const absoluteY = block.position.y + cell.y;
                                 if (absoluteX === x && absoluteY === y) {
+                                    foundBlock = true;
+                                    
+                                    // If this was already an explosion-only block, it's being removed by the explosion
+                                    // (which is correct - explosion-only blocks can be cleared by explosions)
+                                    // Don't create a new explosion-only block in this case
+                                    if (block.explosionOnly) {
+                                        break; // Skip creating a new explosion-only block
+                                    }
+                                    
                                     // Check if this was an exploding block (point value > threshold)
                                     const placementLevel = Math.floor(block.totalShapesPlacedAtPlacement / GAMEPLAY_CONFIG.shapesPerValueTier);
                                     const currentLevel = Math.floor(this.state.totalShapesPlaced / GAMEPLAY_CONFIG.shapesPerValueTier);
                                     const levelIncrements = currentLevel - placementLevel;
                                     const currentPointValue = block.pointValue + block.lineClearBonuses + (levelIncrements * GAMEPLAY_CONFIG.pointsPerTier);
                                     
-                                    if (currentPointValue > GAMEPLAY_CONFIG.explosionThreshold) {
-                                        // Create a new explosion-only block (monomino with pointValue 0)
-                                        // These blocks can only be cleared by explosions, not by normal line clears
-                                        const explosionOnlyBlock: PlacedBlock = {
-                                            shape: [{ x: 0, y: 0 }], // Monomino
-                                            position: { x, y },
-                                            color: '#808080', // Gray color for explosion-only blocks
-                                            pointValue: 0, // Cannot explode (pointValue 0)
-                                            lineClearBonuses: 0,
-                                            totalShapesPlacedAtPlacement: this.state.totalShapesPlaced,
-                                            shapeIndex: -1, // Special index for explosion-only blocks
-                                            darkness: 1.0,
-                                            explosionOnly: true, // Can only be cleared by explosions
-                                        };
-                                        this.state.placedBlocks.push(explosionOnlyBlock);
-                                        // Place it on the board
-                                        this.board.placeShape(explosionOnlyBlock.shape, explosionOnlyBlock.position);
+                                    if (currentPointValue > explosionThreshold) {
+                                        shouldCreateExplosionOnlyBlock = true;
                                         break;
                                     }
+                                    break;
                                 }
                             }
+                            if (foundBlock) break;
                         }
                     }
                     
                     // Clear the cell from the board (will be removed from placedBlocks later)
                     this.board.clearCell(x, y);
+                    
+                    // If we're creating an explosion-only block, do it after clearing the cell
+                    if (shouldCreateExplosionOnlyBlock) {
+                        // Create a new explosion-only block (monomino with pointValue 0)
+                        // These blocks can only be cleared by explosions, not by normal line clears
+                        const explosionOnlyBlock: PlacedBlock = {
+                            shape: [{ x: 0, y: 0 }], // Monomino
+                            position: { x, y },
+                            color: '#808080', // Gray color for explosion-only blocks
+                            pointValue: 0, // Cannot explode (pointValue 0)
+                            lineClearBonuses: 0,
+                            totalShapesPlacedAtPlacement: this.state.totalShapesPlaced,
+                            shapeIndex: -1, // Special index for explosion-only blocks
+                            darkness: 1.0,
+                            explosionOnly: true, // Can only be cleared by explosions
+                        };
+                        this.state.placedBlocks.push(explosionOnlyBlock);
+                        // Place it on the board
+                        this.board.placeShape(explosionOnlyBlock.shape, explosionOnlyBlock.position);
+                        // Remove this cell from cellsToRemove so the explosion-only block doesn't get removed
+                        cellsToRemove.delete(key);
+                    }
                 }
             }
         }
@@ -1092,7 +1388,6 @@ export class Game {
             fullRows,
             fullColumns,
             this.state.placedBlocks,
-            boardCleared,
             this.state.totalShapesPlaced,
             explosionRemovedCells,
             this.settings.mode
@@ -1146,7 +1441,11 @@ export class Game {
                     // Multiply by the ratio of new to old multiplier to avoid compounding
                     const multiplierIncrement = this.comboMultiplier / previousMultiplier;
                     this.state.placedBlocks.forEach(block => {
+                        const oldValue = block.pointValue;
                         block.pointValue = Math.round(block.pointValue * multiplierIncrement);
+                        if (this.settings.devMode && block.pointValue !== oldValue) {
+                            console.log(`[BLOCK VALUE] Block at (${block.position.x}, ${block.position.y}) increased: ${oldValue} → ${block.pointValue} (combo multiplier: ${multiplierIncrement.toFixed(3)}x)`);
+                        }
                     });
                     
                     // Trigger combo continue animation (only when continuing, not starting)
@@ -1167,7 +1466,11 @@ export class Game {
         // Darken all remaining blocks and increment their line clear bonuses
         this.state.placedBlocks.forEach(block => {
             block.darkness = Math.max(0, block.darkness - GAMEPLAY_CONFIG.darknessReduction);
+            const oldBonus = block.lineClearBonuses;
             block.lineClearBonuses += linesCleared; // Increment line clear bonuses by 1 for each line/column cleared
+            if (this.settings.devMode && block.lineClearBonuses !== oldBonus) {
+                console.log(`[BLOCK VALUE] Block at (${block.position.x}, ${block.position.y}) line clear bonus increased: ${oldBonus} → ${block.lineClearBonuses} (${linesCleared} line${linesCleared > 1 ? 's' : ''} cleared)`);
+            }
         });
 
         // Update level progress
@@ -1204,7 +1507,7 @@ export class Game {
             const baseExplosionMs = ANIMATION_CONFIG.explosionMs;
             const maxAnimationDuration = Math.max(this.ANIMATION_DURATION, baseExplosionMs);
             setTimeout(() => {
-                this.removeCellsFromShapes(fullRows, fullColumns, cellsToRemove);
+                this.removeCellsFromShapes(fullRows, fullColumns, cellsToRemove, cellFilledMap);
                 // CRITICAL: Rebuild board grid from placedBlocks to ensure synchronization
                 this.rebuildBoardFromPlacedBlocks();
                 // Ensure board state is synchronized after cleanup
@@ -1212,7 +1515,7 @@ export class Game {
             }, maxAnimationDuration);
         } else {
             // No animations, clean up immediately
-            this.removeCellsFromShapes(fullRows, fullColumns, cellsToRemove);
+            this.removeCellsFromShapes(fullRows, fullColumns, cellsToRemove, cellFilledMap);
             // CRITICAL: Rebuild board grid from placedBlocks to ensure synchronization
             this.rebuildBoardFromPlacedBlocks();
             // Ensure board state is synchronized after cleanup
@@ -1580,13 +1883,16 @@ export class Game {
      * Awards bonus points for remaining cells when the game ends, animating them one at a time.
      */
     private awardGameOverBonus(): void {
-        // Collect all cells with their positions and point values
+        // Collect all cells with their positions, point values, and whether they should explode
         const cellsToClear: Array<{
             x: number;
             y: number;
             color: string;
             pointValue: number;
+            shouldExplode: boolean;
         }> = [];
+
+        const pulseThreshold = getPulseThreshold(this.settings.mode);
 
         for (const block of this.state.placedBlocks) {
             // Skip explosion-only blocks - they don't contribute to score
@@ -1602,6 +1908,14 @@ export class Game {
             const levelIncrements = currentLevel - placementLevel;
             const currentPointValue = block.pointValue + block.lineClearBonuses + (levelIncrements * GAMEPLAY_CONFIG.pointsPerTier);
             
+            // Check if this block should explode (only blocks OVER pulse threshold explode on game over)
+            // Note: Using pulse threshold, not explosion threshold, so only pulsing blocks explode
+            const shouldExplode = currentPointValue > pulseThreshold;
+            
+            if (this.settings.devMode) {
+                console.log(`[GAME OVER] Block at (${block.position.x}, ${block.position.y}): pointValue=${block.pointValue}, lineClearBonuses=${block.lineClearBonuses}, levelIncrements=${levelIncrements}, currentPointValue=${currentPointValue}, pulseThreshold=${pulseThreshold}, shouldExplode=${shouldExplode}`);
+            }
+            
             for (const cell of block.shape) {
                 const absoluteX = block.position.x + cell.x;
                 const absoluteY = block.position.y + cell.y;
@@ -1610,6 +1924,7 @@ export class Game {
                     y: absoluteY,
                     color: block.color,
                     pointValue: currentPointValue,
+                    shouldExplode: shouldExplode,
                 });
             }
         }
@@ -1630,9 +1945,14 @@ export class Game {
         // Animate and clear cells one at a time
         const POP_DELAY = GAME_OVER_CONFIG.popDelayMs;
         const POP_ANIMATION_DURATION = GAME_OVER_CONFIG.popAnimationDurationMs;
+        const EXPLOSION_ANIMATION_DURATION = ANIMATION_CONFIG.explosionMs;
 
         cellsToClear.forEach((cell, index) => {
             setTimeout(() => {
+                // Determine animation type: explosion for pulsing blocks, clear for others
+                const animationType = cell.shouldExplode ? 'explosion' : 'clear';
+                const animationDuration = cell.shouldExplode ? EXPLOSION_ANIMATION_DURATION : POP_ANIMATION_DURATION;
+                
                 // Add to animating cells with random animation index (0-9)
                 const randomAnimIndex = Math.floor(Math.random() * 10);
                 this.animatingCells.push({
@@ -1641,12 +1961,18 @@ export class Game {
                     color: cell.color,
                     startTime: Date.now(),
                     progress: 0,
-                    type: 'clear',
+                    type: animationType,
                     animationIndex: randomAnimIndex,
                 });
 
-                // Play pop sound
-                this.soundManager.playPop();
+                // Play appropriate sound
+                if (cell.shouldExplode) {
+                    // Play explosion sound for each explosion (can overlap)
+                    this.soundManager.playExplosion();
+                } else {
+                    // Play pop sound for regular clears
+                    this.soundManager.playPop();
+                }
 
                 // Add points
                 this.state.score += cell.pointValue;
@@ -1663,12 +1989,14 @@ export class Game {
                     this.animatingCells = this.animatingCells.filter(
                         ac => !(ac.x === cell.x && ac.y === cell.y)
                     );
-                }, POP_ANIMATION_DURATION);
+                }, animationDuration);
             }, index * POP_DELAY);
         });
 
         // Mark popping complete and start fade animation after all pops finish
-        const totalPopDuration = cellsToClear.length * POP_DELAY + POP_ANIMATION_DURATION;
+        // Use the maximum animation duration (explosions take longer)
+        const maxAnimationDuration = Math.max(POP_ANIMATION_DURATION, EXPLOSION_ANIMATION_DURATION);
+        const totalPopDuration = cellsToClear.length * POP_DELAY + maxAnimationDuration;
         setTimeout(() => {
             this.gameOverPopComplete = true;
             // Start the fade overlay animation now
@@ -1683,16 +2011,8 @@ export class Game {
             const finalScore = this.state.score;
             const mode = this.settings.mode;
             
-            recordScore(finalScore, mode, playerName, deviceId).then((rank) => {
-                // Store rank if in top 10
-                if (rank !== null && rank <= 10) {
-                    this.leaderboardRank = rank;
-                } else {
-                    this.leaderboardRank = null;
-                }
-            }).catch((error) => {
+            recordScore(finalScore, mode, playerName, deviceId).catch((error) => {
                 console.warn('Failed to record score:', error);
-                this.leaderboardRank = null;
             });
             
             // Fetch leaderboard ranks for today/week/ever using the rank API
@@ -1782,10 +2102,24 @@ export class Game {
             dialog.style.display = 'block';
             backdrop.style.display = 'block';
             
-            // Focus the OK button for accessibility
+            // Play disappointment sound
+            this.soundManager.playDisappointment();
+            
+            // Fade in the OK button with a delay
             const okButton = document.getElementById('game-over-dialog-ok');
             if (okButton) {
-                okButton.focus();
+                // Start with opacity 0
+                okButton.style.opacity = '0';
+                okButton.style.transition = 'opacity 0.5s ease-in';
+                
+                // Fade in after a brief delay
+                setTimeout(() => {
+                    okButton.style.opacity = '1';
+                    // Focus after fade-in completes
+                    setTimeout(() => {
+                        okButton.focus();
+                    }, 500);
+                }, 300);
             }
         }
     }

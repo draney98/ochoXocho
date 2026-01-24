@@ -25,7 +25,7 @@ describe('scoring', () => {
           darkness: 1.0,
         },
       ];
-      expect(calculateScore([], [], blocks, false, 0)).toBe(0);
+      expect(calculateScore([], [], blocks, 0)).toBe(0);
     });
 
     it('should calculate score for cleared row', () => {
@@ -43,7 +43,7 @@ describe('scoring', () => {
           darkness: 1.0,
         });
       }
-      const score = calculateScore([0], [], blocks, false, 8);
+      const score = calculateScore([0], [], blocks, 8);
       expect(score).toBe(8); // 8 blocks with pointValue 1
     });
 
@@ -62,7 +62,7 @@ describe('scoring', () => {
           darkness: 1.0,
         });
       }
-      const score = calculateScore([], [0], blocks, false, 8);
+      const score = calculateScore([], [0], blocks, 8);
       expect(score).toBe(16); // 8 blocks with pointValue 2
     });
 
@@ -102,7 +102,7 @@ describe('scoring', () => {
       // Let's calculate: blocks 0-9 are at level 0 when placed, so get +10 at level 1
       // Blocks 10-14 are at level 1 when placed, so get +10 at level 1
       // Actually, let's simplify - the scoring counts blocks that intersect cleared lines
-      const score = calculateScore([0], [0], blocks, false, 15);
+      const score = calculateScore([0], [0], blocks, 15);
       // All 15 blocks intersect with cleared lines, each with base value 1
       // At level 1 (totalShapesPlaced=15), each gets +10
       // But blocks placed at different times have different increments
@@ -127,7 +127,7 @@ describe('scoring', () => {
         },
       ];
       // At totalShapesPlaced=20, level = 2, so point value should be 1 + (2 * 10) = 21
-      const score = calculateScore([0], [], blocks, false, 20);
+      const score = calculateScore([0], [], blocks, 20);
       expect(score).toBe(21);
     });
 
@@ -154,7 +154,7 @@ describe('scoring', () => {
           darkness: 1.0,
         },
       ];
-      const score = calculateScore([0], [], blocks, false, 2);
+      const score = calculateScore([0], [], blocks, 2);
       expect(score).toBe(1); // Only the block in row 0
     });
   });

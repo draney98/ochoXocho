@@ -109,22 +109,6 @@ export class InputHandler {
             // Always re-validate - don't trust cached state
             const isValid = canPlaceShape(this.board, this.dragState.shape, this.dragState.mousePosition);
             
-            // In dev mode, log detailed state for debugging
-            // if (this.settings.devMode) {
-            //     console.log(`[BOARD UPDATE] Re-validated position (${this.dragState.mousePosition.x}, ${this.dragState.mousePosition.y}): ${isValid}`);
-            //     // Log the actual grid state for the shape's blocks
-            //     for (const block of this.dragState.shape) {
-            //         const absX = this.dragState.mousePosition.x + block.x;
-            //         const absY = this.dragState.mousePosition.y + block.y;
-            //         if (absX >= 0 && absX < 8 && absY >= 0 && absY < 8) {
-            //             const gridValue = grid[absY][absX];
-            //             const isEmpty = this.board.isCellEmpty({ x: absX, y: absY });
-            //             if (gridValue || !isEmpty) {
-            //                 console.log(`  [BOARD UPDATE] Block (${block.x},${block.y}) -> grid(${absX},${absY}): grid[${absY}][${absX}]=${gridValue}, isCellEmpty=${isEmpty}`);
-            //             }
-            //         }
-            //     }
-            // }
             
             this.dragState.isValidPosition = isValid;
         }
@@ -565,7 +549,6 @@ export class InputHandler {
                     if (!lastLog || lastLog !== logKey) {
                         if (invalidBlocks.length > 0) {
                             invalidBlocks.forEach(() => {
-                                // Debug logging removed
                             });
                         }
                         (this as unknown as { lastInvalidLog: string | null }).lastInvalidLog = logKey;

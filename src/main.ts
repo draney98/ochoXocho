@@ -213,11 +213,9 @@ function setupSettingsControls(game: Game, initialSettings: GameSettings, update
     const controlZoneHeightInput = document.getElementById('setting-control-zone-height') as HTMLInputElement | null;
     const controlZoneMaxScaleInput = document.getElementById('setting-control-zone-max-scale') as HTMLInputElement | null;
     const controlZoneMinScaleInput = document.getElementById('setting-control-zone-min-scale') as HTMLInputElement | null;
-    const dragSnapSmoothingInput = document.getElementById('setting-drag-snap-smoothing') as HTMLInputElement | null;
     const controlZoneHeightValue = document.getElementById('control-zone-height-value');
     const controlZoneMaxScaleValue = document.getElementById('control-zone-max-scale-value');
     const controlZoneMinScaleValue = document.getElementById('control-zone-min-scale-value');
-    const dragSnapSmoothingValue = document.getElementById('drag-snap-smoothing-value');
 
     // Sync inputs with initial settings so toggles reflect any future default changes
     if (gridInput) gridInput.checked = initialSettings.showGrid;
@@ -275,8 +273,6 @@ function setupSettingsControls(game: Game, initialSettings: GameSettings, update
     if (controlZoneHeightInput) controlZoneHeightInput.value = String(initialSettings.controlZoneHeight ?? 0.5);
     if (controlZoneMaxScaleInput) controlZoneMaxScaleInput.value = String(initialSettings.controlZoneMaxScale ?? 4);
     if (controlZoneMinScaleInput) controlZoneMinScaleInput.value = String(initialSettings.controlZoneMinScale ?? 2);
-    if (dragSnapSmoothingInput) dragSnapSmoothingInput.value = String(initialSettings.dragSnapSmoothing ?? 0.5);
-    
     // Update value displays
     if (controlZoneHeightValue && controlZoneHeightInput) {
         controlZoneHeightValue.textContent = `${Math.round(parseFloat(controlZoneHeightInput.value) * 100)}%`;
@@ -286,9 +282,6 @@ function setupSettingsControls(game: Game, initialSettings: GameSettings, update
     }
     if (controlZoneMinScaleValue && controlZoneMinScaleInput) {
         controlZoneMinScaleValue.textContent = `${Math.round(parseFloat(controlZoneMinScaleInput.value))}x`;
-    }
-    if (dragSnapSmoothingValue && dragSnapSmoothingInput) {
-        dragSnapSmoothingValue.textContent = parseFloat(dragSnapSmoothingInput.value).toFixed(2);
     }
 
 
@@ -317,7 +310,6 @@ function setupSettingsControls(game: Game, initialSettings: GameSettings, update
             controlZoneHeight: controlZoneHeightInput ? parseFloat(controlZoneHeightInput.value) : (initialSettings.controlZoneHeight ?? 0.5),
             controlZoneMaxScale: controlZoneMaxScaleInput ? Math.round(parseFloat(controlZoneMaxScaleInput.value)) : (initialSettings.controlZoneMaxScale ?? 4),
             controlZoneMinScale: controlZoneMinScaleInput ? Math.round(parseFloat(controlZoneMinScaleInput.value)) : (initialSettings.controlZoneMinScale ?? 2),
-            dragSnapSmoothing: dragSnapSmoothingInput ? parseFloat(dragSnapSmoothingInput.value) : (initialSettings.dragSnapSmoothing ?? 0.5),
             showGameOverDialog: showGameOverDialogInput?.checked ?? true,
         };
         game.updateSettings(updatedSettings);
@@ -374,12 +366,6 @@ function setupSettingsControls(game: Game, initialSettings: GameSettings, update
     controlZoneMinScaleInput?.addEventListener('input', () => {
         if (controlZoneMinScaleValue && controlZoneMinScaleInput) {
             controlZoneMinScaleValue.textContent = `${Math.round(parseFloat(controlZoneMinScaleInput.value))}x`;
-        }
-        pushToGame();
-    });
-    dragSnapSmoothingInput?.addEventListener('input', () => {
-        if (dragSnapSmoothingValue && dragSnapSmoothingInput) {
-            dragSnapSmoothingValue.textContent = parseFloat(dragSnapSmoothingInput.value).toFixed(2);
         }
         pushToGame();
     });

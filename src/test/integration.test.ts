@@ -35,7 +35,7 @@ describe('Game Integration Tests', () => {
                 });
             }
 
-            const score = calculateScore([0], [], placedBlocks, false, 0);
+            const score = calculateScore([0], [], placedBlocks, 0);
             expect(score).toBe(8); // 8 blocks with point value 1
         });
 
@@ -54,7 +54,7 @@ describe('Game Integration Tests', () => {
             ];
 
             const explosionCells = new Set<string>(['0,0']);
-            const score = calculateScore([], [], placedBlocks, false, 0, explosionCells, 'easy');
+            const score = calculateScore([], [], placedBlocks, 0, explosionCells, 'easy');
             expect(score).toBe(70); // Explosion-removed block counts in easy mode
         });
 
@@ -73,7 +73,7 @@ describe('Game Integration Tests', () => {
             ];
 
             const explosionCells = new Set<string>(['0,0']);
-            const score = calculateScore([], [], placedBlocks, false, 0, explosionCells, 'hard');
+            const score = calculateScore([], [], placedBlocks, 0, explosionCells, 'hard');
             expect(score).toBe(0); // Explosion-removed blocks don't count in hard mode
         });
     });

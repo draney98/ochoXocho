@@ -22,9 +22,27 @@ export const GAMEPLAY_CONFIG = {
     darknessReduction: 0.1,
     shapesPerValueTier: 10,
     pointsPerTier: 10,
-    pulseThreshold: 60, // Blocks with value > this will pulse
-    explosionThreshold: 60, // Blocks with value > this will explode (same as pulse threshold)
+    pulseThreshold: 60, // Blocks with value > this will pulse (default, mode-specific overrides below)
+    explosionThreshold: 60, // Blocks with value > this will explode (default, mode-specific overrides below)
 } as const;
+
+/**
+ * Gets the pulse threshold for the given game mode
+ * @param mode - Game mode ('easy' or 'hard')
+ * @returns Pulse threshold value
+ */
+export function getPulseThreshold(mode: 'easy' | 'hard'): number {
+    return mode === 'hard' ? 15 : 60;
+}
+
+/**
+ * Gets the explosion threshold for the given game mode
+ * @param mode - Game mode ('easy' or 'hard')
+ * @returns Explosion threshold value
+ */
+export function getExplosionThreshold(mode: 'easy' | 'hard'): number {
+    return mode === 'easy' ? 75 : 20;
+}
 
 /**
  * Animation timing configuration (in milliseconds)
@@ -101,11 +119,18 @@ export const SOUND_CONFIG = {
         file: '220180__gameaudio__click-pop.wav', // Audio file for pop sound
     },
     explosion: {
-        frequency: 120, // Low frequency for explosion rumble
+        frequency: 120, // Low frequency for explosion rumble (fallback)
         duration: 0.4, // Longer duration for dramatic effect
         waveform: 'sawtooth' as const,
-        volume: 1.2, // Sawtooth is loud, but boost for impact
-        file: null, // No audio file yet - using synthesized sound
+        volume: 0.6, // Reduced volume to match other sounds
+        file: 'epic-cinematic-explosion-454857.mp3', // Audio file for explosion sound
+    },
+    disappointment: {
+        frequency: 150, // Lower frequency for sad tone
+        duration: 0.8, // Longer duration for dramatic effect
+        waveform: 'sine' as const,
+        volume: 0.9, // Moderate volume
+        file: null, // Synthesized sound
     },
 } as const;
 
@@ -126,7 +151,6 @@ export const DEFAULT_SETTINGS: GameSettings = {
     controlZoneHeight: 0.5, // Bottom half of screen (50%)
     controlZoneMaxScale: 4, // Maximum scaling at bottom of control zone (max 8)
     controlZoneMinScale: 2, // Minimum scaling at top of control zone (max 4)
-    dragSnapSmoothing: 0.5, // Smoothing factor for drag snapping (0.1=smooth, 1.0=instant)
     showGameOverDialog: true, // Show dialog before game over screen
 };
 

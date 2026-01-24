@@ -20,7 +20,7 @@ import {
     DRAG_VISUAL_OFFSET_Y,
     getQueueItemRect,
 } from './constants';
-import { GAMEPLAY_CONFIG, ANIMATION_CONFIG } from './config';
+import { GAMEPLAY_CONFIG, ANIMATION_CONFIG, getPulseThreshold, getExplosionThreshold } from './config';
 import { SYSTEM_FONT_STACK } from './fontConfig';
 
 /**
@@ -36,7 +36,6 @@ export class Renderer {
     private finalLinesCleared: number = 0; // Final lines cleared when game ended
     private finalLevel: number = 1; // Final level when game ended
     private finalMode: 'easy' | 'hard' = 'easy'; // Final mode when game ended
-    private finalLeaderboardRank: number | null = null; // Final leaderboard rank when game ended (if top 10)
     private currentLevel: number = 1;
     private blockIconImage: HTMLImageElement | null = null;
     private blockIconLoaded: boolean = false;
@@ -220,6 +219,38 @@ export class Renderer {
     }
 
     /**
+     * Blends two hex colors together
+     * @param color1 - First color (hex string)
+     * @param color2 - Second color (hex string)
+     * @param blendFactor - Blend factor from 0 to 1 (0 = all color1, 1 = all color2)
+     * @returns Blended color as hex string
+     */
+    private blendColors(color1: string, color2: string, blendFactor: number): string {
+        const factor = Math.max(0, Math.min(1, blendFactor));
+        
+        // Remove # if present
+        const hex1 = color1.replace('#', '');
+        const hex2 = color2.replace('#', '');
+        
+        // Parse RGB values
+        const r1 = parseInt(hex1.substring(0, 2), 16);
+        const g1 = parseInt(hex1.substring(2, 4), 16);
+        const b1 = parseInt(hex1.substring(4, 6), 16);
+        
+        const r2 = parseInt(hex2.substring(0, 2), 16);
+        const g2 = parseInt(hex2.substring(2, 4), 16);
+        const b2 = parseInt(hex2.substring(4, 6), 16);
+        
+        // Blend colors
+        const blendedR = Math.floor(r1 * (1 - factor) + r2 * factor);
+        const blendedG = Math.floor(g1 * (1 - factor) + g2 * factor);
+        const blendedB = Math.floor(b1 * (1 - factor) + b2 * factor);
+        
+        // Convert back to hex
+        return `#${blendedR.toString(16).padStart(2, '0')}${blendedG.toString(16).padStart(2, '0')}${blendedB.toString(16).padStart(2, '0')}`;
+    }
+
+    /**
      * Clears the entire canvas and fills with background color
      */
     clear(): void {
@@ -237,7 +268,6 @@ export class Renderer {
         this.finalLinesCleared = 0;
         this.finalLevel = 1;
         this.finalMode = 'easy';
-        this.finalLeaderboardRank = null;
         this.copyLinkBounds = null;
         this.copyLinkText = 'Share'; // Reset share link text
     }
@@ -358,11 +388,6 @@ export class Renderer {
         emojiString += `Lines: ${this.finalLinesCleared.toLocaleString()}\n`;
         emojiString += `Level: ${this.finalLevel}\n`;
         emojiString += `Mode: ${this.finalMode.charAt(0).toUpperCase() + this.finalMode.slice(1)}`;
-        
-        // Add rank if in top 10
-        if (this.finalLeaderboardRank !== null && this.finalLeaderboardRank <= 10) {
-            emojiString += `\n🏆 Rank #${this.finalLeaderboardRank} on Leaderboard! 🏆`;
-        }
 
         return emojiString;
     }
@@ -498,9 +523,13 @@ export class Renderer {
                 // Apply darkness to color
                 let darkenedColor = this.darkenColor(block.color, block.darkness);
                 
-                // Apply pulsing effect if value > pulse threshold (skip for explosion-only blocks)
+                // Apply pulsing effect if value >= pulse threshold (skip for explosion-only blocks)
                 const isExplosionOnly = block.explosionOnly ?? false;
-                const shouldPulse = !isExplosionOnly && displayValue > GAMEPLAY_CONFIG.pulseThreshold;
+                const pulseThreshold = getPulseThreshold(this.settings.mode);
+                const explosionThreshold = getExplosionThreshold(this.settings.mode);
+                const shouldPulse = !isExplosionOnly && displayValue >= pulseThreshold;
+                const willExplode = !isExplosionOnly && displayValue >= explosionThreshold;
+                
                 if (shouldPulse) {
                     // In hard mode, pulsing takes half the time
                     const pulseCycleMs = this.settings.mode === 'hard' 
@@ -513,6 +542,15 @@ export class Renderer {
                     // When pulseBrightness is 1.0, use full brightness; when 0.7, use current darkness
                     const pulsedDarkness = block.darkness + (1.0 - block.darkness) * (pulseBrightness - 0.7) / 0.3;
                     darkenedColor = this.darkenColor(block.color, pulsedDarkness);
+                    
+                    // If block will explode, incorporate red into the pulsing color
+                    if (willExplode) {
+                        // Blend red with the current color based on pulse brightness
+                        // More red when pulse is brighter (at peak of pulse)
+                        const redIntensity = (pulseBrightness - 0.7) / 0.3; // 0 to 1 as pulse goes from 0.7 to 1.0
+                        const redColor = '#ff0000';
+                        darkenedColor = this.blendColors(darkenedColor, redColor, redIntensity * 0.5); // Blend up to 50% red
+                    }
                 }
                 
                 // Draw only the non-animating cells with incremented point values
@@ -560,8 +598,12 @@ export class Renderer {
                         // Check if this is an explosion-only block
                         const isExplosionOnly = block.explosionOnly ?? false;
                         
-                        // Apply pulsing effect if value > pulse threshold (skip for explosion-only blocks)
-                        const shouldPulse = !isExplosionOnly && displayValue > GAMEPLAY_CONFIG.pulseThreshold;
+                        // Apply pulsing effect if value >= pulse threshold (skip for explosion-only blocks)
+                        const pulseThreshold = getPulseThreshold(this.settings.mode);
+                        const explosionThreshold = getExplosionThreshold(this.settings.mode);
+                        const shouldPulse = !isExplosionOnly && displayValue >= pulseThreshold;
+                        const willExplode = !isExplosionOnly && displayValue >= explosionThreshold;
+                        
                         if (shouldPulse) {
                             const pulseCycleMs = this.settings.mode === 'hard' 
                                 ? ANIMATION_CONFIG.pulseCycleMs / 2 
@@ -570,6 +612,15 @@ export class Renderer {
                             const pulseBrightness = 0.7 + (Math.sin(pulseProgress * Math.PI * 2) * 0.15 + 0.15);
                             const pulsedDarkness = block.darkness + (1.0 - block.darkness) * (pulseBrightness - 0.7) / 0.3;
                             darkenedColor = this.darkenColor(block.color, pulsedDarkness);
+                            
+                            // If block will explode, incorporate red into the pulsing color
+                            if (willExplode) {
+                                // Blend red with the current color based on pulse brightness
+                                // More red when pulse is brighter (at peak of pulse)
+                                const redIntensity = (pulseBrightness - 0.7) / 0.3; // 0 to 1 as pulse goes from 0.7 to 1.0
+                                const redColor = '#ff0000';
+                                darkenedColor = this.blendColors(darkenedColor, redColor, redIntensity * 0.5); // Blend up to 50% red
+                            }
                         }
                         
                         // Draw X for explosion-only blocks, or point value for normal blocks
@@ -1309,30 +1360,21 @@ export class Renderer {
         this.ctx.globalAlpha = 1.0;
         this.ctx.restore();
         
-        // Draw outline around destination cells when hovering over a valid drop location
-        // Only outline the outer perimeter of the shape (not internal lines)
+        // Draw glow around destination cells when hovering over a valid drop location
         if (dragState.hasBoardPosition && dragState.isValidPosition && dragState.mousePosition) {
             this.ctx.save();
             
-            // Determine outline color based on theme (white for dark themes, black for light themes)
+            // Determine glow color based on theme (white for dark themes, black for light themes)
             const isDarkTheme = this.settings.theme === 'midnight';
-            const outlineColor = isDarkTheme ? '#ffffff' : '#000000';
-            this.ctx.strokeStyle = outlineColor;
-            this.ctx.lineWidth = 3;
-            this.ctx.globalAlpha = 0.9;
+            const glowColor = isDarkTheme ? '#ffffff' : '#000000';
             
-            // Create a set of all cell positions in the shape
-            const shapeCells = new Set<string>();
-            for (const block of dragState.shape) {
-                const gridX = dragState.mousePosition.x + block.x;
-                const gridY = dragState.mousePosition.y + block.y;
-                if (gridX >= 0 && gridX < BOARD_CELL_COUNT && gridY >= 0 && gridY < BOARD_CELL_COUNT) {
-                    shapeCells.add(`${gridX},${gridY}`);
-                }
-            }
+            // Set up glow effect using shadow
+            this.ctx.shadowBlur = 12;
+            this.ctx.shadowColor = glowColor;
+            this.ctx.globalAlpha = 0.6;
+            this.ctx.fillStyle = glowColor;
             
-            // Draw only the outer edges of the shape
-            // For each cell, check its 4 neighbors and draw edges that face empty cells or board boundaries
+            // Draw a subtle glow for each cell in the shape
             for (const block of dragState.shape) {
                 const gridX = dragState.mousePosition.x + block.x;
                 const gridY = dragState.mousePosition.y + block.y;
@@ -1342,40 +1384,16 @@ export class Renderer {
                     const cellX = BOARD_OFFSET_X + gridX * CELL_SIZE;
                     const cellY = BOARD_OFFSET_Y + gridY * CELL_SIZE;
                     
-                    // Check each of the 4 edges (top, right, bottom, left)
-                    // An edge is outer if the neighbor is not in the shape (or is outside board bounds)
-                    // Top edge
-                    const topNeighbor = `${gridX},${gridY - 1}`;
-                    if (!shapeCells.has(topNeighbor)) {
-                        this.ctx.beginPath();
-                        this.ctx.moveTo(cellX, cellY);
-                        this.ctx.lineTo(cellX + CELL_SIZE, cellY);
-                        this.ctx.stroke();
-                    }
-                    // Right edge
-                    const rightNeighbor = `${gridX + 1},${gridY}`;
-                    if (!shapeCells.has(rightNeighbor)) {
-                        this.ctx.beginPath();
-                        this.ctx.moveTo(cellX + CELL_SIZE, cellY);
-                        this.ctx.lineTo(cellX + CELL_SIZE, cellY + CELL_SIZE);
-                        this.ctx.stroke();
-                    }
-                    // Bottom edge
-                    const bottomNeighbor = `${gridX},${gridY + 1}`;
-                    if (!shapeCells.has(bottomNeighbor)) {
-                        this.ctx.beginPath();
-                        this.ctx.moveTo(cellX + CELL_SIZE, cellY + CELL_SIZE);
-                        this.ctx.lineTo(cellX, cellY + CELL_SIZE);
-                        this.ctx.stroke();
-                    }
-                    // Left edge
-                    const leftNeighbor = `${gridX - 1},${gridY}`;
-                    if (!shapeCells.has(leftNeighbor)) {
-                        this.ctx.beginPath();
-                        this.ctx.moveTo(cellX, cellY + CELL_SIZE);
-                        this.ctx.lineTo(cellX, cellY);
-                        this.ctx.stroke();
-                    }
+                    // Draw a small filled rectangle with glow
+                    // Use a slightly smaller size to create a subtle inner glow effect
+                    const glowSize = CELL_SIZE * 0.7;
+                    const glowOffset = (CELL_SIZE - glowSize) / 2;
+                    this.ctx.fillRect(
+                        cellX + glowOffset,
+                        cellY + glowOffset,
+                        glowSize,
+                        glowSize
+                    );
                 }
             }
             
@@ -1895,7 +1913,7 @@ export class Renderer {
      * @param progress - Animation progress from 0 to 1
      * @param placedBlocks - Final board state to render as 4x4 grid
      */
-    drawGameOver(progress: number = 1, placedBlocks: PlacedBlock[] = [], leaderboardRank: number | null = null, leaderboardRanks: { today: number | null; week: number | null; ever: number | null; todayTotal: number; weekTotal: number; everTotal: number } | null = null, mode: 'easy' | 'hard' = 'easy'): void {
+    drawGameOver(progress: number = 1, placedBlocks: PlacedBlock[] = [], leaderboardRanks: { today: number | null; week: number | null; ever: number | null; todayTotal: number; weekTotal: number; everTotal: number } | null = null, mode: 'easy' | 'hard' = 'easy'): void {
         // Animated overlay - fade in from 0 to 0.8 opacity (cover the entire playing surface and queue area)
         const overlayAlpha = 0.8 * progress;
         this.ctx.fillStyle = `rgba(0, 0, 0, ${overlayAlpha})`;
@@ -2289,7 +2307,6 @@ export class Renderer {
         level: number = 1,
         score: number = 0,
         linesCleared: number = 0,
-        leaderboardRank: number | null = null,
         leaderboardRanks: { today: number | null; week: number | null; ever: number | null; todayTotal: number; weekTotal: number; everTotal: number } | null = null,
         mode: 'easy' | 'hard' = 'easy',
         animatingShapes: AnimatingShape[] = [],
@@ -2325,9 +2342,7 @@ export class Renderer {
         // Draw border between board and queue area
         this.drawBoardQueueBorder();
         
-        if (this.settings.showGhostPreview) {
-            this.drawDragPreview(dragState, smoothedDragPosition);
-        }
+        this.drawDragPreview(dragState, smoothedDragPosition);
 
         // Store final board state when game over just starts (before pop animations begin)
         // Capture when gameOver is true but no animations have started yet (animatingCells is empty)
@@ -2344,7 +2359,6 @@ export class Renderer {
             this.finalLinesCleared = linesCleared;
             this.finalLevel = level;
             this.finalMode = mode;
-            this.finalLeaderboardRank = leaderboardRank;
         }
         
         // Always update finalScore when gameOver is true (score may change due to game over bonus)
@@ -2353,7 +2367,7 @@ export class Renderer {
         }
 
         if (gameOver) {
-            this.drawGameOver(gameOverProgress, placedBlocks, leaderboardRank ?? null, leaderboardRanks ?? null, mode);
+            this.drawGameOver(gameOverProgress, placedBlocks, leaderboardRanks ?? null, mode);
         }
         
         if (levelUpProgress > 0 && levelUpProgress < 1) {
