@@ -1,0 +1,9 @@
+<svg width="32" height="32" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges">
+  <!-- Black outline (2px) with rounded corners -->
+  <rect x="0" y="0" width="32" height="32" rx="3" ry="3" fill="#000000"/>
+  <!-- White fill with rounded corners and subtle highlight -->
+  <rect x="2" y="2" width="28" height="28" rx="2" ry="2" fill="#FFFFFF"/>
+  <!-- Subtle lighter highlight on top-left edge -->
+  <rect x="2" y="2" width="4" height="4" rx="1" ry="1" fill="#F5F5F5"/>
+  <rect x="2" y="2" width="3" height="3" rx="1" ry="1" fill="#F8F8F8"/>
+</svg>

@@ -5,7 +5,7 @@
 import { Position, Shape, PlacedBlock, GameState, AnimatingCell, AnimatingShape, GameSettings } from './types';
 import { Board } from './board';
 import { generateShapes, generateEasyShapes, getShapeColor, getShapeIndex, getShapePointValue, updateColorScheme } from './shapes';
-import { Renderer } from './renderer';
+import { PixiRenderer } from './pixiRenderer';
 import { InputHandler } from './input';
 import { calculateScore } from './scoring';
 import { checkGameOver } from './gameOver';
@@ -26,7 +26,7 @@ import { DragController } from './dragController';
 export class Game {
     private board: Board;
     private state: GameState;
-    private renderer: Renderer;
+    private renderer: PixiRenderer;
     private inputHandler: InputHandler;
     private canvas: HTMLCanvasElement;
     private scoreElement: HTMLElement | null;
@@ -44,6 +44,7 @@ export class Game {
     private gameOverStartTime: number | null = null;
     private readonly GAME_OVER_ANIMATION_DURATION = ANIMATION_CONFIG.gameOverFadeMs;
     private gameOverPopComplete: boolean = false;
+    private gameOverDialogShowing: boolean = false; // true while "Game Over" modal is visible (prevents re-entry)
     private playerNamePromptShown: boolean = false; // Track if we've shown the player name prompt
     private levelUpStartTime: number | null = null;
     private leaderboardRanks: { today: number | null; week: number | null; ever: number | null; todayTotal: number; weekTotal: number; everTotal: number } = {
@@ -94,7 +95,7 @@ export class Game {
             linesCleared: 0,
         };
 
-        this.renderer = new Renderer(canvas, this.settings);
+        this.renderer = new PixiRenderer(canvas, this.settings);
         this.inputHandler = new InputHandler(
             canvas,
             this.board,
@@ -138,6 +139,13 @@ export class Game {
         if (this.onAutoPlaceStateChange) {
             this.onAutoPlaceStateChange(isPlacing);
         }
+    }
+
+    /**
+     * Gets the renderer instance (for initialization)
+     */
+    getRenderer(): PixiRenderer {
+        return this.renderer;
     }
 
     /**
@@ -214,7 +222,10 @@ export class Game {
      */
     private gameLoop(): void {
         this.update();
-        this.render();
+        // Only render if renderer is initialized (prevents warning on first frame)
+        if (this.renderer.isInitialized()) {
+            this.render();
+        }
         this.animationFrameId = requestAnimationFrame(() => this.gameLoop());
     }
 
@@ -254,10 +265,8 @@ export class Game {
         
         // Don't update game logic if game is over (freeze the board)
         if (this.state.gameOver) {
-            // Still update game over animation
-            if (this.gameOverStartTime === null) {
-                this.gameOverStartTime = currentTime;
-            }
+            // gameOverStartTime is set only by awardGameOverBonus after pops complete — do not set it here,
+            // or the overlay would cover the board and hide the block-clearing animation
             return;
         }
         
@@ -641,25 +650,22 @@ export class Game {
             }
         }
         
-        this.state.placedBlocks = this.state.placedBlocks.map(block => {
-            // Filter out cells that are in cleared rows or columns, or in the cellsToRemove set
-            const remainingCells = block.shape.filter(cell => {
-                const absoluteX = block.position.x + cell.x;
-                const absoluteY = block.position.y + cell.y;
-                
-                // Check if cell is in cleared row or column
-                const inClearedRow = fullRows.includes(absoluteY);
-                const inClearedColumn = fullColumns.includes(absoluteX);
-                
-                // Check if cell is marked for removal by explosion
-                const key = `${absoluteX},${absoluteY}`;
-                const removedByExplosion = cellsToRemove?.has(key) ?? false;
-                
-                // If block is explosion-only, it can be removed by explosion OR if in both a full row AND column
-                // (even if those rows/columns aren't "clearable" due to other unexplodable blocks)
-                if (block.explosionOnly) {
+        // First pass: Identify intersection blocks that should be removed and their rows/columns
+        const rowsToClearFromIntersection = new Set<number>();
+        const colsToClearFromIntersection = new Set<number>();
+        
+        for (const block of this.state.placedBlocks) {
+            if (block.explosionOnly) {
+                for (const cell of block.shape) {
+                    const absoluteX = block.position.x + cell.x;
+                    const absoluteY = block.position.y + cell.y;
+                    
+                    const inClearedRow = fullRows.includes(absoluteY);
+                    const inClearedColumn = fullColumns.includes(absoluteX);
+                    const key = `${absoluteX},${absoluteY}`;
+                    const removedByExplosion = cellsToRemove?.has(key) ?? false;
+                    
                     // Check if this cell is at the intersection of two full lines
-                    // Build a quick check: is the row full? is the column full?
                     let rowIsFull = true;
                     let colIsFull = true;
                     for (let x = 0; x < BOARD_CELL_COUNT; x++) {
@@ -678,14 +684,68 @@ export class Game {
                     }
                     const atIntersection = rowIsFull && colIsFull;
                     const shouldRemove = removedByExplosion || (inClearedRow && inClearedColumn) || atIntersection;
-                    if (this.settings.devMode && (inClearedRow || inClearedColumn || atIntersection)) {
-                        console.log(`[LINE CLEAR DEBUG] Explosion-only block at (${absoluteX}, ${absoluteY}): inClearedRow=${inClearedRow}, inClearedColumn=${inClearedColumn}, rowIsFull=${rowIsFull}, colIsFull=${colIsFull}, atIntersection=${atIntersection}, removedByExplosion=${removedByExplosion}, shouldRemove=${shouldRemove}`);
+                    
+                    // If removing an intersection block (not already in cleared lines), mark row/column for clearing
+                    if (shouldRemove && atIntersection && !removedByExplosion && !inClearedRow && !inClearedColumn) {
+                        rowsToClearFromIntersection.add(absoluteY);
+                        colsToClearFromIntersection.add(absoluteX);
+                        if (this.settings.devMode) {
+                            console.log(`[INTERSECTION CLEAR] Removing intersection block at (${absoluteX}, ${absoluteY}), will clear entire row ${absoluteY} and column ${absoluteX}`);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Second pass: Remove cells based on all conditions
+        this.state.placedBlocks = this.state.placedBlocks.map(block => {
+            // Filter out cells that are in cleared rows or columns, or in the cellsToRemove set
+            const remainingCells = block.shape.filter(cell => {
+                const absoluteX = block.position.x + cell.x;
+                const absoluteY = block.position.y + cell.y;
+                
+                // Check if cell is in cleared row or column
+                const inClearedRow = fullRows.includes(absoluteY);
+                const inClearedColumn = fullColumns.includes(absoluteX);
+                
+                // Check if cell is marked for removal by explosion
+                const key = `${absoluteX},${absoluteY}`;
+                const removedByExplosion = cellsToRemove?.has(key) ?? false;
+                
+                // Check if cell is in row/column cleared by intersection block removal
+                const inIntersectionClearedRow = rowsToClearFromIntersection.has(absoluteY);
+                const inIntersectionClearedCol = colsToClearFromIntersection.has(absoluteX);
+                
+                // If block is explosion-only, it can be removed by explosion OR if in both a full row AND column
+                // (even if those rows/columns aren't "clearable" due to other unexplodable blocks)
+                if (block.explosionOnly) {
+                    // Check if this cell is at the intersection of two full lines
+                    let rowIsFull = true;
+                    let colIsFull = true;
+                    for (let x = 0; x < BOARD_CELL_COUNT; x++) {
+                        const rowKey = `${x},${absoluteY}`;
+                        if (!filledMap.get(rowKey)) {
+                            rowIsFull = false;
+                            break;
+                        }
+                    }
+                    for (let y = 0; y < BOARD_CELL_COUNT; y++) {
+                        const colKey = `${absoluteX},${y}`;
+                        if (!filledMap.get(colKey)) {
+                            colIsFull = false;
+                            break;
+                        }
+                    }
+                    const atIntersection = rowIsFull && colIsFull;
+                    const shouldRemove = removedByExplosion || (inClearedRow && inClearedColumn) || atIntersection || inIntersectionClearedRow || inIntersectionClearedCol;
+                    if (this.settings.devMode && (inClearedRow || inClearedColumn || atIntersection || inIntersectionClearedRow || inIntersectionClearedCol)) {
+                        console.log(`[LINE CLEAR DEBUG] Explosion-only block at (${absoluteX}, ${absoluteY}): inClearedRow=${inClearedRow}, inClearedColumn=${inClearedColumn}, rowIsFull=${rowIsFull}, colIsFull=${colIsFull}, atIntersection=${atIntersection}, removedByExplosion=${removedByExplosion}, inIntersectionRow=${inIntersectionClearedRow}, inIntersectionCol=${inIntersectionClearedCol}, shouldRemove=${shouldRemove}`);
                     }
                     return !shouldRemove; // Return true to keep, false to remove
                 }
                 
-                // Normal blocks: remove if in cleared row/column OR removed by explosion
-                return !inClearedRow && !inClearedColumn && !removedByExplosion;
+                // Normal blocks: remove if in cleared row/column OR removed by explosion OR in row/column cleared by intersection
+                return !inClearedRow && !inClearedColumn && !removedByExplosion && !inIntersectionClearedRow && !inIntersectionClearedCol;
             });
             
             // Return updated block with remaining cells, or null if all cells were removed
@@ -715,7 +775,7 @@ export class Game {
      * @param fullColumns - Array of cleared column indices
      */
     private cleanupAfterAnimation(fullRows: number[], fullColumns: number[]): void {
-        this.removeCellsFromShapes(fullRows, fullColumns, undefined, undefined);
+        this.removeCellsFromShapes(fullRows, fullColumns);
     }
 
     /**
@@ -819,15 +879,18 @@ export class Game {
             
             let hasExplosionOnly = false;
             let allExplosionOnlyAtIntersection = true;
+            const explosionOnlyPositions: number[] = [];
+            const nonIntersectionExplosionOnly: number[] = [];
             
             for (let x = 0; x < BOARD_SIZE; x++) {
                 const key = `${x},${row}`;
                 if (cellExplosionOnlyMap.get(key)) {
                     hasExplosionOnly = true;
+                    explosionOnlyPositions.push(x);
                     // Check if this explosion-only block is at an intersection where both row and column are full
                     if (!fullColumnSet.has(x)) {
                         allExplosionOnlyAtIntersection = false;
-                        break;
+                        nonIntersectionExplosionOnly.push(x);
                     }
                 }
             }
@@ -835,6 +898,14 @@ export class Game {
             // Row is clearable if it has no explosion-only blocks, OR all explosion-only blocks are at intersections
             if (!hasExplosionOnly || allExplosionOnlyAtIntersection) {
                 fullRows.push(row);
+                if (this.settings.devMode && hasExplosionOnly) {
+                    console.log(`[LINE CLEAR] Row ${row} is clearable - has explosion-only blocks at columns [${explosionOnlyPositions.join(', ')}], all at intersections`);
+                }
+            } else {
+                // Row is NOT clearable due to explosion-only blocks
+                if (this.settings.devMode) {
+                    console.log(`[LINE CLEAR] Row ${row} is FULL but NOT clearable - has explosion-only blocks at columns [${explosionOnlyPositions.join(', ')}], but columns [${nonIntersectionExplosionOnly.join(', ')}] are NOT full. Full columns: [${Array.from(fullColumnSet).join(', ')}]`);
+                }
             }
         }
         
@@ -964,15 +1035,18 @@ export class Game {
             
             let hasExplosionOnly = false;
             let allExplosionOnlyAtIntersection = true;
+            const explosionOnlyPositions: number[] = [];
+            const nonIntersectionExplosionOnly: number[] = [];
             
             for (let y = 0; y < BOARD_SIZE; y++) {
                 const key = `${col},${y}`;
                 if (cellExplosionOnlyMap.get(key)) {
                     hasExplosionOnly = true;
+                    explosionOnlyPositions.push(y);
                     // Check if this explosion-only block is at an intersection where both row and column are full
                     if (!fullRowSet.has(y)) {
                         allExplosionOnlyAtIntersection = false;
-                        break;
+                        nonIntersectionExplosionOnly.push(y);
                     }
                 }
             }
@@ -980,6 +1054,14 @@ export class Game {
             // Column is clearable if it has no explosion-only blocks, OR all explosion-only blocks are at intersections
             if (!hasExplosionOnly || allExplosionOnlyAtIntersection) {
                 fullColumns.push(col);
+                if (this.settings.devMode && hasExplosionOnly) {
+                    console.log(`[LINE CLEAR] Column ${col} is clearable - has explosion-only blocks at rows [${explosionOnlyPositions.join(', ')}], all at intersections`);
+                }
+            } else {
+                // Column is NOT clearable due to explosion-only blocks
+                if (this.settings.devMode) {
+                    console.log(`[LINE CLEAR] Column ${col} is FULL but NOT clearable - has explosion-only blocks at rows [${explosionOnlyPositions.join(', ')}], but rows [${nonIntersectionExplosionOnly.join(', ')}] are NOT full. Full rows: [${Array.from(fullRowSet).join(', ')}]`);
+                }
             }
         }
         
@@ -1005,9 +1087,17 @@ export class Game {
      * 
      * @private
      */
-    private checkAndClearLines(): void {
+    private checkAndClearLines(recursionDepth: number = 0): void {
         // Never clear lines if game is over - board should stay visible
         if (this.state.gameOver) {
+            return;
+        }
+        
+        // Prevent infinite recursion (max 3 levels should be more than enough)
+        if (recursionDepth > 3) {
+            if (this.settings.devMode) {
+                console.warn('[LINE CLEAR] Max recursion depth reached, stopping recursive clearing');
+            }
             return;
         }
         
@@ -1017,6 +1107,60 @@ export class Game {
         // Use custom methods that exclude rows/columns with explosion-only blocks
         const fullRows = this.getClearableFullRows();
         const fullColumns = this.getClearableFullColumns();
+        
+        // Always log which rows/columns are full vs clearable (for debugging line clearing issues)
+        if (this.settings.devMode) {
+            // Build maps to check which rows/columns are actually full
+            const cellFilledMap = new Map<string, boolean>();
+            for (const block of this.state.placedBlocks) {
+                for (const cell of block.shape) {
+                    const absoluteX = block.position.x + cell.x;
+                    const absoluteY = block.position.y + cell.y;
+                    if (absoluteX >= 0 && absoluteX < BOARD_CELL_COUNT && absoluteY >= 0 && absoluteY < BOARD_CELL_COUNT) {
+                        const key = `${absoluteX},${absoluteY}`;
+                        cellFilledMap.set(key, true);
+                    }
+                }
+            }
+            const actuallyFullRows: number[] = [];
+            const actuallyFullColumns: number[] = [];
+            for (let row = 0; row < BOARD_CELL_COUNT; row++) {
+                let isFull = true;
+                for (let x = 0; x < BOARD_CELL_COUNT; x++) {
+                    const key = `${x},${row}`;
+                    if (!cellFilledMap.get(key)) {
+                        isFull = false;
+                        break;
+                    }
+                }
+                if (isFull) actuallyFullRows.push(row);
+            }
+            for (let col = 0; col < BOARD_CELL_COUNT; col++) {
+                let isFull = true;
+                for (let y = 0; y < BOARD_CELL_COUNT; y++) {
+                    const key = `${col},${y}`;
+                    if (!cellFilledMap.get(key)) {
+                        isFull = false;
+                        break;
+                    }
+                }
+                if (isFull) actuallyFullColumns.push(col);
+            }
+            if (actuallyFullRows.length > 0 || actuallyFullColumns.length > 0) {
+                console.log(`[LINE CLEAR DEBUG] Actually full rows: [${actuallyFullRows.join(', ')}], Actually full columns: [${actuallyFullColumns.join(', ')}]`);
+                console.log(`[LINE CLEAR DEBUG] Clearable rows: [${fullRows.join(', ')}], Clearable columns: [${fullColumns.join(', ')}]`);
+                if (actuallyFullRows.length !== fullRows.length || actuallyFullColumns.length !== fullColumns.length) {
+                    const blockedRows = actuallyFullRows.filter(r => !fullRows.includes(r));
+                    const blockedColumns = actuallyFullColumns.filter(c => !fullColumns.includes(c));
+                    if (blockedRows.length > 0) {
+                        console.log(`[LINE CLEAR DEBUG] Rows blocked from clearing: [${blockedRows.join(', ')}] (likely due to explosion-only blocks)`);
+                    }
+                    if (blockedColumns.length > 0) {
+                        console.log(`[LINE CLEAR DEBUG] Columns blocked from clearing: [${blockedColumns.join(', ')}] (likely due to explosion-only blocks)`);
+                    }
+                }
+            }
+        }
         
         if (this.settings.devMode && (fullRows.length > 0 || fullColumns.length > 0)) {
             console.log(`[LINE CLEAR] About to clear - Rows: [${fullRows.join(', ')}], Columns: [${fullColumns.join(', ')}], Total blocks: ${this.state.placedBlocks.length}`);
@@ -1502,6 +1646,7 @@ export class Game {
         this.updateLevelDisplay();
 
         // Remove cells from shapes after animation completes
+        const nextRecursionDepth = recursionDepth + 1;
         if (shouldAnimate && this.animatingCells.length > 0) {
             // Wait for the longest animation to complete (explosions take longer than regular clears)
             const baseExplosionMs = ANIMATION_CONFIG.explosionMs;
@@ -1512,6 +1657,8 @@ export class Game {
                 this.rebuildBoardFromPlacedBlocks();
                 // Ensure board state is synchronized after cleanup
                 this.inputHandler.updateBoard(this.board);
+                // After removing intersection blocks, check if rows/columns became clearable
+                this.checkAndClearLines(nextRecursionDepth);
             }, maxAnimationDuration);
         } else {
             // No animations, clean up immediately
@@ -1520,6 +1667,8 @@ export class Game {
             this.rebuildBoardFromPlacedBlocks();
             // Ensure board state is synchronized after cleanup
             this.inputHandler.updateBoard(this.board);
+            // After removing intersection blocks, check if rows/columns became clearable
+            this.checkAndClearLines(nextRecursionDepth);
         }
     }
 
@@ -1933,6 +2082,8 @@ export class Game {
             this.board.reset();
             this.state.placedBlocks = [];
             this.animatingCells = [];
+            this.gameOverPopComplete = true;
+            this.gameOverStartTime = Date.now();
             return;
         }
 
@@ -2076,7 +2227,7 @@ export class Game {
      * If showGameOverDialog is enabled, shows a dialog first before proceeding.
      */
     private triggerGameOver(): void {
-        if (this.state.gameOver) {
+        if (this.state.gameOver || this.gameOverDialogShowing) {
             return;
         }
 
@@ -2096,32 +2247,31 @@ export class Game {
         const dialog = document.getElementById('game-over-dialog');
         const backdrop = document.getElementById('game-over-dialog-backdrop');
         
-        if (dialog && backdrop) {
-            dialog.setAttribute('aria-hidden', 'false');
-            backdrop.setAttribute('aria-hidden', 'false');
-            dialog.style.display = 'block';
-            backdrop.style.display = 'block';
-            
-            // Play disappointment sound
-            this.soundManager.playDisappointment();
-            
-            // Fade in the OK button with a delay
-            const okButton = document.getElementById('game-over-dialog-ok');
-            if (okButton) {
-                // Start with opacity 0
-                okButton.style.opacity = '0';
-                okButton.style.transition = 'opacity 0.5s ease-in';
-                
-                // Fade in after a brief delay
-                setTimeout(() => {
-                    okButton.style.opacity = '1';
-                    // Focus after fade-in completes
-                    setTimeout(() => {
-                        okButton.focus();
-                    }, 500);
-                }, 300);
-            }
+        if (!dialog || !backdrop) return;
+
+        this.gameOverDialogShowing = true;
+        this.state.gameOver = true; // Freeze so renderer shows board and we don't run game logic
+        this.inputHandler.updateGameOverState(true);
+
+        dialog.setAttribute('aria-hidden', 'false');
+        backdrop.setAttribute('aria-hidden', 'false');
+        dialog.style.display = 'block';
+        backdrop.style.display = 'block';
+        dialog.style.visibility = 'visible';
+        backdrop.style.visibility = 'visible';
+
+        const okButton = document.getElementById('game-over-dialog-ok');
+        if (okButton) {
+            okButton.style.opacity = '0';
+            okButton.style.transition = 'opacity 0.5s ease-in';
+            okButton.style.visibility = 'visible';
+            setTimeout(() => {
+                okButton.style.opacity = '1';
+                setTimeout(() => okButton.focus(), 500);
+            }, 300);
         }
+
+        this.soundManager.playDisappointment();
     }
 
     /**
@@ -2130,12 +2280,17 @@ export class Game {
     private hideGameOverDialog(): void {
         const dialog = document.getElementById('game-over-dialog');
         const backdrop = document.getElementById('game-over-dialog-backdrop');
-        
+        const okButton = document.getElementById('game-over-dialog-ok');
+
         if (dialog && backdrop) {
             dialog.setAttribute('aria-hidden', 'true');
             backdrop.setAttribute('aria-hidden', 'true');
             dialog.style.display = 'none';
             backdrop.style.display = 'none';
+            if (okButton) {
+                okButton.style.opacity = '1';
+                okButton.style.visibility = '';
+            }
         }
     }
 
@@ -2144,12 +2299,12 @@ export class Game {
      * Public method so it can be called from main.ts when OK button is clicked
      */
     public proceedWithGameOver(): void {
-        // Hide the dialog first
         this.hideGameOverDialog();
-        
+        this.gameOverDialogShowing = false;
+
         this.state.gameOver = true;
         this.gameOverPopComplete = false;
-        this.gameOverStartTime = null; // Will be set after popping completes
+        this.gameOverStartTime = null; // Set by awardGameOverBonus after pop animation completes
         
         // Keep the queue visible even during game over (pieces will still be shown but dragging will be prevented)
         // The input handler and placeShapeDirectly will prevent actual placement during game over
@@ -2229,7 +2384,8 @@ export class Game {
         this.animatingCells = [];
         this.animatingShapes = [];
         this.gameOverStartTime = null;
-        this.gameOverPopComplete = false; // Reset game over pop complete flag
+        this.gameOverPopComplete = false;
+        this.gameOverDialogShowing = false;
         this.playerNamePromptShown = false; // Reset prompt flag on game reset
         this.isNewHighScore = false;
         this.placementsSinceLastClear = 0; // Reset combo tracking

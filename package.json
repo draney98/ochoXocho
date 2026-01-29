@@ -1,11 +1,11 @@
 {
   "name": "ocho-xocho",
-  "version": "1.1.7",
+  "version": "1.1.8",
   "description": "Block placement puzzle game",
   "type": "module",
   "scripts": {
     "dev": "concurrently -n \"frontend,backend\" -c \"cyan,magenta\" \"npm run dev:frontend\" \"npm run dev:backend\"",
-    "dev:frontend": "vite",
+    "dev:frontend": "vite --host 0.0.0.0",
     "dev:backend": "cd backend && npm start",
     "build": "tsc && vite build",
     "preview": "vite preview",
@@ -14,6 +14,9 @@
     "test:coverage": "vitest --coverage",
     "lint": "eslint \"src/**/*.ts\" --fix",
     "format": "prettier --write \"src/**/*.{ts,js,json,css,md}\""
+  },
+  "dependencies": {
+    "pixi.js": "^8.15.0"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^6.21.0",

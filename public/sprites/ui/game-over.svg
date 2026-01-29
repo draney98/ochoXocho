@@ -1,0 +1,115 @@
+<svg width="240" height="80" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges">
+  <!-- GAME OVER text (pixel font style) -->
+  <!-- G -->
+  <rect x="20" y="20" width="4" height="40" fill="#FF0000"/>
+  <rect x="20" y="20" width="24" height="4" fill="#FF0000"/>
+  <rect x="20" y="56" width="24" height="4" fill="#FF0000"/>
+  <rect x="40" y="36" width="4" height="20" fill="#FF0000"/>
+  <rect x="32" y="36" width="8" height="4" fill="#FF0000"/>
+  
+  <!-- A -->
+  <rect x="50" y="20" width="4" height="40" fill="#FF0000"/>
+  <rect x="66" y="20" width="4" height="40" fill="#FF0000"/>
+  <rect x="50" y="20" width="20" height="4" fill="#FF0000"/>
+  <rect x="50" y="36" width="20" height="4" fill="#FF0000"/>
+  
+  <!-- M -->
+  <rect x="76" y="20" width="4" height="40" fill="#FF0000"/>
+  <rect x="92" y="20" width="4" height="40" fill="#FF0000"/>
+  <rect x="80" y="20" width="4" height="12" fill="#FF0000"/>
+  <rect x="88" y="20" width="4" height="12" fill="#FF0000"/>
+  <rect x="84" y="28" width="4" height="4" fill="#FF0000"/>
+  
+  <!-- E -->
+  <rect x="102" y="20" width="4" height="40" fill="#FF0000"/>
+  <rect x="102" y="20" width="24" height="4" fill="#FF0000"/>
+  <rect x="102" y="36" width="20" height="4" fill="#FF0000"/>
+  <rect x="102" y="56" width="24" height="4" fill="#FF0000"/>
+  
+  <!-- O -->
+  <rect x="140" y="20" width="4" height="40" fill="#FF0000"/>
+  <rect x="156" y="20" width="4" height="40" fill="#FF0000"/>
+  <rect x="140" y="20" width="20" height="4" fill="#FF0000"/>
+  <rect x="140" y="56" width="20" height="4" fill="#FF0000"/>
+  
+  <!-- V -->
+  <rect x="170" y="20" width="4" height="28" fill="#FF0000"/>
+  <rect x="186" y="20" width="4" height="28" fill="#FF0000"/>
+  <rect x="174" y="44" width="4" height="4" fill="#FF0000"/>
+  <rect x="178" y="48" width="4" height="4" fill="#FF0000"/>
+  <rect x="182" y="52" width="4" height="4" fill="#FF0000"/>
+  <rect x="186" y="56" width="4" height="4" fill="#FF0000"/>
+  
+  <!-- E -->
+  <rect x="196" y="20" width="4" height="40" fill="#FF0000"/>
+  <rect x="196" y="20" width="24" height="4" fill="#FF0000"/>
+  <rect x="196" y="36" width="20" height="4" fill="#FF0000"/>
+  <rect x="196" y="56" width="24" height="4" fill="#FF0000"/>
+  
+  <!-- R -->
+  <rect x="226" y="20" width="4" height="40" fill="#FF0000"/>
+  <rect x="226" y="20" width="20" height="4" fill="#FF0000"/>
+  <rect x="226" y="36" width="16" height="4" fill="#FF0000"/>
+  <rect x="238" y="20" width="4" height="20" fill="#FF0000"/>
+  <rect x="234" y="40" width="4" height="4" fill="#FF0000"/>
+  <rect x="230" y="44" width="4" height="4" fill="#FF0000"/>
+  <rect x="226" y="48" width="4" height="4" fill="#FF0000"/>
+  
+  <!-- White outline for all letters -->
+  <!-- G outline -->
+  <rect x="18" y="18" width="4" height="44" fill="#FFFFFF"/>
+  <rect x="18" y="18" width="28" height="4" fill="#FFFFFF"/>
+  <rect x="18" y="58" width="28" height="4" fill="#FFFFFF"/>
+  <rect x="42" y="34" width="4" height="24" fill="#FFFFFF"/>
+  <rect x="30" y="34" width="12" height="4" fill="#FFFFFF"/>
+  
+  <!-- A outline -->
+  <rect x="48" y="18" width="4" height="44" fill="#FFFFFF"/>
+  <rect x="68" y="18" width="4" height="44" fill="#FFFFFF"/>
+  <rect x="48" y="18" width="24" height="4" fill="#FFFFFF"/>
+  <rect x="48" y="34" width="24" height="4" fill="#FFFFFF"/>
+  
+  <!-- M outline -->
+  <rect x="74" y="18" width="4" height="44" fill="#FFFFFF"/>
+  <rect x="94" y="18" width="4" height="44" fill="#FFFFFF"/>
+  <rect x="78" y="18" width="4" height="16" fill="#FFFFFF"/>
+  <rect x="90" y="18" width="4" height="16" fill="#FFFFFF"/>
+  <rect x="82" y="26" width="4" height="4" fill="#FFFFFF"/>
+  
+  <!-- E outline -->
+  <rect x="100" y="18" width="4" height="44" fill="#FFFFFF"/>
+  <rect x="100" y="18" width="28" height="4" fill="#FFFFFF"/>
+  <rect x="100" y="34" width="24" height="4" fill="#FFFFFF"/>
+  <rect x="100" y="58" width="28" height="4" fill="#FFFFFF"/>
+  
+  <!-- O outline -->
+  <rect x="138" y="18" width="4" height="44" fill="#FFFFFF"/>
+  <rect x="158" y="18" width="4" height="44" fill="#FFFFFF"/>
+  <rect x="138" y="18" width="24" height="4" fill="#FFFFFF"/>
+  <rect x="138" y="58" width="24" height="4" fill="#FFFFFF"/>
+  
+  <!-- V outline -->
+  <rect x="168" y="18" width="4" height="32" fill="#FFFFFF"/>
+  <rect x="188" y="18" width="4" height="32" fill="#FFFFFF"/>
+  <rect x="172" y="42" width="4" height="4" fill="#FFFFFF"/>
+  <rect x="176" y="46" width="4" height="4" fill="#FFFFFF"/>
+  <rect x="180" y="50" width="4" height="4" fill="#FFFFFF"/>
+  <rect x="184" y="54" width="4" height="4" fill="#FFFFFF"/>
+  <rect x="188" y="58" width="4" height="4" fill="#FFFFFF"/>
+  
+  <!-- E outline -->
+  <rect x="194" y="18" width="4" height="44" fill="#FFFFFF"/>
+  <rect x="194" y="18" width="28" height="4" fill="#FFFFFF"/>
+  <rect x="194" y="34" width="24" height="4" fill="#FFFFFF"/>
+  <rect x="194" y="58" width="28" height="4" fill="#FFFFFF"/>
+  
+  <!-- R outline -->
+  <rect x="224" y="18" width="4" height="44" fill="#FFFFFF"/>
+  <rect x="224" y="18" width="24" height="4" fill="#FFFFFF"/>
+  <rect x="224" y="34" width="20" height="4" fill="#FFFFFF"/>
+  <rect x="240" y="18" width="4" height="24" fill="#FFFFFF"/>
+  <rect x="236" y="38" width="4" height="4" fill="#FFFFFF"/>
+  <rect x="232" y="42" width="4" height="4" fill="#FFFFFF"/>
+  <rect x="228" y="46" width="4" height="4" fill="#FFFFFF"/>
+  <rect x="224" y="50" width="4" height="4" fill="#FFFFFF"/>
+</svg>

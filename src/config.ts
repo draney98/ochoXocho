@@ -48,8 +48,8 @@ export function getExplosionThreshold(mode: 'easy' | 'hard'): number {
  * Animation timing configuration (in milliseconds)
  */
 export const ANIMATION_CONFIG = {
-    lineClearMs: 300,
-    gameOverFadeMs: 3000,
+    lineClearMs: 500, // Duration of line/column clear animations
+    gameOverFadeMs: 375,
     pulseCycleMs: 5000, // Duration of one pulse cycle (slower pulsing)
     explosionMs: 1200, // Duration of explosion animation (longer for more dramatic effect)
     levelUpMs: 3000, // Duration of level up text animation
@@ -59,9 +59,9 @@ export const ANIMATION_CONFIG = {
  * Game over animation configuration
  */
 export const GAME_OVER_CONFIG = {
-    popDelayMs: 80,
-    popAnimationDurationMs: 400,
-    restartDelayMs: 500,
+    popDelayMs: 30,
+    popAnimationDurationMs: 150,
+    restartDelayMs: 200,
 } as const;
 
 /**

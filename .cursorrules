@@ -161,6 +161,7 @@ When dragging a piece over a valid drop location on the board, an outline is dra
 - ❌ Leave commented-out debug code in production
 - ❌ Declare variables in switch cases without braces
 - ❌ Use `(obj as any)` for type assertions - prefer `(obj as unknown as TargetType)`
+- ❌ Try to suppress PixiJS warnings inline (after imports) - libraries capture console at import time
 
 ### Do This Instead:
 - ✅ Use constants from `constants.ts`
@@ -181,6 +182,22 @@ When dragging a piece over a valid drop location on the board, an outline is dra
 - Use `requestAnimationFrame` for animations (already implemented)
 - Avoid redrawing entire canvas unnecessarily
 - Cache computed values (shape dimensions, colors)
+
+### PixiJS Renderer Initialization
+- **CRITICAL**: Always set `preference: 'webgl'` in `app.init()` options
+- WebGPU is experimental and may fail on some platforms
+- CanvasRenderer is not yet implemented in PixiJS v8
+- **Warning Suppression**: Import `suppressPixiWarnings.ts` at the VERY TOP of `main.ts`, BEFORE any other imports
+  - This module overrides `console.warn` and `console.error` BEFORE PixiJS loads
+  - PixiJS captures console references at import time, so suppression must happen first
+  - Suppresses: "WebGPU is experimental", "Failed to create WebGPU Context Provider", "CanvasRenderer is not yet implemented"
+- The renderer must be initialized with `await app.init()` (async), not in constructor
+- Handle "CanvasRenderer is not yet implemented" errors gracefully - check if `app.renderer` exists (WebGL fallback works)
+
+### Browser Warning Suppression
+- **ResizeObserver loop warnings**: Suppress in global error handler by checking `message.includes('ResizeObserver loop')`
+  - These are harmless notifications when ResizeObserver callbacks cause additional layout changes
+  - Call `event.preventDefault()` and return early without logging
 
 ### Memory
 - Clean up event listeners when components are destroyed
@@ -290,16 +307,18 @@ This is safer than `(this as any)` and makes the intent clearer.
 
 ### Layout and Content
 - Game over screen displays vertically centered content in this order:
-  1. "GAME OVER" (bold, 54px)
+  1. "GAME OVER" (bold, 28px)
   2. Emoji board (if available, filtered to exclude stats text)
-  3. Score: xxxx (on its own line)
-  4. Lines: xxxx / Level xxxx (on its own line)
-  5. Mode: easy/hard (on its own line)
+  3. Score: xxxx (bold, 20px)
+  4. Lines: xxxx / Level xxxx (18px)
+  5. Mode: easy/hard (18px)
   6. Today: x of y, Week: x of y, Ever: x of y (rankings, gold if top 10)
   7. Share button (text only, no emoji)
+- **Centering**: Content is centered horizontally and vertically within the BOARD AREA only (not including queue)
+- **Overlay**: Dark overlay covers entire game area (board + queue) but content is positioned within board bounds
 - Rankings are fetched via `getScoreRankAPI()` for accurate position and total player counts
 - Top 10 rankings displayed in gold (#FFD700), others in white
-- Screen covers entire game area (board + queue) with overlay
+- Visual hierarchy through weight (bold title/score) and spacing, not font size variation
 
 ### Player Name Prompt
 - Modal appears after game over screen is visible (`gameOverProgress > 0.1`)

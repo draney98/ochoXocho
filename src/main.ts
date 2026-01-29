@@ -2,7 +2,11 @@
  * Application entry point - initializes the game and sets up event handlers
  */
 
+// IMPORTANT: Import this FIRST to suppress PixiJS warnings before pixi.js loads
+import './suppressPixiWarnings';
+
 import { Game } from './game';
+import { assetLoader } from './assetLoader';
 import { GameSettings, ThemeName, GameMode, LeaderboardEntry } from './types';
 import { getHighScores, getLeaderboard } from './highScores';
 import { LeaderboardPeriod } from './api';
@@ -110,6 +114,29 @@ if (window.visualViewport) {
     window.visualViewport.addEventListener('resize', setViewportHeight);
 }
 
+// Global error handlers to prevent unexpected restarts on mobile
+window.addEventListener('error', (event) => {
+    const message = String(event.message || event.error || '');
+    
+    // Suppress harmless ResizeObserver loop warnings
+    // These occur when ResizeObserver callbacks cause additional layout changes
+    if (message.includes('ResizeObserver loop')) {
+        event.preventDefault();
+        return false;
+    }
+    
+    console.error('[GLOBAL ERROR]', event.error || event.message, event.filename, event.lineno);
+    // Prevent default error handling that might cause page reload
+    event.preventDefault();
+    return false;
+});
+
+window.addEventListener('unhandledrejection', (event) => {
+    console.error('[UNHANDLED PROMISE REJECTION]', event.reason);
+    // Prevent default error handling that might cause page reload
+    event.preventDefault();
+});
+
 // Wait for DOM to be ready
 document.addEventListener('DOMContentLoaded', async () => {
     // Recalculate viewport height after DOM is ready (Safari may have stabilized)
@@ -138,8 +165,29 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Sync UI element widths with canvas width
     setupResponsiveUI(canvas);
 
+    // Load PixiJS assets before initializing game
+    try {
+        await assetLoader.load();
+    } catch (error) {
+        console.error('Failed to load assets:', error);
+        // Continue anyway - assets will be missing but game can still initialize
+    }
+
     // Initialize the game
     const game = new Game(canvas, settingsState);
+    
+    // Initialize PixiJS renderer after game is created
+    try {
+        await game.getRenderer().initialize(canvas);
+    } catch (error) {
+        // Suppress "CanvasRenderer is not yet implemented" errors - WebGL fallback works
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (!errorMessage.includes('CanvasRenderer is not yet implemented')) {
+            console.error('Failed to initialize PixiJS renderer:', error);
+        }
+        // If initialization actually failed, the renderer won't work, but we continue anyway
+    }
+    
     game.start();
     
     // Set up player name prompt callback
@@ -910,12 +958,11 @@ function setupResponsiveUI(canvas: HTMLCanvasElement): void {
             buttonContainer.style.width = `${canvasWidth}px`;
         }
         
-        // Dynamically adjust font sizes based on canvas width
-        // Base font size scales with canvas width (600px = 24px font)
-        const baseFontSize = Math.max(18, Math.min(28, (canvasWidth / 600) * 24));
+        // Use --font-lg (20px) for score displays
+        const scoreFontSize = 20; // --font-lg value
         const progressBarHeight = Math.max(24, Math.min(40, (canvasWidth / 600) * 32));
         
-        // Update font sizes
+        // Update font sizes to use --font-lg
         const scoreDisplay = document.getElementById('score-display');
         const turnDisplay = document.getElementById('turn-display');
         const linesDisplay = document.getElementById('lines-display');
@@ -926,7 +973,7 @@ function setupResponsiveUI(canvas: HTMLCanvasElement): void {
         
         [scoreDisplay, turnDisplay, linesDisplay, highScoreToday, highScoreWeek, highScoreYear, modeDisplay].forEach(el => {
             if (el) {
-                el.style.fontSize = `${baseFontSize}px`;
+                el.style.fontSize = `${scoreFontSize}px`;
             }
         });
         

@@ -1,0 +1,16 @@
+<svg width="8" height="8" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges">
+  <!-- White square with soft glow effect -->
+  <defs>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="1" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <!-- Glow layer -->
+  <rect x="2" y="2" width="4" height="4" fill="#FFFFFF" opacity="0.5" filter="url(#glow)"/>
+  <!-- Main white square -->
+  <rect x="2" y="2" width="4" height="4" fill="#FFFFFF"/>
+</svg>
