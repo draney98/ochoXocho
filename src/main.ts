@@ -246,7 +246,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         restartButton.addEventListener('click', (e: Event) => {
             e.preventDefault();
             e.stopPropagation();
-            showRestartConfirm();
+            if (game.getState().gameOver) {
+                doRestart();
+            } else {
+                showRestartConfirm();
+            }
         });
     }
     // Handlers with 800ms debounce per button (same as game-over OK) to prevent double-fire from click + touchend on mobile
