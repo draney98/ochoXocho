@@ -27,7 +27,7 @@
             </div>
             <canvas id="game-canvas"></canvas>
             <div id="button-container">
-                <button id="restart-button" aria-label="Restart game">
+                <button type="button" id="restart-button" aria-label="Restart game">
                     <span class="button-emoji">🔄</span>
                     <span class="button-text">Restart</span>
                 </button>
@@ -231,6 +231,14 @@
                 <input type="text" id="player-name-input" placeholder="ABC" maxlength="3" pattern="[A-Za-z0-9]{1,3}" style="text-transform: uppercase; font-family: 'Courier New', monospace; font-weight: bold; letter-spacing: 0.2em; text-align: center; width: 120px; padding: 10px; font-size: 24px; border: 2px solid var(--accent-color); border-radius: 8px; background: var(--panel-bg); color: var(--panel-text-color);">
                 <button id="player-name-submit" style="padding: 10px 20px; border: 2px solid var(--accent-color); border-radius: 8px; background: var(--accent-color); color: var(--accent-color-contrast, #ffffff); cursor: pointer; min-width: 80px;">OK</button>
             </div>
+        </div>
+    </section>
+    <div id="restart-confirm-backdrop" aria-hidden="true"></div>
+    <section id="restart-confirm-dialog" role="dialog" aria-labelledby="restart-confirm-title" aria-modal="true" aria-hidden="true">
+        <p id="restart-confirm-message">Are you sure you want to restart? Your current game will be lost.</p>
+        <div class="restart-confirm-buttons">
+            <button type="button" id="restart-confirm-cancel">Cancel</button>
+            <button type="button" id="restart-confirm-restart">Restart</button>
         </div>
     </section>
     <div id="game-over-dialog-backdrop" aria-hidden="true"></div>

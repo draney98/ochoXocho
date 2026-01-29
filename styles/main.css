@@ -605,6 +605,115 @@ body[data-theme="midnight"] #leaderboard-button svg {
     pointer-events: auto;
 }
 
+/* Restart confirm dialog */
+#restart-confirm-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--transition-normal);
+    z-index: 9997;
+    display: none;
+}
+
+#restart-confirm-backdrop[aria-hidden="false"] {
+    opacity: 1;
+    pointer-events: auto;
+    display: block;
+    touch-action: manipulation;
+}
+
+#restart-confirm-dialog {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0.9);
+    width: 280px;
+    max-width: calc(100% - var(--space-8));
+    background: var(--panel-bg);
+    border-radius: var(--radius-lg);
+    padding: var(--space-6);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    transition: transform var(--transition-normal), opacity var(--transition-normal);
+    z-index: 9998;
+    color: var(--panel-text-color);
+    opacity: 0;
+    pointer-events: none;
+    text-align: center;
+    display: none;
+    touch-action: manipulation;
+}
+
+#restart-confirm-dialog[aria-hidden="false"] {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+    pointer-events: auto;
+    display: block;
+}
+
+#restart-confirm-message {
+    margin: 0 0 var(--space-4) 0;
+    font-size: var(--font-base);
+    line-height: 1.4;
+}
+
+.restart-confirm-buttons {
+    display: flex;
+    gap: var(--space-3);
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+/* Same look as game-over-dialog OK button */
+#restart-confirm-cancel,
+#restart-confirm-restart {
+    padding: 12px 32px;
+    border: 2px solid var(--accent-color);
+    border-radius: var(--radius-md);
+    background: var(--accent-color);
+    color: var(--accent-color-contrast, #ffffff);
+    cursor: pointer;
+    font-size: var(--font-lg);
+    font-weight: 500;
+    min-height: 44px;
+    -webkit-tap-highlight-color: transparent;
+    transition: background-color var(--transition-normal), transform var(--transition-fast);
+}
+
+#restart-confirm-cancel {
+    background: var(--panel-bg);
+    color: var(--panel-text-color);
+    border-color: var(--accent-color);
+}
+
+#restart-confirm-restart:hover {
+    background: var(--button-hover);
+    transform: translateY(-1px);
+}
+
+#restart-confirm-restart:active {
+    background: var(--button-active);
+    transform: translateY(0);
+}
+
+#restart-confirm-cancel:hover {
+    background: var(--button-hover);
+    color: var(--accent-color-contrast, #ffffff);
+    transform: translateY(-1px);
+}
+
+#restart-confirm-cancel:active {
+    background: var(--button-active);
+    transform: translateY(0);
+}
+
+#restart-confirm-restart:focus-visible,
+#restart-confirm-cancel:focus-visible {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 2px;
+}
+
 /* Game over dialog - appears over entire game (must sit above canvas) */
 #game-over-dialog-backdrop {
     position: fixed;
@@ -621,6 +730,7 @@ body[data-theme="midnight"] #leaderboard-button svg {
     opacity: 1;
     pointer-events: auto;
     display: block;
+    touch-action: manipulation; /* Prevent scroll/double-tap so tap on OK is reliable on mobile */
 }
 
 #game-over-dialog {
@@ -641,6 +751,7 @@ body[data-theme="midnight"] #leaderboard-button svg {
     pointer-events: none;
     text-align: center;
     display: none;
+    touch-action: manipulation;
 }
 
 #game-over-dialog[aria-hidden="false"] {
@@ -661,6 +772,8 @@ body[data-theme="midnight"] #leaderboard-button svg {
     font-size: var(--font-lg);
     font-weight: 500;
     transition: background-color var(--transition-normal), transform var(--transition-fast);
+    -webkit-tap-highlight-color: transparent;
+    min-height: 44px; /* Easier tap target on mobile */
 }
 
 #game-over-dialog-ok:hover {

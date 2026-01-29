@@ -2265,9 +2265,13 @@ export class Game {
             okButton.style.opacity = '0';
             okButton.style.transition = 'opacity 0.5s ease-in';
             okButton.style.visibility = 'visible';
+            okButton.disabled = false;
             setTimeout(() => {
                 okButton.style.opacity = '1';
-                setTimeout(() => okButton.focus(), 500);
+                // Don't focus on touch devices - can trigger accidental activation or keyboard
+                if (!window.matchMedia('(pointer: coarse)').matches) {
+                    setTimeout(() => okButton.focus(), 500);
+                }
             }, 300);
         }
 

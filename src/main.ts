@@ -192,27 +192,86 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // Set up player name prompt callback
     game.setPlayerNamePromptCallback(() => showPlayerNamePrompt());
-    // Wire up game over dialog OK button
+    // Wire up game over dialog OK button (click + touchend for mobile)
     const gameOverDialogOk = document.getElementById('game-over-dialog-ok');
     if (gameOverDialogOk) {
-        gameOverDialogOk.addEventListener('click', () => {
+        let gameOverOkLastHandled = 0;
+        const handleGameOverOk = (e: Event) => {
+            const now = Date.now();
+            if (now - gameOverOkLastHandled < 800) return; // Prevent double-fire (click + touchend)
+            gameOverOkLastHandled = now;
+            if (e.type === 'touchend' && e.cancelable) {
+                e.preventDefault();
+            }
             game.proceedWithGameOver();
-        });
+        };
+        gameOverDialogOk.addEventListener('click', handleGameOverOk);
+        gameOverDialogOk.addEventListener('touchend', handleGameOverOk, { passive: false });
     }
 
     const updateHighScoreMode = setupHighScores(game, settingsState);
     const { updateModeSelectState } = setupSettingsControls(game, settingsState, updateHighScoreMode);
     setupLeaderboardPopup(settingsState);
 
-    // Restart button provides explicit control over resetting the board
+    // Restart button: show custom confirm dialog (works everywhere, including when native confirm is blocked)
     const restartButton = document.getElementById('restart-button');
+    const restartBackdrop = document.getElementById('restart-confirm-backdrop');
+    const restartDialog = document.getElementById('restart-confirm-dialog');
+    const restartConfirmCancel = document.getElementById('restart-confirm-cancel');
+    const restartConfirmRestart = document.getElementById('restart-confirm-restart');
+
+    const showRestartConfirm = (): void => {
+        if (!restartBackdrop || !restartDialog) return;
+        restartBackdrop.setAttribute('aria-hidden', 'false');
+        restartDialog.setAttribute('aria-hidden', 'false');
+        restartBackdrop.style.display = 'block';
+        restartDialog.style.display = 'block';
+    };
+
+    const hideRestartConfirm = (): void => {
+        if (!restartBackdrop || !restartDialog) return;
+        restartBackdrop.setAttribute('aria-hidden', 'true');
+        restartDialog.setAttribute('aria-hidden', 'true');
+        restartBackdrop.style.display = 'none';
+        restartDialog.style.display = 'none';
+    };
+
+    const doRestart = (): void => {
+        hideRestartConfirm();
+        game.reset(true);
+        updateModeSelectState();
+    };
+
     if (restartButton) {
-        restartButton.addEventListener('click', () => {
-            game.reset(true);
-            // Update mode select state after reset
-            updateModeSelectState();
+        restartButton.addEventListener('click', (e: Event) => {
+            e.preventDefault();
+            e.stopPropagation();
+            showRestartConfirm();
         });
     }
+    // Handlers with 800ms debounce per button (same as game-over OK) to prevent double-fire from click + touchend on mobile
+    let restartCancelLastHandled = 0;
+    let restartConfirmLastHandled = 0;
+    const handleRestartCancel = (e: Event) => {
+        const now = Date.now();
+        if (now - restartCancelLastHandled < 800) return;
+        restartCancelLastHandled = now;
+        if (e.type === 'touchend' && e.cancelable) e.preventDefault();
+        hideRestartConfirm();
+    };
+    const handleRestartConfirm = (e: Event) => {
+        const now = Date.now();
+        if (now - restartConfirmLastHandled < 800) return;
+        restartConfirmLastHandled = now;
+        if (e.type === 'touchend' && e.cancelable) e.preventDefault();
+        doRestart();
+    };
+    restartConfirmCancel?.addEventListener('click', handleRestartCancel);
+    restartConfirmRestart?.addEventListener('click', handleRestartConfirm);
+    restartBackdrop?.addEventListener('click', () => hideRestartConfirm());
+    restartDialog?.addEventListener('click', (e: Event) => e.stopPropagation());
+    restartConfirmCancel?.addEventListener('touchend', handleRestartCancel, { passive: false });
+    restartConfirmRestart?.addEventListener('touchend', handleRestartConfirm, { passive: false });
 
     // Auto-place button automatically places all three pieces
     const autoPlaceButton = document.getElementById('auto-place-button') as HTMLButtonElement | null;

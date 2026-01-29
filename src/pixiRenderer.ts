@@ -1467,20 +1467,27 @@ export class PixiRenderer {
         const textAlpha = progress;
         const centerX = Math.round(BOARD_OFFSET_X + BOARD_PIXEL_SIZE / 2);
         const baseFont = SYSTEM_FONT_STACK;
-        const gameOverFontSize = 20;    // Same as today/week/ever line
+        // Scale fonts so they match DOM today/week/ever (--font-lg) when canvas is scaled on mobile
+        const canvasEl = this.app?.canvas as HTMLCanvasElement | undefined;
+        const displayWidth = canvasEl?.clientWidth;
+        const displayScale = (displayWidth != null && displayWidth > 0) ? CANVAS_WIDTH / displayWidth : 1;
+        const gameOverFontSize = Math.round(20 * displayScale);
+        const rankingFontSize = Math.round(18 * displayScale);
+        const emojiLineHeight = Math.round(26 * displayScale);
+        const emojiSpacing = Math.round(20 * displayScale);
         // Calculate total content height for vertical centering
         // Center content within BOARD area only (above the queue)
         const boardAreaHeight = BOARD_PIXEL_SIZE;
         const gameOverTextHeight = gameOverFontSize;
-        const gameOverSpacing = 36;     // Increased spacing for visual hierarchy
+        const gameOverSpacing = Math.round(36 * displayScale);
         let emojiBoardHeight = 0;
         if (progress > 0 && this.finalBoardState && this.finalBoardState.length > 0) {
             const emojiText = this.generateEmojiBoard();
             const lines = emojiText.split('\n').filter(line => line.trim() !== '' && !line.includes('Score:') && !line.includes('Lines:') && !line.includes('Level:') && !line.includes('Mode:') && !line.includes('Rank') && !line.includes('Leaderboard'));
-            emojiBoardHeight = lines.length * 26 + 20; // Reduced line height for 20px font
+            emojiBoardHeight = lines.length * emojiLineHeight + emojiSpacing;
         }
-        const statLineHeight = gameOverFontSize + 14;
-        const scoreHeight = gameOverFontSize + 14;   // Score + reduced spacing
+        const statLineHeight = gameOverFontSize + Math.round(14 * displayScale);
+        const scoreHeight = statLineHeight;   // Same as other stat lines (font + scaled spacing)
         const linesLevelHeight = statLineHeight;
         const modeHeight = statLineHeight;
         let rankingsHeight = 0;
@@ -1523,24 +1530,23 @@ export class PixiRenderer {
             const emojiText = this.generateEmojiBoard();
             const lines = emojiText.split('\n').filter(line => line.trim() !== '' && !line.includes('Score:') && !line.includes('Lines:') && !line.includes('Level:') && !line.includes('Mode:') && !line.includes('Rank') && !line.includes('Leaderboard'));
             
-            const lineHeight = 26; // Reduced for 20px font
             lines.forEach((line, index) => {
                 const emojiLine = new Text({
                     text: line,
                     style: {
                         fontFamily: baseFont,
-                        fontSize: 20,
+                        fontSize: gameOverFontSize,
                         fill: 0xffffff,
                     },
                 });
                 emojiLine.anchor.set(0.5, 0);
                 emojiLine.x = centerX;
-                emojiLine.y = Math.round(currentY + index * lineHeight);
+                emojiLine.y = Math.round(currentY + index * emojiLineHeight);
                 emojiLine.alpha = progress;
                 this.uiLayer.addChild(emojiLine);
             });
             
-            currentY += lines.length * lineHeight + 20; // Reduced spacing
+            currentY += lines.length * emojiLineHeight + emojiSpacing;
         }
         
         // Draw stats
@@ -1551,7 +1557,7 @@ export class PixiRenderer {
             text: `Score: ${this.finalScore.toLocaleString()}`,
             style: {
                 fontFamily: baseFont,
-                fontSize: 20,
+                fontSize: gameOverFontSize,
                 fill: 0xffffff,
                 fontWeight: 'bold',
             },
@@ -1561,7 +1567,7 @@ export class PixiRenderer {
         scoreText.y = currentY;
         scoreText.alpha = textAlpha;
         this.uiLayer.addChild(scoreText);
-        currentY += gameOverFontSize + 14;
+        currentY += statLineHeight;
         
         // Lines / Level
         const linesText = new Text({
@@ -1612,7 +1618,7 @@ export class PixiRenderer {
                         text: rankText,
                         style: {
                             fontFamily: baseFont,
-                            fontSize: 18,
+                            fontSize: rankingFontSize,
                             fill: isTop10 ? 0xffd700 : 0xffffff,
                         },
                     });
@@ -1621,7 +1627,7 @@ export class PixiRenderer {
                     rankTextObj.y = currentY;
                     rankTextObj.alpha = textAlpha;
                     this.uiLayer.addChild(rankTextObj);
-                    currentY += 18 + 14; // Reduced spacing
+                    currentY += rankingFontSize + Math.round(14 * displayScale);
                 }
             }
         }
